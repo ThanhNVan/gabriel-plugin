@@ -1,9 +1,9 @@
 // Which doc sets the map knows. From <dataDir>/projects.json (file order is the routing order);
 // with no file, one project per folder under <dataDir>/docs/.
 const fs = require('fs'), os = require('os'), path = require('path');
-const { dataDir, projectsFile, privateDir, checkName } = require('./paths');
+const { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles } = require('./paths');
 const DEFAULTS = { layout: 'auto', graph: null, skipDirs: ['graphify-out', 'node_modules', '.git', 'atlas', '_tools'],
-  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, coreDocs: null, extensions: null };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in)
+  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, sessionGate: false, coreDocs: null, extensions: null };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in)
 const resolveRoot = (r) => { const s = String(r || '');
   if (s.startsWith('~')) return path.join(os.homedir(), s.slice(1).replace(/^[\\/]/, ''));
   return path.isAbsolute(s) ? path.resolve(s) : path.join(dataDir(), s); };
@@ -31,7 +31,7 @@ function loadConfig() {
   const legacyProject = j.legacyProject || null;   // tag for map rows written before projects existed (owner only)
   if (legacyProject && !seen.has(legacyProject)) throw new Error(`legacyProject ${legacyProject} is not a project`);
   const embedModel = typeof j.embedModel === 'string' && j.embedModel ? j.embedModel : null;   // optional: a tuned meaning model, e.g. "local/gabriel-tuned"
-  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || ['CLAUDE.md'], embedModel }; cacheKey = key; return cache;
+  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || defaultRuleFiles(), embedModel }; cacheKey = key; return cache;
 }
 const loadProjects = () => loadConfig().projects;
 const getProject = (name) => loadProjects().find((p) => p.name === name);

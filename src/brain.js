@@ -3,9 +3,13 @@
 // Matches by words (plus thesaurus.json synonyms) and by meaning (a small local embedding model).
 //   node brain.js build [--require-embeddings]   build graph.json, then vectors (downloads the model once)
 //   node brain.js query "<text>"                 show what would be injected for this text
-//   node brain.js hook                           UserPromptSubmit hook (JSON on stdin, JSON on stdout, fails open)
+//   node brain.js hook [--host claude|codex|gemini|generic]     prompt hook (JSON on stdin, JSON on stdout for the host, fails open)
+//   node brain.js touched [--host <name>]                        post-tool hook (JSON on stdin, prints nothing)
+//   node brain.js context "<prompt>" [--host <name>] [--session <id>]   the same block as plain text, for any tool
 //   node brain.js refresh                        embed nodes that have no vector yet (the hook starts this itself)
-// Env BRAIN_HOME overrides ~/.claude (used by the test). Only the build step may use the network (model download).
+// Host: --host, else env GABRIEL_HOST, else claude. Env BRAIN_HOME overrides ~/.claude (used by the test). Only the build step may use the network (model download).
+// --data <dir> sets the data folder (GABRIEL_DATA) for this run: other hosts do not see Claude Code's settings.json env.
+{ const i = process.argv.indexOf('--data'); if (i > 0 && process.argv[i + 1]) { process.env.GABRIEL_DATA = process.argv[i + 1]; process.argv.splice(i, 2); } }
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -14,10 +18,11 @@ const { homeDir, graphFile, dataDir, tokens, build, fresh, loadThesaurus, wordSc
 const { MODEL, ehash, withTimeout, getEmbedder, readVectors, embedNodes } = require('./embed.js');
 const { getProject } = require('./projects.js');
 const paths = require('./paths.js');
+const hosts = require('./hosts/index.js');
 
 const MAX_CHARS = 2400, NODE_CHARS = 320;
 const SIM_FLOOR = 0.2, SIM_SPAN = 0.35, SIM_GATE = 0.3;            // calibrated on the real rules: unrelated prompts peak at 0.18
-const EMBED_TIMEOUT = 9000, REFRESH_LOCK_MS = 120000, MK_LOCK_MS = 600000; // the hook limit is 15 s (settings.json); the map search is skipped after 11 s
+const EMBED_TIMEOUT = 9000, REFRESH_LOCK_MS = 120000, MK_LOCK_MS = 600000; // the hook timeout is 60 s (hooks/hooks.json); the map search is skipped after 11 s
 const MK_BUDGET_MS = 11000;
 
 // Words + synonyms + meaning. Any trouble with the model falls back to words + synonyms.
@@ -61,21 +66,21 @@ function mapFor(home, text, pv, started, session, cwd = '') {
 }
 
 // PostToolUse hook: a file was opened or edited. If a map was shown for this session a moment ago, learn from it. JSON on stdin; prints nothing; fails open.
-function touchedHook() {
+function touchedHook(host) {
   try {
     if (!fs.existsSync(path.join(paths.dataDir(), 'mk.db'))) return; // no map yet (before setup): nothing to learn from
-    const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-    const ti = input.tool_input || {};
-    const file = ti.file_path || ti.notebook_path || ti.path;
-    if (!file || !input.session_id) return;
-    require('./mk.js').touched(homeDir(), input.session_id, file);
+    const raw = fs.readFileSync(0, 'utf8');
+    const { sessionId } = host.readInput(raw);
+    const files = host.readTouched(raw);
+    if (!files.length || !sessionId) return;
+    for (const file of files) require('./mk.js').touched(homeDir(), sessionId, file);
   } catch { /* never block a tool call */ }
 }
 
 // When a doc or the code graph changed since the map was built, rebuild it in the background (once per 10 minutes). The old map keeps serving.
 function refreshMapInBackground(home) {
   try {
-    if (process.env.BRAIN_HOME) return; // set only by the tests: they must never start a real map build
+    if (process.env.BRAIN_HOME || process.env.GABRIEL_NO_BACKGROUND) return; // set only by the tests: they must never start a real map build
     const mk = require('./mk.js');
     const stamp = path.join(dataDir(home), 'mk-check');
     let due = true;
@@ -106,6 +111,7 @@ function format(nodes) {
 // After a source file changed, new nodes have no vector. Embed them in the background (once per 2 minutes, no download).
 function refreshInBackground(home) {
   try {
+    if (process.env.GABRIEL_NO_BACKGROUND) return; // tests: no background embedding
     const vecs = readVectors(home, MODEL);
     // checking history reads the whole vector file, so do it at most once a minute (and not at all when no model is installed)
     const stamp = path.join(dataDir(home), 'history-check');
@@ -215,49 +221,85 @@ function setupHint(sessionId) {
   } catch { return ''; }
 }
 
-async function hook() {
+// The items for one prompt: rules, the project map, similar earlier prompts. Logs the prompt and starts the background refreshes.
+async function gather(prompt, sid, cwd) {
+  const started = Date.now();
+  const { nodes, hist, pv } = await searchFull(homeDir(), prompt);
+  try { history.append(homeDir(), prompt, cwd); } catch {}
+  refreshInBackground(homeDir());
+  refreshMapInBackground(homeDir());
+  const parts = [];
+  if (nodes.length) parts.push(format(nodes));
+  const map = mapFor(homeDir(), prompt, pv, started, sid, cwd);
+  if (map) parts.push(map);
+  if (hist.length) parts.push(history.formatHistory(hist));
+  return parts;
+}
+
+// Cut a block to max characters, at a line break when there is one. No max = no cut. Codex caps hook output (see hosts/codex.js).
+function capText(text, max) {
+  if (!max || text.length <= max) return text;
+  const cut = text.slice(0, max), nl = cut.lastIndexOf('\n');
+  return (nl > 0 ? cut.slice(0, nl) : cut) + '\n';
+}
+
+// Writes host output to stdout and waits for the write to finish. Empty output writes nothing.
+const emit = (s) => (s ? new Promise((resolve) => process.stdout.write(s, resolve)) : undefined);
+
+async function hook(host) {
   try {
-    const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-    const prompt = String(input.prompt || '');
-    const sid = typeof input.session_id === 'string' ? input.session_id : '';
+    const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
-      const hint = setupHint(sid);
-      if (hint) await new Promise((resolve) => process.stdout.write(JSON.stringify({ systemMessage: hint }), resolve));
+      await emit(host.writeOutput({ text: '', note: setupHint(sid) }));
     };
     if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return await hintOnly();
-    const started = Date.now();
-    const { nodes, hist, pv } = await searchFull(homeDir(), prompt);
-    const cwd = typeof input.cwd === 'string' ? input.cwd : '';
-    try { history.append(homeDir(), prompt, cwd); } catch {}
-    refreshInBackground(homeDir());
-    refreshMapInBackground(homeDir());
-    const parts = [];
-    if (nodes.length) parts.push(format(nodes));
-    const map = mapFor(homeDir(), prompt, pv, started, typeof input.session_id === 'string' ? input.session_id : '', cwd);
-    if (map) parts.push(map);
-    if (hist.length) parts.push(history.formatHistory(hist));
+    const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
-    const { text: additionalContext, skipped, save } = dedupe(homeDir(), parts.join('\n'), sid, String(input.transcript_path || ''));
+    const { text: additionalContext, skipped, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
     const note = skipped ? `(${skipped} item${skipped > 1 ? 's' : ''} already in context, not repeated)` : '';
     const hint = setupHint(sid);
     if (!additionalContext) {
       const msg = [note ? '🧭 Brain: ' + note : '', hint].filter(Boolean).join('\n');
-      if (msg) await new Promise((resolve) => process.stdout.write(JSON.stringify({ systemMessage: msg }), resolve));
+      await emit(host.writeOutput({ text: '', note: msg }));
       save();
       return;
     }
-    // additionalContext (full text) goes to Claude; systemMessage is a short, readable view of the same items for the user.
-    const out = JSON.stringify({ systemMessage: humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : ''), hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } });
-    await new Promise((resolve) => process.stdout.write(out, resolve));
+    // additionalContext (full text) goes to the model; note is a short, readable view of the same items for the user.
+    await emit(host.writeOutput({ text: additionalContext, note: humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '') }));
     save();
   } catch { /* fail open: never block a prompt */ }
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens };
+// For `brain.js context "<prompt>"`: the same items as the hook, as plain text. Short prompts and slash commands give ''.
+async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
+  if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return '';
+  const parts = await gather(prompt, sid, cwd);
+  if (!parts.length) return '';
+  const { text, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
+  save();
+  return text;
+}
+
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText };
+
+// The value after a flag ("--host codex"), or undefined.
+function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
+
+// The prompt, --session and --cwd for `context`: the first word that is not a flag or a flag value.
+function contextArgs(argv) {
+  const out = { prompt: '', session: flagValue('--session') || '', cwd: flagValue('--cwd') || '' }, valued = new Set(['--host', '--session', '--cwd']);
+  for (let i = 3; i < argv.length; i++) {
+    if (valued.has(argv[i])) i++;
+    else if (!argv[i].startsWith('--') && !out.prompt) out.prompt = argv[i];
+  }
+  return out;
+}
 
 if (require.main === module) {
   (async () => {
     const [mode, arg] = process.argv.slice(2);
+    const host = hosts.get(flagValue('--host') || process.env.GABRIEL_HOST || 'claude');
+    paths.setHost(host.name);   // before any path is read: it picks the rules folder and the graph file
     const home = homeDir();
     if (mode === 'build') {
       const g = build();
@@ -309,7 +351,7 @@ if (require.main === module) {
         } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { if (project === mk.defaultProject()) fs.rmSync(path.join(dataDir(home), 'mk.lock'), { force: true }); } catch { /* none */ } }
       }
     } else if (mode === 'touched') { // PostToolUse hook (see settings.json): learn from a file that was just opened or edited
-      touchedHook();
+      touchedHook(host);
     } else if (mode === 'touched-files') { // after a Codex step: node brain.js touched-files <file>... ; learns from the newest map (any session, last 45 min)
       const mk = require('./mk.js');
       for (const f of process.argv.slice(3)) { const r = mk.touched(home, '*', path.resolve(f)); console.log(`${f}: ${r.learned ? `learned ${r.learned} (${r.targets.join(', ')})` : r.ignored}`); }
@@ -344,9 +386,13 @@ if (require.main === module) {
       if (!arg) console.log('usage: node brain.js forget "<text>"');
       else console.log(`forgot ${history.forget(home, arg)} prompt(s)`);
     } else if (mode === 'hook') {
-      await hook();
+      await hook(host);
+    } else if (mode === 'context') { // plain text for any tool: node brain.js context "<prompt>" [--host <name>] [--session <id>]
+      const { prompt, session, cwd } = contextArgs(process.argv);
+      const text = await contextText(prompt, session, host, '', cwd);
+      if (text) process.stdout.write(text.endsWith('\n') ? text : text + '\n');
     } else {
-      console.log('usage: node brain.js build [--require-embeddings] | query "<text>" | hook | refresh | forget "<text>" | graph | related "<word>" | check | build-mk | mk "<text>" | mk-status | learn-show | learn-reset | touched');
+      console.log('usage: node brain.js build [--require-embeddings] | query "<text>" | hook [--host <name>] | context "<prompt>" [--host <name>] [--session <id>] | refresh | forget "<text>" | graph | related "<word>" | check | build-mk | mk "<text>" | mk-status | learn-show | learn-reset | touched [--host <name>]');
     }
   })().then(() => process.exit()); // onnx keeps threads alive; exit with the code set above
 }

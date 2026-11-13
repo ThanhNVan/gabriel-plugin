@@ -91,7 +91,7 @@ try {
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /current weights/);
   if (hasModel) assert.match(r.stdout, /new weights: strict \d+\/\d+/);
-  else assert.match(r.stdout, /train-rank failed/);
+  else assert.match(r.stdout, /meaning model is missing/);
   step('retrain sample: prints the scores, exit 0');
 
   r = cli('src/retrain.js', ['bare']);

@@ -88,7 +88,7 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const areas = [...new Set(rows.map((r) => r.c.id.replace(/-\d+$/, '')))];
   out('  by area (strict): ' + areas.filter((a) => a !== 'NEG' && pos.some((r) => r.c.id.startsWith(a + '-'))).map((a) => { const p = pos.filter((r) => r.c.id.startsWith(a + '-')); return `${a} ${p.filter(strict).length}/${p.length}`; }).join('   '));
   if (flag('--route')) { const shown = rows.filter((r) => !r.c.none); out(`  second project block shown for ${rate(shown, (r) => r.alsoN > 0)} of the questions (the cost of a close call: a few more lines)`); }
-  const ms = rows.map((r) => r.ms); out(`  search time: average ${Math.round(ms.reduce((a, b) => a + b, 0) / Math.max(ms.length, 1))} ms, slowest ${Math.max(0, ...ms)} ms (the hook limit is 15,000 ms)`);
+  const ms = rows.map((r) => r.ms); out(`  search time: average ${Math.round(ms.reduce((a, b) => a + b, 0) / Math.max(ms.length, 1))} ms, slowest ${Math.max(0, ...ms)} ms (the hook timeout is 60,000 ms; the map search stops after 11,000 ms)`);
   if (knownRows.length) out('  known, not counted: ' + knownRows.map((r) => `${r.c.id} (${r.status}): ${r.c.why || ''}`).join('; '));
   const bad = rows.filter((r) => !strict(r)), shown = flag('--fails') ? bad : bad.slice(0, 40);
   if (bad.length) out(`\nnot strict-OK (${bad.length})${shown.length < bad.length ? `, first ${shown.length} (use --fails for all)` : ''}:`);

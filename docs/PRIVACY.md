@@ -24,7 +24,7 @@ This page says what gabriel stores, where, and what it sends. It covers version 
 
 ## What is stored, and where
 
-Everything is in one data folder, `~/.claude/gabriel-data`. Set `GABRIEL_DATA` to use another folder.
+Everything is in one data folder, `~/.gabriel`. Older installs keep `~/.claude/gabriel-data`: gabriel uses that folder while it exists. Set `GABRIEL_DATA` to use another folder.
 
 | Path | What it holds | Can it contain private text? |
 |---|---|---|
@@ -32,8 +32,9 @@ Everything is in one data folder, `~/.claude/gabriel-data`. Set `GABRIEL_DATA` t
 | `projects.json` | Names and paths of your doc sets. | Paths only. |
 | `mk.db` | Map: text chunks from your docs, code names, links, and the list of files you opened after a map. | Yes. It holds chunks of your docs. |
 | `vectors.json`, `history/vectors.json` | Meaning numbers (lists of decimals) for rules and prompts. | Numbers only, but they come from your text. |
-| `graph.json` | Rules graph: the text of your rules and memory notes. | Yes. |
-| `history/*.jsonl` | Your prompts, one file per month and machine. | Yes. |
+| `graph.json` | Rules graph for Claude Code: the text of your rules and memory notes. | Yes. |
+| `graph.codex.json`, `graph.gemini.json`, `graph.generic.json` | The same kind of graph for Codex CLI, Gemini CLI and `gabriel context`. | Yes. |
+| `history/*.jsonl` | Your prompts, one file per month and machine. All hosts write here. | Yes. |
 | `history/graph.db` | Word links built from your prompts. | Yes, in word form. |
 | `seen/` | Which items were sent in each session. | Item text. Removed after 7 days. |
 | `private/<name>/` | Files you add yourself: ranking weights, questions, eval cases. | Yes, if you add private text. |
@@ -43,7 +44,9 @@ Everything is in one data folder, `~/.claude/gabriel-data`. Set `GABRIEL_DATA` t
 
 Plugin folder: code only. It holds no data. It is replaced when the plugin updates.
 
-Your rules come from `~/.claude` (`CLAUDE.md` and memory notes). gabriel reads them. It does not write to that folder.
+Your rules come from the rules folder of each host. Claude Code: `~/.claude` (`CLAUDE.md` and memory notes). Codex CLI: `CODEX_HOME` or `~/.codex` (`AGENTS.md`). Gemini CLI: `~/.gemini` (`GEMINI.md`). `gabriel context` reads `GABRIEL_RULES_HOME`, or `~/.claude`. gabriel reads them. It does not write to those folders.
+
+Setup for Codex CLI and Gemini CLI writes one file each: `~/.codex/hooks.json` and `~/.gemini/settings.json`. It writes only with `--apply`, and it saves a backup first. `--remove-host` removes only gabriel's entries. See [HOSTS](HOSTS.md).
 
 ## What never leaves the machine
 
@@ -77,7 +80,8 @@ node "<plugin folder>/src/brain.js" forget "<text of the prompt>"
 ## Deleting everything
 
 1. Uninstall the plugin in Claude Code.
-2. Delete the data folder: `~/.claude/gabriel-data` (or the folder set in `GABRIEL_DATA`).
+2. Delete the data folder: `~/.gabriel`. On older installs, delete `~/.claude/gabriel-data` instead. Or delete the folder set in `GABRIEL_DATA`.
+3. For Codex CLI or Gemini CLI, run `setup.js --remove-host codex --apply` or `--remove-host gemini --apply` first. This removes the hooks from the host's file.
 
 That removes the map, the history, the model, the seen state and your private files. The plugin folder holds no data, so nothing else is left behind.
 

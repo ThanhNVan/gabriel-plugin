@@ -1,7 +1,8 @@
 node_modules/
-# per-user data lives outside the repo (~/.claude/gabriel-data) or in the gitignored private/ folder
+# per-user data lives outside the repo (~/.gabriel, or ~/.claude/gabriel-data on older installs) or in the gitignored private/ folder
 private/
 gabriel-data/
+.gabriel/
 brain-data/
 data/
 history/

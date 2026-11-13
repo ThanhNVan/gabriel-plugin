@@ -235,13 +235,12 @@ async function addDocs(argv) {
 const UPDATE_USAGE = 'usage: node src/setup.js --update [--dry-run] [--data <dir>]';
 const UPDATE_STEPS = 5;
 const ustep = (k, text) => console.log(`[${'#'.repeat(k).padEnd(UPDATE_STEPS, '-')}] ${String(Math.round((k * 100) / UPDATE_STEPS)).padStart(3)}% step ${k}/${UPDATE_STEPS}: ${text}`);
-const pairKey = (c) => c.doc + '\n' + c.sec;   // a case is the same case when its doc and section match
 
 async function update(argv) {
   const paths = require('./paths.js');
   const mk = require('./mk.js');
   const { loadConfig, loadProjects } = require('./projects.js');
-  const { sectionCases } = require('../eval/suggest-cases.js');
+  const { newSuggestions } = require('../eval/suggest-cases.js');
   let dry = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -307,14 +306,10 @@ async function update(argv) {
     if (!fs.existsSync(casesFile) || !fs.existsSync(p.root)) continue;
     const reviewed = readJson(casesFile), old = readJson(sugFile) || [];
     if (!Array.isArray(reviewed) || !Array.isArray(old)) { line(`${p.name}: eval-cases.json or eval-cases.suggested.json is not a list, skipped`); continue; }
-    const known = new Set([...reviewed, ...old].map(pairKey));
-    const fresh = [];
-    for (const c of sectionCases(p.name)) { if (known.has(pairKey(c))) continue; known.add(pairKey(c)); fresh.push(c); }
+    const { fresh, cases } = newSuggestions(p.name, reviewed, old);   // a section is new only when no reviewed or suggested case covers it
     counts.newCases += fresh.length;
     if (dry) { line(`${p.name}: (dry run) would add ${fresh.length} new suggested case(s)`); continue; }
     if (!fresh.length) { line(`${p.name}: 0 new suggested cases`); continue; }
-    let next = old.reduce((m, c) => Math.max(m, Number(String(c.id || '').replace(/^S/, '')) || 0), 0) + 1;
-    const cases = [...old, ...fresh.map((c) => ({ id: `S${next++}`, q: c.q, doc: c.doc, sec: c.sec, set: 'suggested' }))];
     writeJsonAtomic(sugFile, cases);
     line(`${p.name}: ${fresh.length} new suggested cases (review them in ${sugFile})`);
   }
@@ -331,9 +326,102 @@ async function update(argv) {
   return counts.failed ? 1 : 0;
 }
 
+// ---- hosts: node src/setup.js --host <codex|gemini> [--apply]   |   node src/setup.js --remove-host <name> --apply ----
+// Prints the hook config by default. Writes only with --apply: a backup first, then a JSON check, then the file. Other hooks are never removed.
+const HOST_USAGE = 'usage: node src/setup.js --host <claude|codex|gemini|copilot> [--apply]\n       node src/setup.js --remove-host <claude|codex|gemini|copilot> --apply';
+const GABRIEL_HOOK = /brain\.js"?\s+(hook|touched)\b/;   // the command gabriel writes: node "<plugin>/src/brain.js" hook|touched --host <name>
+const isGabriel = (cmd, name) => typeof cmd === 'string' && GABRIEL_HOOK.test(cmd) && cmd.includes(`--host ${name}`);
+const subcommand = (cmd) => (GABRIEL_HOOK.exec(cmd) || [])[1];
+
+// Adds gabriel's groups to hooks (the "hooks" object of the file). A gabriel hook that is already there is updated, never doubled.
+function addGabriel(hooks, want, name) {
+  const out = { added: [], updated: [] };
+  for (const [event, groups] of Object.entries(want)) {
+    if (hooks[event] !== undefined && !Array.isArray(hooks[event])) throw new Error(`"${event}" in the hooks file is not a list. Nothing was changed.`);
+    const list = hooks[event] || (hooks[event] = []);
+    for (const group of groups) {
+      const h = group.hooks[0];
+      const mine = list.flatMap((g) => (Array.isArray(g.hooks) ? g.hooks : []).filter((x) => isGabriel(x.command, name) && subcommand(x.command) === subcommand(h.command)));
+      if (!mine.length) { list.push(structuredClone(group)); out.added.push(`${event}: ${h.command}`); continue; }
+      for (const x of mine) if (x.command !== h.command || x.timeout !== h.timeout) { x.command = h.command; x.timeout = h.timeout; out.updated.push(`${event}: ${h.command}`); }
+    }
+  }
+  return out;
+}
+
+// Removes only gabriel's hooks for this host. A group is dropped only when removing left it empty.
+function removeGabriel(hooks, name) {
+  const removed = [];
+  for (const event of Object.keys(hooks)) {
+    if (!Array.isArray(hooks[event])) continue;
+    const keep = [];
+    let touched = false;
+    for (const group of hooks[event]) {
+      if (!Array.isArray(group.hooks)) { keep.push(group); continue; }
+      const before = group.hooks.length;
+      group.hooks = group.hooks.filter((x) => !isGabriel(x.command, name));
+      const n = before - group.hooks.length;
+      if (n) { touched = true; removed.push(`${event}: ${n} hook(s)`); }
+      if (group.hooks.length || !n) keep.push(group);
+    }
+    if (!touched) continue;
+    if (keep.length) hooks[event] = keep; else delete hooks[event];
+  }
+  return { removed };
+}
+
+function hostSetup(argv) {
+  const hostsMod = require('./hosts/index.js');
+  const remove = argv.includes('--remove-host'), flag = remove ? '--remove-host' : '--host';
+  const name = argv[argv.indexOf(flag) + 1], apply = argv.includes('--apply');
+  for (const a of argv) if (![flag, name, '--apply'].includes(a)) throw new Error('unknown option: ' + a);
+  if (!name || name.startsWith('--')) throw new Error(`${flag} needs a host name`);
+  const host = hostsMod.get(name);
+  if (!host.setup) {
+    line(host.name === 'claude'
+      ? (remove ? 'claude: remove the gabriel plugin in Claude Code (/plugin). setup.js writes nothing for it.' : 'claude: installed as a Claude Code plugin. setup.js writes nothing for it.')
+      : host.name === 'copilot'
+        ? `copilot: Copilot ignores what a prompt hook prints, so no hook file is written. Add these lines to ${path.join(host.rulesHome(), 'copilot-instructions.md')}:
+`
+          + `  Before you answer a question about a project, run: node "${path.join(ROOT, 'src', 'brain.js')}" context "<the question>" --host copilot${process.env.GABRIEL_DATA ? ` --data "${process.env.GABRIEL_DATA}"` : ''}
+`
+          + '  Use its map as a lead: name the doc or file it points to, then confirm in the code.'
+        : `${host.name}: no hook file. Call node "${path.join(ROOT, 'src', 'brain.js')}" context "<prompt>" --host ${host.name} from your tool.`);
+    return 0;
+  }
+  const file = host.setup.configFile(), want = host.setup.entries(ROOT);
+  let cfg = {};
+  if (fs.existsSync(file)) {
+    try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`${file} is not valid JSON (${e.message}). Nothing was changed. Fix it, then run again.`); }
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error(`${file} must hold a JSON object. Nothing was changed.`);
+  }
+  if (cfg.hooks !== undefined && (!cfg.hooks || typeof cfg.hooks !== 'object' || Array.isArray(cfg.hooks))) throw new Error(`"hooks" in ${file} must be an object. Nothing was changed.`);
+  const hooks = JSON.parse(JSON.stringify(cfg.hooks || {}));   // work on a copy
+  const r = remove ? removeGabriel(hooks, name) : addGabriel(hooks, want, name);
+  const changes = remove ? r.removed : [...r.added, ...r.updated];
+  line(`${host.name}: ${file}`);
+  if (!apply) {
+    if (remove) line(changes.length ? `would remove: ${changes.join('; ')}` : 'nothing to remove');
+    else { line('hook config gabriel adds:'); console.log(JSON.stringify({ hooks: want }, null, 2).split('\n').map((l) => '  ' + l).join('\n')); line(changes.length ? `not written yet: ${changes.length} change(s). Add --apply to write it (a backup is made first).` : 'already set up: no change'); }
+    return 0;
+  }
+  if (!changes.length) { line(remove ? 'nothing to remove' : 'already set up: nothing to change'); return 0; }
+  cfg.hooks = hooks;
+  JSON.parse(JSON.stringify(cfg));   // the new file must be valid JSON
+  let backup = '';
+  if (fs.existsSync(file)) { backup = `${file}.gabriel-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`; fs.copyFileSync(file, backup); }
+  writeJsonAtomic(file, cfg);
+  line(`${remove ? 'removed' : 'wrote'}: ${changes.join('; ')}`);
+  if (backup) line(`backup: ${backup}`);
+  return 0;
+}
+
 async function main(argv) {
   if (argv[0] === 'add-docs') {
     try { return await addDocs(argv.slice(1)); } catch (e) { console.error(e.message); return 1; }
+  }
+  if (argv.includes('--host') || argv.includes('--remove-host')) {
+    try { return hostSetup(argv); } catch (e) { console.error(e.message + '\n' + HOST_USAGE); return 1; }
   }
   if (argv.includes('--update')) {
     try { return await update(argv.filter((a) => a !== '--update')); } catch (e) { console.error(e.message + '\n' + UPDATE_USAGE); return 1; }

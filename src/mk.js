@@ -800,7 +800,8 @@ function searchAll(home, text, opts = {}) {
   hits.sort((a, b) => b.score - a.score);
   // Session gate: off-topic prompts (job tips, questions about this brain) scored 0.68-1.40 here while real unnamed questions have a median of 1.68
   // (2026-11-09 measurement). So a weak, unnamed match outside the repo folder shows a map only when this session already had one for that project.
-  if (hits[0] && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) hits.length = 0;
+  // Opt-in per project (projects.json "sessionGate": true). Off by default.
+  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) hits.length = 0;
   const top = hits[0], also = [];
   if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
   // The fallback project (general docs): the answer when no project answers, and a short extra block when the project's own answer is weak and the general docs are clearly stronger.

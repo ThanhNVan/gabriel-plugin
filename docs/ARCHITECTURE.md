@@ -1,10 +1,12 @@
 # Architecture
 
+For the step-by-step flows, with diagrams, see [WORKFLOWS.md](WORKFLOWS.md).
+
 This page explains how gabriel works inside. Read the [README](../README.md) first.
 
 gabriel has two parts:
 
-- **Rules graph.** Short rules and memory notes from your Claude home folder.
+- **Rules graph.** Short rules and memory notes from your host's rules folder (`~/.claude` for Claude Code).
 - **Map.** Doc sections and code names from your doc folders.
 
 A graph is a set of nodes joined by links. gabriel calls each node a "neuron" in its code and in its map search.
@@ -37,19 +39,21 @@ flowchart TD
 
 Prompts that start with `/`, have fewer than 4 words, or look like harness messages skip the search.
 
+Codex CLI, Gemini CLI and other tools run the same steps through their own adapter in `src/hosts/`. Each adapter reads the host's input and writes the host's output. See [HOSTS](HOSTS.md).
+
 The hook never blocks a prompt. Any error means it prints nothing. The hook timeout is 60 seconds. The map search is skipped when the hook is already past 11 seconds. The meaning step gives up after 9 seconds.
 
 ## Rules graph
 
-- **Sources.** `CLAUDE.md` and the files named in `ruleFiles` (default `CLAUDE.md`), in the Claude home folder (`~/.claude`). It also reads memory notes under `projects/*/memory/`, except `MEMORY.md`.
+- **Sources.** The files named in `ruleFiles` in `projects.json`. With no setting, the host's default file: `CLAUDE.md` in `~/.claude` (Claude Code), `AGENTS.md` in `~/.codex` (Codex CLI), `GEMINI.md` in `~/.gemini` (Gemini CLI). It also reads memory notes under `projects/*/memory/` in the same folder, except `MEMORY.md`.
 - **Nodes.** Each bullet or paragraph is one node. The nearest heading is its section.
 - **Note headers.** A note can set `valid-until: YYYY-MM-DD` to drop out after that day. It can set `supersedes: <note name>` to drop an older note.
 - **Skipped lines.** A line with `key`, `token`, `secret` or `password` and a long value is never stored.
-- **Already in context.** Nodes from `CLAUDE.md` and files it imports are loaded every session. gabriel never injects them again.
+- **Already in context.** Nodes from the host's always-loaded file (`CLAUDE.md`, `AGENTS.md` or `GEMINI.md`) and files it imports are loaded every session. gabriel never injects them again.
 - **Matching.** Words count with an inverse-frequency weight. Synonyms from `src/thesaurus.json` count half. A node needs 2 or more matching words, or one strong exact term such as a long name with a dash or dot.
 - **Meaning.** A small local model scores each node against the prompt. A meaning score needs to reach 0.3 unless words already matched.
 - **Output.** Up to 6 rules. The block stays under 2400 characters. Each rule line is cut at 320 characters.
-- **Storage.** `graph.json` in the data folder. It is rebuilt when a source file changes.
+- **Storage.** `graph.json` in the data folder for Claude Code, and `graph.<host>.json` for the other hosts. It is rebuilt when a source file changes.
 
 ## Map build
 
@@ -85,7 +89,7 @@ For each prompt, the map search does this:
    - A code line shows the name and the file, with its line.
    - For the top 3 code names, up to 4 neighbours each appear as `↔` lines. A `↔` line is one hop along a graph link. It has no direction.
 
-A "session gate" also applies. A weak match is a match that is not named in the prompt and is outside the project folder. It shows only when this session already had a map for that project.
+A "session gate" applies only to a project with `"sessionGate": true` in `projects.json` (off by default). A weak match is a match that is not named in the prompt and is outside the project folder. For that project it shows only when this session already had a map for it. See [ADDING-DOCS](ADDING-DOCS.md), section 10.
 
 ## Ranking
 
@@ -167,7 +171,7 @@ Flags: `--dry-run`, `--skip-model`, `--skip-test`, `--yes`, `--data <dir>`, `--o
 
 ## Files and data
 
-The plugin folder holds code only. It is replaced on update. Your data lives in one folder, `~/.claude/gabriel-data`. Set `GABRIEL_DATA` to use another folder.
+The plugin folder holds code only. It is replaced on update. Your data lives in one folder, `~/.gabriel`. Older installs keep `~/.claude/gabriel-data` while it exists. Set `GABRIEL_DATA` to use another folder.
 
 ```mermaid
 flowchart TD
@@ -189,7 +193,7 @@ flowchart TD
 | `docs/<name>/` | Your Markdown files for one doc set. |
 | `mk.db` | The map: doc chunks, code names, links, word index, learned links, last map per session. |
 | `vectors.json` | Meaning numbers for the rules graph nodes. |
-| `graph.json` | The rules graph. |
+| `graph.json` | The rules graph (Claude Code). Other hosts: `graph.<host>.json`. |
 | `models/` | The meaning model files. |
 | `history/` | Your prompts (one `YYYY-MM.<machine>.jsonl` file per month), their meaning numbers, and `graph.db`. |
 | `seen/` | Dedupe state per session. Removed after 7 days. |
@@ -197,7 +201,7 @@ flowchart TD
 | `dq.<name>.bin`, `dq.<name>.idx.json` | The question index for one doc set. Optional. |
 | `*.lock`, `mk-check`, `history-check` | Small lock and timing files. |
 
-The plugin's code reads the `CLAUDE.md` and memory files from `~/.claude`. It never writes there.
+The plugin's code reads the rules files of the host (for Claude Code: `CLAUDE.md` and memory files in `~/.claude`). It never writes there.
 
 ## Related
 

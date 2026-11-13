@@ -35,7 +35,10 @@ function run(cmd, args, env, what) {
 function capture(cmd, args, env, what) {
   const r = spawnSync(cmd, args, { env, encoding: 'utf8', maxBuffer: 256 << 20, windowsHide: true });
   const text = (r.stdout || '') + (r.stderr || '');
-  if (r.error || r.status !== 0) throw new Error(`${what} failed${r.status != null ? ` (exit ${r.status})` : ''}: ${text.trim().split(/\r?\n/).slice(-3).join(' | ')}`);
+  if (r.error || r.status !== 0) {
+    const lines = text.trim().split(/\r?\n/), firstErr = lines.find((l) => /error/i.test(l));   // the cause, then the last lines
+    throw new Error(`${what} failed${r.status != null ? ` (exit ${r.status})` : ''}: ${[...new Set([firstErr, ...lines.slice(-3)].filter(Boolean))].join(' | ')}`);
+  }
   return text;
 }
 

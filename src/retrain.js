@@ -42,7 +42,13 @@ const show = (label, s) => (s ? `${label}: strict ${s.n}/${s.t}` : `${label}: no
   const tmp = path.join(os.tmpdir(), `retrain-${name}-${process.pid}.json`);
   try {
     const trained = runNode('src/train-rank.js', ['--project', name, '--out', tmp]);
-    if (!trained.ok) { console.log(`train-rank failed (it needs the local meaning model): kept the current weights\n${trained.out.trim().split('\n').slice(-3).join('\n')}`); return; }
+    if (!trained.ok && /needs the local meaning model/.test(trained.out)) {   // not a failure: no model installed, so nothing to train
+      console.log(`meaning model is missing (train-rank needs it): no training; kept the current weights`); return;
+    }
+    if (!trained.ok) {
+      console.error(`training failed; kept the current weights\n${trained.out.trim().split('\n').slice(-3).join('\n')}`);
+      process.exitCode = 1; return;
+    }
     const after = runNode('eval/eval-map.js', ['--project', name, '--rank', tmp]);
     if (!after.ok) { console.error(after.out.trim()); process.exitCode = 1; return; }
     const newS = strictOf(after.out);

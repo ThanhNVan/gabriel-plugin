@@ -11,7 +11,7 @@ process.env.MK_DOCS = root;
 process.env.GABRIEL_DATA = path.join(tmp, 'data');
 fs.mkdirSync(process.env.GABRIEL_DATA, { recursive: true });
 fs.writeFileSync(path.join(process.env.GABRIEL_DATA, 'projects.json'), JSON.stringify({ version: 1, legacyProject: 'alpha', projects: [
-  { name: 'alpha', label: 'Alpha', root, graph: 'graphify-out/graph.json', prior: 0.5, learn: true, aliases: ['alpha'], cwdHints: ['alpha'] },
+  { name: 'alpha', label: 'Alpha', root, graph: 'graphify-out/graph.json', prior: 0.5, learn: true, aliases: ['alpha'], cwdHints: ['alpha'], sessionGate: true },
   { name: 'beta', label: 'Beta', root: root2, graph: 'graphify-out/graph.json', prior: 0, learn: false, aliases: ['beta'] },
   { name: 'ref', label: 'Ref docs', root: path.join(tmp, 'ref'), fallback: true },
 ] }));
@@ -100,7 +100,11 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.ok(mk.touched(home, 's1', file, { now: T0 }).ignored, 'no map was shown for this session yet');
     assert.strictEqual(mk.remember(home, 's1', before, T0), true);
     // session gate: a weak, unnamed match shows no map in a new session, but does in a session that already had an Alpha map, or inside the repo folder
-    assert.strictEqual(mk.searchAll(home, Q, { session: 'fresh' }), null, 'a weak match in a new session shows no map');
+    assert.strictEqual(mk.searchAll(home, Q, { session: 'fresh' }), null, 'a weak match in a new session shows no map (alpha has sessionGate: true)');
+    // sessionGate is off by default: beta (no sessionGate) shows a weak, unnamed match from outside its folder in a new session; alpha (sessionGate: true) hid it
+    const weakParcel = 'how do parcels get routed by zone', outside = 'C:\\elsewhere';
+    assert.strictEqual(mk.searchAll(home, weakParcel, { session: 'fresh2', cwd: outside }).project, 'beta', 'default (no sessionGate): a weak match from outside shows');
+    assert.strictEqual(mk.searchAll(home, Q, { session: 'fresh2', cwd: outside }), null, 'sessionGate: true: the weak alpha match from outside is hidden');
     assert.strictEqual(mk.searchAll(home, Q, { session: 's1' }).project, 'alpha', 'the same match shows in a session that already had a map');
     assert.strictEqual(mk.searchAll(home, Q, { cwd: 'C:\\repos\\Alpha' }).project, 'alpha', 'and inside the repo folder');
     assert.ok(mk.touched(home, 's1', 'C:\\other\\notes.txt', { now: T0 }).ignored, 'a file outside src is ignored');

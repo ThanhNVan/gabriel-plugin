@@ -1,7 +1,6 @@
 'use strict';
 // Privacy scan for publishable files: finds owner words, emails, IPs, secrets and user paths. Prints file, line and kind only, never the matched value.
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -39,7 +38,7 @@ function parseArgs(argv) {
 }
 
 function findWordsFile(opts) {
-  const base = process.env.GABRIEL_DATA || process.env.BRAIN_DATA || path.join(os.homedir(), '.claude', 'gabriel-data');
+  const base = require('../src/paths.js').dataDir();   // same folder rule as the rest of gabriel
   const candidates = opts.words
     ? [opts.words]
     : [path.join(base, 'private', 'privacy-words.txt'), path.join(opts.root, 'private', 'privacy-words.txt')];

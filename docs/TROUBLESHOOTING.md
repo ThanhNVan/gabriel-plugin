@@ -86,11 +86,19 @@ pwsh -File "D:\My Tools\gabriel\setup.ps1" --dry-run
 
 ## The hook runs twice
 
-Symptom: each prompt shows the same block twice.
+Symptom: each prompt shows the same block twice. Find your host below.
 
-Cause: an old manual hook is still in your Claude Code settings. The plugin adds its own hook too.
+**Claude Code.** Cause: an old manual hook is still in your Claude Code settings. The plugin adds its own hook too.
 
 Fix: open your Claude Code settings file and remove the old hook entry that runs `brain.js hook`. Keep the plugin's hook. The plugin's hook is in `hooks/hooks.json`.
+
+**Codex CLI.** Cause: the `UserPromptSubmit` entry for gabriel is in `hooks.json` twice. Setup never adds a second entry, so this comes from a manual edit or a second copy of the file.
+
+Fix: search the hooks file for `brain.js`. The file is `~/.codex/hooks.json`, or `hooks.json` in `CODEX_HOME`. Keep one `hook --host codex` entry and one `touched --host codex` entry. Or remove gabriel's entries with `node "<plugin folder>/src/setup.js" --remove-host codex --apply`, then add them again with `--host codex --apply`. See [HOSTS](HOSTS.md).
+
+**Gemini CLI.** Cause: the same as Codex, in `~/.gemini/settings.json`.
+
+Fix: the same steps, with `--host gemini`.
 
 ## Plugin update removed packages
 

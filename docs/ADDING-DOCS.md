@@ -4,7 +4,7 @@ A doc set is one folder of doc files. Gabriel builds a map from it. The map find
 
 Gabriel reads Markdown, plain text, reStructuredText, AsciiDoc, Org, HTML, Word (.docx), PowerPoint (.pptx), OpenDocument (.odt, .odp), Excel (.xlsx), CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. A scanned PDF has only pictures, so it has no text and is skipped. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: they are read only when the set lists them. Set `"extensions": ["md","pdf"]` in `projects.json` to limit a set to some types. For opt-in types, list the name without the dot, like `"json"`, `"jsonl"`, `"ndjson"`, `"yaml"` or `"yml"`.
 
-Your data folder is `~/.claude/gabriel-data/`. On Windows that is `C:\Users\<you>\.claude\gabriel-data\`.
+Your data folder is `~/.gabriel/`. On Windows that is `C:\Users\<you>\.gabriel\`. Older installs use `~/.gabriel/` instead, as long as that folder exists. The examples below use `~/.gabriel/`. Use your own folder's path.
 
 **The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. From a local folder, it is that folder: local-path marketplaces load in place.
 
@@ -13,7 +13,7 @@ Your data folder is `~/.claude/gabriel-data/`. On Windows that is `C:\Users\<you
 Option A: put the files in a folder under the data folder.
 
 ```
-~/.claude/gabriel-data/docs/<name>/
+~/.gabriel/docs/<name>/
 ```
 
 Use one folder per topic. Option A works only while there is no `projects.json` file in the data folder. After the first `add-docs`, that file exists, and a new folder under `docs/` is ignored. Then use `add-docs --copy`, or add an entry to `projects.json`.
@@ -101,10 +101,12 @@ node eval/suggest-cases.js --project <name>
 
 Expected line: `wrote <n> suggested cases to <file>; review them, then save as eval-cases.json`
 
+A section that a case already covers is not suggested again. A case covers a section when its `doc` pattern matches the file and its `sec` pattern matches the section. Cases with a bad pattern cover nothing. The file keeps the cases it already had.
+
 Open the suggested file. Rewrite each question in your own words. Then save it as:
 
 ```
-~/.claude/gabriel-data/private/<name>/eval-cases.json
+~/.gabriel/private/<name>/eval-cases.json
 ```
 
 Then retrain the ranking:
@@ -117,9 +119,9 @@ Claude reports the scores before and after. Read the comments at the top of `eva
 
 ## 8. Remove a doc set
 
-1. Open `~/.claude/gabriel-data/projects.json`.
+1. Open `~/.gabriel/projects.json`.
 2. Delete the entry with that `name`. Save the file.
-3. If you copied the set, delete its folder: `~/.claude/gabriel-data/docs/<name>/`. A linked set uses your own folder. Keep that folder.
+3. If you copied the set, delete its folder: `~/.gabriel/docs/<name>/`. A linked set uses your own folder. Keep that folder.
 4. Run setup again:
 
 ```
@@ -134,7 +136,7 @@ Setup does not clear the old map rows of a removed set. To purge them, delete `m
 
 You can add doc sets and doc files at any time. Either:
 
-- Add a new doc set with `/gabriel:add-docs <name> <folder>`, or copy a folder into `~/.claude/gabriel-data/docs/<name>/`.
+- Add a new doc set with `/gabriel:add-docs <name> <folder>`, or copy a folder into `~/.gabriel/docs/<name>/`.
 - Change or add files in a doc set you already have.
 
 Then run:
@@ -151,7 +153,11 @@ Expected lines: `added doc set <name>` for each new folder, `<name>: map built` 
 
 `/gabriel:update` does not change `eval-cases.json`. It only adds new cases to `eval-cases.suggested.json`, for sections that are not in your cases yet. Then:
 
-1. Open `~/.claude/gabriel-data/private/<name>/eval-cases.suggested.json`. Keep the new cases you want. Rewrite each question in your own words, and save them in `eval-cases.json`.
+1. Open `~/.gabriel/private/<name>/eval-cases.suggested.json`. Keep the new cases you want. Rewrite each question in your own words, and save them in `eval-cases.json`.
 2. Retrain the ranking: `/gabriel:retrain <name>`.
 
 A folder dropped into `docs/` is a new doc set only when `projects.json` exists. With no `projects.json`, gabriel already reads every folder under `docs/`.
+
+## 10. projects.json fields
+
+- `"sessionGate": true`: on the first prompt of a session, a weak match that names no doc set and comes from outside its folder shows nothing. Default: `false`. Use it when several doc sets overlap.

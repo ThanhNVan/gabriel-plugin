@@ -12,7 +12,9 @@ const SECRET = /\b(key|token|secret|password)\b.*[A-Za-z0-9_-]{24,}/i; // a line
 const homeDir = paths.rulesHome;
 // An explicit other home (used by in-process tests) keeps its own data under <home>/brain/data; otherwise the real data folder.
 const dataDir = (home) => (home && path.resolve(home) !== paths.rulesHome()) ? path.join(home, 'brain', 'data') : paths.dataDir();
-const graphFile = (home) => path.join(dataDir(home), 'graph.json');
+// Claude keeps graph.json (the owner's data). Other hosts get their own file, so two hosts never overwrite each other.
+const graphName = () => (paths.activeHost() === 'claude' ? 'graph.json' : `graph.${paths.activeHost()}.json`);
+const graphFile = (home) => path.join(dataDir(home), graphName());
 function writeAtomic(file, text) { // write to a temp name, then rename: a reader never sees half a file
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
@@ -34,8 +36,8 @@ const spans = (text) => [...text.matchAll(/`([^`]{2,60})`/g)].map((m) => m[1].to
 
 function sources(home) {
   const list = [];
-  let files;   // the rule files named in projects.json (fail open: CLAUDE.md only)
-  try { files = require('./projects.js').loadConfig().ruleFiles; } catch { files = ['CLAUDE.md']; }
+  let files;   // the rule files named in projects.json (fail open: the host's default file only)
+  try { files = require('./projects.js').loadConfig().ruleFiles; } catch { files = paths.defaultRuleFiles(); }
   for (const f of files) if (fs.existsSync(path.join(home, f))) list.push({ rel: f, abs: path.join(home, f), note: false });
   const proj = path.join(home, 'projects');
   if (fs.existsSync(proj)) {
@@ -66,13 +68,15 @@ function blocks(body) {
   return out.filter((b) => b.text.length >= 12);
 }
 
-// Files CLAUDE.md pulls in with an "@file" line are loaded every session too, so their rules are already in context.
-function importedByClaude(home) {
-  try { return new Set([...fs.readFileSync(path.join(home, 'CLAUDE.md'), 'utf8').matchAll(/^@(?:~\/\.claude\/|\.\/)?(\S+\.md)\s*$/gm)].map((m) => m[1])); } catch { return new Set(); }
+// Files the host's always-loaded file (CLAUDE.md, AGENTS.md, ...) pulls in with an "@file" line are loaded every session too, so their rules are already in context.
+function importedByContext(home) {
+  const ctx = paths.contextFile();
+  if (!ctx) return new Set();
+  try { return new Set([...fs.readFileSync(path.join(home, ctx), 'utf8').matchAll(/^@(?:~\/\.claude\/|\.\/)?(\S+\.md)\s*$/gm)].map((m) => m[1])); } catch { return new Set(); }
 }
 
 function build(home = homeDir()) {
-  const imported = importedByClaude(home);
+  const imported = importedByContext(home);
   const nodes = [], built = Date.now(), mtimes = {}, replaced = new Map(), names = new Set(), warnings = [];
   let expires = 0; // earliest future valid-until date: after it the graph must be rebuilt
   for (const s of sources(home)) {
@@ -101,7 +105,7 @@ function build(home = homeDir()) {
       const section = s.note ? name.trim() : b.section;
       nodes.push({
         id: `${s.rel}#${nodes.length}`, label: b.text.slice(0, 60), file: s.rel, section, text: b.text, kind,
-        inContext: s.rel === 'CLAUDE.md' || imported.has(s.rel), stale: !!stale, kw: [...new Set([...tokens(b.text), ...spans(b.text)])],
+        inContext: s.rel === paths.contextFile() || imported.has(s.rel), stale: !!stale, kw: [...new Set([...tokens(b.text), ...spans(b.text)])],
       });
     }
   }
