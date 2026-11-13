@@ -68,7 +68,7 @@ Only after a graph was made in step 2. Ask (multi-select): "Write docs for <fold
 - Architecture (parts, layers, how they connect)
 - Workflows with Mermaid diagrams
 
-For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<folder>/docs/`, one file per pick, in short plain words.
+For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<folder>/docs/` in the layout and lean rules of `${CLAUDE_PLUGIN_ROOT}/docs/DOC-LAYOUT.md`: read it first. Business and workflow picks go in `docs/business/`, technical and architecture picks in `docs/technical/`, plus the index `docs/README.md`. Make only the files that have real content, in short plain words. Do not over-detail: no per-method docs, no copied code, no line numbers, no empty or "planned" sections.
 
 Add Mermaid diagrams to every doc, not only the workflow one: a picture is read faster than words. Build each diagram from the graph and the code, never from memory. Fit the kind to the doc:
 

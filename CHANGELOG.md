@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Code docs from setup and refresh-docs follow one layout (`docs/DOC-LAYOUT.md`): `business/` (domain map, rules, states, glossary, `workflows/W<nn>-*.md`) and `technical/` (architecture, modules, dev workflow, findings), with an index. Lean rules: one fact in one place, name the code instead of copying it, no per-method docs, no line numbers, size limits. Refresh-docs lists what it cuts as over-detail.
+
 ## 0.2.0 (2026-11-13)
 
 - Hosts: Codex CLI and Gemini CLI hooks (`node src/setup.js --host <name> [--apply]`, `--remove-host`), GitHub Copilot through its instructions file (`--host copilot` prints the lines), and `brain.js context` for any other tool. Data folder `~/.gabriel` by default; `--data <dir>` for hosts that do not see your env.

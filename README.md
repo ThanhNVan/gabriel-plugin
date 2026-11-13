@@ -80,6 +80,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): common problems and fixes.
 - [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md): how to add doc sets.
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
+- [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md): the folder layout and lean rules for the code docs that setup writes and refresh-docs keeps.
 
 ## Best results: graph your code, then write its docs
 

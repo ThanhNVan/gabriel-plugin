@@ -6,7 +6,7 @@ Gabriel reads Markdown, plain text, reStructuredText, AsciiDoc, Org, HTML, Word 
 
 Your data folder is `~/.gabriel/`. On Windows that is `C:\Users\<you>\.gabriel\`. Older installs use `~/.gabriel/` instead, as long as that folder exists. The examples below use `~/.gabriel/`. Use your own folder's path.
 
-**The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. From a local folder, it is that folder: local-path marketplaces load in place.
+**The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. A local-folder marketplace is copied there too, so edits in your folder are not used until you run `claude plugin update gabriel@gabriel` and restart Claude Code.
 
 ## 1. Add the files
 
