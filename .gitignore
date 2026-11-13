@@ -1,0 +1,20 @@
+node_modules/
+# per-user data lives outside the repo (~/.claude/gabriel-data) or in the gitignored private/ folder
+private/
+gabriel-data/
+brain-data/
+data/
+history/
+*.db
+*.bin
+*.idx.json
+vectors.json
+rank.json
+rank.*.json
+eval-cases*.json
+eval-mk-cases.json
+doc-questions.json
+projects.json
+privacy-words.txt
+*.local.*
+!projects.example.json

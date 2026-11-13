@@ -1,0 +1,375 @@
+#!/usr/bin/env node
+// One-shot setup: checks node, installs packages, fetches the model, builds the rules graph and the doc maps, runs the tests.
+// Usage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test]
+// Safe to run again. Writes only inside the data folder (and node_modules when packages change).
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const SRC = __dirname;
+const ROOT = path.resolve(__dirname, '..');
+const TOTAL = 10;
+const MODEL_FILE = ['onnx', 'model_quantized.onnx'];
+const RETRY_WAITS = [5000, 15000, 45000];
+const OLD_BRAIN = path.join(os.homedir(), '.claude', 'brain');
+const GRAPHIFY_SKILL = path.join(os.homedir(), '.claude', 'skills', 'graphify', 'SKILL.md');
+const ONLY_STEPS = { model: [5], build: [7, 8], test: [9] };
+
+const line = (msg) => console.log('  ' + msg);
+const step = (n, text) => console.log(`[${'#'.repeat(n).padEnd(TOTAL, '-')}] ${String(n * 10).padStart(3)}% step ${n}/${TOTAL}: ${text}`);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+
+function parseArgs(argv) {
+  const o = { dryRun: false, skipModel: false, skipTest: false, yes: false, data: null, only: null };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--dry-run') o.dryRun = true;
+    else if (a === '--skip-model') o.skipModel = true;
+    else if (a === '--skip-test') o.skipTest = true;
+    else if (a === '--yes') o.yes = true;
+    else if (a === '--data' || a === '--only') {
+      const v = argv[++i];
+      if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
+      if (a === '--data') o.data = v; else o.only = v;
+    } else throw new Error('unknown option: ' + a);
+  }
+  if (o.only && !ONLY_STEPS[o.only]) throw new Error('--only must be model, build or test');
+  return o;
+}
+
+// Runs src/<script> with node. Returns the spawn result.
+function runNode(args, { skipModel = false, heap = false, capture = false } = {}) {
+  const execArgs = heap ? ['--max-old-space-size=4096'] : [];
+  return spawnSync(process.execPath, [...execArgs, ...args], {
+    cwd: ROOT, env: skipModel ? { ...process.env, GABRIEL_NO_DOWNLOAD: '1' } : process.env, encoding: 'utf8', stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+  });
+}
+
+// Counts .md files under a doc folder (skips the same folders the map skips). Returns null when the folder is missing.
+function countDocs(root) {
+  if (!root || !fs.existsSync(root)) return null;
+  const skip = new Set(['graphify-out', 'node_modules', '.git', 'atlas', '_tools']);
+  let n = 0;
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    if (e.isDirectory()) { if (!skip.has(e.name)) walk(path.join(d, e.name)); } else if (e.name.endsWith('.md')) n++; } };
+  walk(root);
+  return n;
+}
+
+async function fetchModel(modelsDir, modelFile) {
+  const embedPath = path.join(SRC, 'embed.js');
+  const script = `const e=require(${JSON.stringify(embedPath)});e.getEmbedder(true).then((p)=>process.exit(p?0:1));`;
+  for (let attempt = 0; attempt <= RETRY_WAITS.length; attempt++) {
+    if (attempt > 0) {
+      line(`retry ${attempt} of ${RETRY_WAITS.length} in ${RETRY_WAITS[attempt - 1] / 1000} s`);
+      await sleep(RETRY_WAITS[attempt - 1]);
+    }
+    fs.mkdirSync(modelsDir, { recursive: true });
+    const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: process.env, stdio: 'inherit' });
+    if (r.status === 0 && fs.existsSync(modelFile)) return true;
+  }
+  return false;
+}
+
+// ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>] ----
+const DOC_EXT = ['.md'], CODE_EXT = ['.cs', '.ts', '.js', '.py', '.java', '.go'];   // DOC_EXT: the map reads Markdown only (mk.js listDocs)
+const ADD_SKIP = new Set(['graphify-out', 'node_modules', '.git']);
+const MAX_DOC_FILES = 20000, MAX_DOC_BYTES = 500 * 1024 * 1024;
+const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]';
+
+// Doc files under a folder (paths relative to it, subfolders kept) and their total size.
+function listDocFiles(root) {
+  const files = [];
+  let bytes = 0;
+  const walk = (dir, rel) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name), r = path.join(rel, e.name);
+      if (e.isDirectory()) { if (!ADD_SKIP.has(e.name)) walk(p, r); }
+      else if (DOC_EXT.includes(path.extname(e.name).toLowerCase())) { files.push(r); bytes += fs.statSync(p).size; }
+    }
+  };
+  walk(root, '');
+  return { files, bytes };
+}
+
+// True when a code file sits within two levels of the folder (the folder itself is level 0).
+function hasCodeFiles(root) {
+  const walk = (dir, level) => fs.readdirSync(dir, { withFileTypes: true }).some((e) => {
+    if (e.isDirectory()) return level < 2 && !ADD_SKIP.has(e.name) && walk(path.join(dir, e.name), level + 1);
+    return CODE_EXT.includes(path.extname(e.name).toLowerCase());
+  });
+  return walk(root, 0);
+}
+
+// The graph path stored in projects.json. mk.build joins root + graph, so it must be relative to root. Null when no relative path exists (another drive).
+function graphRel(root, graphFile) {
+  const rel = path.relative(root, graphFile).split(path.sep).join('/');
+  return path.isAbsolute(rel) ? null : rel;
+}
+
+// Write JSON to a temp file, then rename it over the target (a reader sees the old or the new file, never half).
+function writeJsonAtomic(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  try { fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n'); fs.renameSync(tmp, file); }
+  catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+}
+
+// Adds one doc set. Prints its lines. Returns the exit code. Every check runs before any write, so an error leaves projects.json unchanged.
+function addDocs(argv) {
+  const { checkName, dataDir, docsDir, projectsFile } = require('./paths.js');
+  const { loadProjects } = require('./projects.js');
+  const fail = (msg) => { console.error(msg); return 1; };
+  const opt = { copy: false, code: null, yes: false }, pos = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--copy') opt.copy = true;
+    else if (a === '--yes') opt.yes = true;
+    else if (a === '--code' || a === '--data') {
+      const v = argv[++i];
+      if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
+      if (a === '--code') opt.code = v; else process.env.GABRIEL_DATA = path.resolve(v);
+    } else if (a.startsWith('--')) throw new Error('unknown option: ' + a);
+    else pos.push(a);
+  }
+  if (pos.length !== 2) throw new Error(ADD_USAGE);
+  const [name, folderArg] = pos;
+
+  checkName(name);
+  const folder = path.resolve(folderArg);
+  if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return fail(`folder not found: ${folderArg}`);
+  const { files, bytes } = listDocFiles(folder);
+  if (!files.length) return fail(`0 docs found in ${folderArg}`);
+  if (loadProjects().some((p) => p.name === name)) return fail(`project ${name} already exists`);
+  if ((files.length > MAX_DOC_FILES || bytes > MAX_DOC_BYTES) && !opt.yes) {
+    return fail(`too big: ${files.length} files, ${(bytes / 1048576).toFixed(1)} MB (limit ${MAX_DOC_FILES} files, ${MAX_DOC_BYTES / 1048576} MB). Add --yes to add it anyway.`);
+  }
+  const dest = docsDir(name);
+  if (opt.copy && fs.existsSync(dest)) return fail(`folder already exists: ${dest}. Remove it or pick another name.`);
+  const codeDir = opt.code ? path.resolve(opt.code) : folder;
+  if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+
+  // code graph: the --code repo first, then the docs folder
+  const root = opt.copy ? dest : folder;
+  const graphFile = [path.join(codeDir, 'graphify-out', 'graph.json'), path.join(folder, 'graphify-out', 'graph.json')].find((f) => fs.existsSync(f));
+  let graph = null;
+  if (graphFile) {
+    graph = graphRel(root, graphFile);
+    if (graph) console.log('code graph found: linking docs to code');
+    else console.log('code graph is on another drive, so it cannot be linked. The docs work without it.');
+  } else if (hasCodeFiles(codeDir)) {
+    console.log(`For better results with code, run /graphify ${opt.code || folderArg}; gabriel reads its graphify-out/graph.json.`);
+  }
+
+  if (opt.copy) {
+    try {
+      for (const f of files) { fs.mkdirSync(path.dirname(path.join(dest, f)), { recursive: true }); fs.copyFileSync(path.join(folder, f), path.join(dest, f)); }
+    } catch (e) { fs.rmSync(dest, { recursive: true, force: true }); return fail(`copy failed: ${e.message}`); }
+  }
+
+  // projects.json: with no file yet, start from the folders under docs/ (the same list loadConfig uses), so nothing disappears
+  const file = projectsFile();
+  let j;
+  if (fs.existsSync(file)) {
+    j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (j.version !== 1) throw new Error(`projects.json version ${j.version} is not supported (expected 1)`);
+    j.projects = j.projects || [];
+  } else {
+    const docs = path.join(dataDir(), 'docs');
+    j = { version: 1, projects: [] };
+    for (const e of fs.existsSync(docs) ? fs.readdirSync(docs, { withFileTypes: true }) : []) {
+      if (!e.isDirectory() || e.name === name) continue;   // the new name is added below (a --copy just made its folder)
+      try { checkName(e.name); } catch { console.log(`skipped folder with a bad name: ${e.name}`); continue; }
+      j.projects.push({ name: e.name, root: 'docs/' + e.name });
+    }
+  }
+  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph });
+  try { writeJsonAtomic(file, j); }
+  catch (e) { if (opt.copy) fs.rmSync(dest, { recursive: true, force: true }); return fail(`cannot write projects.json: ${e.message}`); }
+
+  // build the map (a child process reads projects.json, so this runs after the write)
+  const r = runNode([path.join(SRC, 'brain.js'), 'build-mk', name], { heap: true, capture: true });
+  const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean);
+  console.log(out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)');
+  if (r.status !== 0) return fail(`${name} is in projects.json but its map was not built. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${name}`);
+  console.log(`added ${name}: ${files.length} docs`);
+  return 0;
+}
+
+async function main(argv) {
+  if (argv[0] === 'add-docs') {
+    try { return addDocs(argv.slice(1)); } catch (e) { console.error(e.message); return 1; }
+  }
+  let opts;
+  try { opts = parseArgs(argv); } catch (e) { console.error(e.message + '\nusage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test]'); return 2; }
+  if (opts.data) process.env.GABRIEL_DATA = path.resolve(opts.data);
+  return run(opts);
+}
+
+async function run(opts) {
+  const paths = require('./paths.js');
+  const { MODEL } = require('./embed.js');
+  const { loadProjects } = require('./projects.js');
+  const { migrate } = require('./migrate-data.js');
+  const dataDir = paths.dataDir();
+  const dry = opts.dryRun;
+  const runs = (n) => n === 1 || !opts.only || ONLY_STEPS[opts.only].includes(n);
+
+  // 1: node version
+  if (runs(1)) {
+    step(1, 'check node (22.5 or newer)');
+    const [maj, min] = process.versions.node.split('.').map(Number);
+    if (maj < 22 || (maj === 22 && min < 5)) {
+      line(`node ${process.version} is too old. Install Node 22.5 or newer from https://nodejs.org/ and open a new terminal.`);
+      return 1;
+    }
+    line(`node ${process.version}`);
+  }
+
+  // 2: packages (pinned version in package.json)
+  if (runs(2)) {
+    step(2, 'install packages');
+    const pin = (readJson(path.join(ROOT, 'package.json')) || {}).dependencies?.['@huggingface/transformers'];
+    const installed = (readJson(path.join(ROOT, 'node_modules', '@huggingface', 'transformers', 'package.json')) || {}).version;
+    if (installed && installed === pin) line(`already installed (${pin})`);
+    else if (dry) line(`(dry run) would run: npm ci --omit=dev in ${ROOT}`);
+    else {
+      const r = spawnSync('npm', ['ci', '--omit=dev'], { cwd: ROOT, shell: true, stdio: 'inherit' });
+      if (r.status !== 0) {
+        line(`npm install failed. Retry: cd "${ROOT}" && npm ci --omit=dev`);
+        return 1;
+      }
+    }
+  }
+
+  // 3: data folders
+  if (runs(3)) {
+    step(3, 'create the data folder');
+    if (dry) line(`(dry run) would create ${dataDir} with docs, private and models`);
+    else for (const d of ['docs', 'private', 'models']) fs.mkdirSync(path.join(dataDir, d), { recursive: true });
+    line(dataDir);
+  }
+
+  // 4: starter folder when there are no doc sets yet
+  if (runs(4)) {
+    step(4, 'add a starter folder when there are no doc sets');
+    const docs = path.join(dataDir, 'docs');
+    const hasProjectsFile = fs.existsSync(paths.projectsFile());
+    const hasDocFolder = fs.existsSync(docs) && fs.readdirSync(docs, { withFileTypes: true }).some((e) => e.isDirectory());
+    if (hasProjectsFile || hasDocFolder) line('doc sets found, nothing to add');
+    else if (dry) line(`(dry run) would create ${path.join(docs, 'README.md')}`);
+    else {   // a file, not a folder: a starter folder would become a doc set and block `add-docs <same name>`
+      const text = [
+        'Make one folder here per topic, and put your Markdown files in it.',
+        'Or point gabriel at a folder you already have: /gabriel:add-docs <name> <folder>.',
+        'Then run /gabriel:setup again. For code repos, also run /graphify <repo>.',
+      ].join('\n') + '\n';
+      fs.mkdirSync(docs, { recursive: true });
+      fs.writeFileSync(path.join(docs, 'README.md'), text);
+      line(`created ${path.join(docs, 'README.md')}`);
+    }
+  }
+
+  // 5: meaning model
+  if (runs(5)) {
+    step(5, 'fetch the meaning model');
+    const modelsDir = paths.modelsDir();
+    const modelFile = path.join(modelsDir, ...MODEL.split('/'), ...MODEL_FILE);
+    if (opts.skipModel) line('skipped (--skip-model): words-only mode');
+    else if (fs.existsSync(modelFile)) line('already installed');
+    else if (dry) line(`(dry run) would download ${MODEL} into ${modelsDir}`);
+    else if (await fetchModel(modelsDir, modelFile)) line(`model ${MODEL} installed`);
+    else {
+      line(`warning: model ${MODEL} not downloaded (words-only mode for now). Retry later: node "${path.join(ROOT, 'src', 'setup.js')}" --only model`);
+    }
+  }
+
+  // 6: data from the old brain folder (copies only, never deletes)
+  if (runs(6)) {
+    step(6, 'check for data from the old brain folder');
+    const oldDb = path.join(OLD_BRAIN, 'data', 'mk.db');
+    const newDb = path.join(dataDir, 'mk.db');
+    const migrateCli = path.join(SRC, 'migrate-data.js');
+    const cmd = `node "${migrateCli}" --from "${OLD_BRAIN}" --to "${dataDir}"`;
+    if (process.env.GABRIEL_SETUP_NO_MIGRATE === '1') line('skipped (GABRIEL_SETUP_NO_MIGRATE=1)');
+    else if (!fs.existsSync(oldDb) || fs.existsSync(newDb)) line('nothing to copy');
+    else {
+      try {
+        const r = migrate({ from: OLD_BRAIN, to: dataDir, dryRun: true, log: () => {} });
+        line(`found old data in ${OLD_BRAIN}: ${r.planned} file(s) to copy, ${r.bytes} bytes (${r.done} already there)`);
+      } catch (e) {
+        line(`cannot plan the copy: ${e.message}`);
+        return 1;
+      }
+      line(`exact command: ${cmd}`);
+      if (opts.yes && !dry) {
+        const r = spawnSync(process.execPath, [migrateCli, '--from', OLD_BRAIN, '--to', dataDir], { stdio: 'inherit' });
+        if (r.status !== 0) line(`copy failed (exit ${r.status}). Old data is untouched.`);
+        else line('copy done');
+      } else line('not copied yet: add --yes to copy');
+    }
+  }
+
+  // 7: rules graph
+  if (runs(7)) {
+    step(7, 'build the rules graph');
+    const brain = path.join(SRC, 'brain.js');
+    if (dry) line(`(dry run) would run: node src/brain.js build`);
+    else {
+      const r = runNode([brain, 'build'], { skipModel: opts.skipModel });
+      if (r.status !== 0) { line(`rules graph failed (exit ${r.status})`); return 1; }
+    }
+  }
+
+  // 8: doc maps, one per project
+  if (runs(8)) {
+    step(8, 'build the doc maps');
+    const projects = loadProjects();
+    if (!projects.length) line(`no doc sets yet: put Markdown folders in ${path.join(dataDir, 'docs')}/`);
+    for (const p of projects) {
+      if (dry) { line(`(dry run) would build the map for ${p.name}`); continue; }
+      const brain = path.join(SRC, 'brain.js');
+      const r = runNode([brain, 'build-mk', p.name], { skipModel: opts.skipModel, heap: true, capture: true });
+      const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean);
+      const res = out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)';
+      line(`${p.name}: ${res}`);
+    }
+  }
+
+  // 9: tests (a failure is printed, not fatal)
+  if (runs(9)) {
+    step(9, 'run the tests');
+    if (opts.skipTest) line('skipped (--skip-test)');
+    else if (dry) line('(dry run) would run: npm test');
+    else {
+      const r = spawnSync('npm', ['test'], { cwd: ROOT, shell: true, stdio: 'inherit' });
+      line(r.status === 0 ? 'tests passed' : `tests failed (exit ${r.status}). Setup continues; see the output above.`);
+    }
+  }
+
+  // 10: summary (read only)
+  if (!opts.only) {
+    step(10, 'summary');
+    line(`data folder: ${dataDir}`);
+    let projects = [];
+    try { projects = loadProjects(); } catch (e) { line(`cannot read projects: ${e.message}`); }
+    line(`${projects.length} project${projects.length === 1 ? '' : 's'}`);
+    for (const p of projects) {
+      const n = countDocs(p.root);
+      line(`  ${p.name}${n === null ? '' : `: ${n} doc${n === 1 ? '' : 's'}`}`);
+    }
+    if (!fs.existsSync(GRAPHIFY_SKILL)) {
+      line('For code repos, install the graphify skill and run /graphify <repo>; gabriel links docs to code through its graphify-out/graph.json.');
+    }
+    line('Next: /gabriel:add-docs <name> <folder>');
+  }
+  return 0;
+}
+
+if (require.main === module) {
+  main(process.argv.slice(2)).then((code) => process.exit(code), (e) => { console.error(e && e.stack || e); process.exit(1); });
+}
+
+module.exports = { main };

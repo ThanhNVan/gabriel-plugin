@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "ruleFiles": ["CLAUDE.md"],
+  "projects": [
+    { "name": "notes", "label": "My notes", "root": "docs/notes", "layout": "all-md", "graph": null,
+      "aliases": ["notes"], "cwdHints": [], "prior": 0, "learn": true, "fallback": false }
+  ]
+}

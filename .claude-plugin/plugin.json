@@ -1,0 +1,10 @@
+{
+  "name": "gabriel",
+  "version": "0.1.0",
+  "description": "Local doc and rules map for Claude Code: adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine.",
+  "author": {
+    "name": "ThanhNVan @ AIC Lab FPT University"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "docs", "retrieval", "local"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "claude-brain",
+  "private": true,
+  "description": "Brain graph: rules and memory as a graph, matched to each prompt by words, synonyms and meaning.",
+  "scripts": {
+    "test": "node test/run-all.js",
+    "privacy": "node tools/check-public.js",
+    "prepack": "node tools/check-public.js --release"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2"
+  }
+}
