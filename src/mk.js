@@ -517,6 +517,14 @@ function stale(home = homeDir(), project = defaultProject()) { // true when ther
   } catch { return graphOnDisk(project); }   // the other projects are built on request, so no map is not "stale"
 }
 
+// True when the project has a map in mk.db. stale() is false for a new non-default project with no rows (built on request), so --update checks this too.
+function hasMap(home = homeDir(), project = defaultProject()) {
+  try {
+    const db = new (sqlite())(dbFile(home, project), { readOnly: true });
+    try { return !!db.prepare("SELECT 1 FROM meta WHERE project = ? AND k = 'root'").get(project); } finally { db.close(); }
+  } catch { return false; }
+}
+
 // ---- firing ----
 function expand(q, groups) {
   const m = new Map([...q].map((t) => [t, 1]));
@@ -831,4 +839,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { defaultProject, projectNames, dbFile, docsRoot, build, stale, search, searchAll, format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };
+module.exports = { defaultProject, projectNames, dbFile, docsRoot, build, stale, hasMap, search, searchAll, format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };

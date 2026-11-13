@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/gabriel:update` (`node src/setup.js --update`): adds new doc folders, rebuilds only the stale doc sets, and suggests eval cases for new sections (merged into `eval-cases.suggested.json`; `eval-cases.json` is never touched). `--dry-run` changes nothing. Safe to run again.
+
 ## 0.1.0 (2026-11-13)
 
 First public version.

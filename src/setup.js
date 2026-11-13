@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // One-shot setup: checks node, installs packages, fetches the model, builds the rules graph and the doc maps, runs the tests.
 // Usage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test]
+//        node src/setup.js --tune [--dry-run] [--data <dir>]     (optional: Python packages for the tune run, see docs/TUNING.md)
 // Safe to run again. Writes only inside the data folder (and node_modules when packages change).
 const fs = require('fs');
 const os = require('os');
@@ -16,6 +17,10 @@ const RETRY_WAITS = [5000, 15000, 45000];
 const OLD_BRAIN = path.join(os.homedir(), '.claude', 'brain');
 const GRAPHIFY_SKILL = path.join(os.homedir(), '.claude', 'skills', 'graphify', 'SKILL.md');
 const ONLY_STEPS = { model: [5], build: [7, 8], test: [9] };
+const TUNE_STEPS = 6;
+const TORCH_INDEX = 'https://download.pytorch.org/whl/cpu';
+const TUNE_REQ = path.join(SRC, 'tune', 'requirements.txt');
+const PY_HELP = 'Install Python 3.10 or newer from https://www.python.org/ and open a new terminal.';
 
 const line = (msg) => console.log('  ' + msg);
 
@@ -31,20 +36,23 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 
 function parseArgs(argv) {
-  const o = { dryRun: false, skipModel: false, skipTest: false, yes: false, data: null, only: null };
+  const o = { dryRun: false, skipModel: false, skipTest: false, yes: false, data: null, only: null, tune: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') o.dryRun = true;
     else if (a === '--skip-model') o.skipModel = true;
     else if (a === '--skip-test') o.skipTest = true;
     else if (a === '--yes') o.yes = true;
+    else if (a === '--tune') o.tune = true;
     else if (a === '--data' || a === '--only') {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
       if (a === '--data') o.data = v; else o.only = v;
     } else throw new Error('unknown option: ' + a);
   }
-  if (o.only && !ONLY_STEPS[o.only]) throw new Error('--only must be model, build or test');
+  if (o.only === 'tune') { o.only = null; o.tune = true; }
+  if (o.only && !ONLY_STEPS[o.only]) throw new Error('--only must be model, build, test or tune');
+  if (o.tune && o.only) throw new Error('--tune cannot be used with --only');
   return o;
 }
 
@@ -223,17 +231,196 @@ async function addDocs(argv) {
   return 0;
 }
 
+// ---- --update: node src/setup.js --update [--dry-run] [--data <dir>]. Safe to run again. Steps: register new doc folders, rebuild stale maps, suggest cases for new sections ----
+const UPDATE_USAGE = 'usage: node src/setup.js --update [--dry-run] [--data <dir>]';
+const UPDATE_STEPS = 5;
+const ustep = (k, text) => console.log(`[${'#'.repeat(k).padEnd(UPDATE_STEPS, '-')}] ${String(Math.round((k * 100) / UPDATE_STEPS)).padStart(3)}% step ${k}/${UPDATE_STEPS}: ${text}`);
+const pairKey = (c) => c.doc + '\n' + c.sec;   // a case is the same case when its doc and section match
+
+async function update(argv) {
+  const paths = require('./paths.js');
+  const mk = require('./mk.js');
+  const { loadConfig, loadProjects } = require('./projects.js');
+  const { sectionCases } = require('../eval/suggest-cases.js');
+  let dry = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--dry-run') dry = true;
+    else if (a === '--data') {
+      const v = argv[++i];
+      if (!v || v.startsWith('--')) throw new Error('--data needs a value');
+      process.env.GABRIEL_DATA = path.resolve(expandHome(v));
+    } else throw new Error('unknown option: ' + a);
+  }
+  const { checkName } = paths;
+  const home = paths.rulesHome(), dataRoot = paths.dataDir(), file = paths.projectsFile(), docsRoot = path.join(dataRoot, 'docs');
+  const counts = { added: 0, rebuilt: 0, upToDate: 0, newCases: 0, failed: 0 };
+  const mapLine = (r) => { const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean); return out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)'; };
+  if (dry) console.log('(dry run) nothing will be changed');
+
+  // 1: new folders under docs/ become doc sets (only when projects.json exists: with no file, auto mode already sees them)
+  ustep(1, 'register new doc folders');
+  if (!fs.existsSync(file)) line('no projects.json: auto mode reads every folder under docs/, so new folders are used already');
+  else {
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (j.version !== 1) throw new Error(`projects.json version ${j.version} is not supported (expected 1)`);
+    j.projects = j.projects || [];
+    const have = new Set(j.projects.map((p) => p.name)), roots = new Set(loadProjects().map((p) => path.resolve(p.root)));
+    const folders = fs.existsSync(docsRoot) ? fs.readdirSync(docsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort() : [];
+    const add = [];
+    for (const f of folders) {
+      const dir = path.join(docsRoot, f);
+      if (roots.has(path.resolve(dir))) continue;   // already a doc set
+      try { checkName(f); } catch { line(`skipped docs/${f}: bad name (a-z, 0-9, - or _, up to 40)`); continue; }
+      if (have.has(f)) { line(`skipped docs/${f}: a project named ${f} already exists with another folder`); continue; }
+      if (!listDocFiles(dir).files.length) { line(`skipped docs/${f}: no doc files in it yet`); continue; }
+      add.push(f);
+    }
+    for (const f of add) {
+      if (dry) { line(`(dry run) would add doc set ${f}`); continue; }
+      j.projects.push({ name: f, label: f, root: 'docs/' + f });
+    }
+    if (!dry && add.length) writeJsonAtomic(file, j);
+    for (const f of add) { if (!dry) line(`added doc set ${f}`); counts.added++; }
+    if (!add.length) line('no new doc folders');
+  }
+
+  // 2: rebuild the doc sets that are stale (or have no map yet)
+  ustep(2, 'rebuild stale doc sets');
+  const projects = loadProjects();
+  if (!projects.length) line(`no doc sets yet: put Markdown folders in ${docsRoot}/`);
+  for (const p of projects) {
+    if (!fs.existsSync(p.root)) { line(`warning: ${p.name}: folder not found (${p.root}), skipped`); continue; }
+    if (!mk.hasMap(home, p.name) || mk.stale(home, p.name)) {
+      if (dry) { line(`(dry run) would rebuild ${p.name}`); counts.rebuilt++; continue; }
+      const r = runNode([path.join(SRC, 'brain.js'), 'build-mk', p.name], { heap: true, capture: true });
+      line(`${p.name}: ${mapLine(r)}`);
+      if (r.status !== 0) { counts.failed++; line(`${p.name} is not rebuilt. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${p.name}`); }
+      else counts.rebuilt++;
+    } else { line(`up to date: ${p.name}`); counts.upToDate++; }
+  }
+
+  // 3: suggested cases for new sections only (sets that have reviewed eval-cases.json). Never writes eval-cases.json.
+  ustep(3, 'suggest cases for new sections');
+  for (const p of projects) {
+    const priv = paths.privateDir(p.name), casesFile = path.join(priv, 'eval-cases.json'), sugFile = path.join(priv, 'eval-cases.suggested.json');
+    if (!fs.existsSync(casesFile) || !fs.existsSync(p.root)) continue;
+    const reviewed = readJson(casesFile), old = readJson(sugFile) || [];
+    if (!Array.isArray(reviewed) || !Array.isArray(old)) { line(`${p.name}: eval-cases.json or eval-cases.suggested.json is not a list, skipped`); continue; }
+    const known = new Set([...reviewed, ...old].map(pairKey));
+    const fresh = [];
+    for (const c of sectionCases(p.name)) { if (known.has(pairKey(c))) continue; known.add(pairKey(c)); fresh.push(c); }
+    counts.newCases += fresh.length;
+    if (dry) { line(`${p.name}: (dry run) would add ${fresh.length} new suggested case(s)`); continue; }
+    if (!fresh.length) { line(`${p.name}: 0 new suggested cases`); continue; }
+    let next = old.reduce((m, c) => Math.max(m, Number(String(c.id || '').replace(/^S/, '')) || 0), 0) + 1;
+    const cases = [...old, ...fresh.map((c) => ({ id: `S${next++}`, q: c.q, doc: c.doc, sec: c.sec, set: 'suggested' }))];
+    writeJsonAtomic(sugFile, cases);
+    line(`${p.name}: ${fresh.length} new suggested cases (review them in ${sugFile})`);
+  }
+
+  // 4: next steps (printed only, nothing heavy runs)
+  ustep(4, 'next steps');
+  for (const p of projects) if (fs.existsSync(path.join(paths.privateDir(p.name), 'eval-cases.json'))) line(`run /gabriel:retrain ${p.name} to update the ranker`);
+  const embedModel = (() => { try { return loadConfig().embedModel; } catch { return null; } })();
+  if (embedModel && embedModel.startsWith('local/')) line('run /gabriel:tune-embeddings to re-tune with the new cases (it keeps the new model only if scores hold)');
+
+  // 5: summary
+  ustep(5, 'summary');
+  line(`${dry ? '(dry run) ' : ''}summary: ${counts.added} added, ${counts.rebuilt} rebuilt, ${counts.upToDate} up to date, ${counts.newCases} new suggested cases${counts.failed ? `, ${counts.failed} failed` : ''}`);
+  return counts.failed ? 1 : 0;
+}
+
 async function main(argv) {
   if (argv[0] === 'add-docs') {
     try { return await addDocs(argv.slice(1)); } catch (e) { console.error(e.message); return 1; }
   }
+  if (argv.includes('--update')) {
+    try { return await update(argv.filter((a) => a !== '--update')); } catch (e) { console.error(e.message + '\n' + UPDATE_USAGE); return 1; }
+  }
   let opts;
-  try { opts = parseArgs(argv); } catch (e) { console.error(e.message + '\nusage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test]'); return 2; }
+  try { opts = parseArgs(argv); } catch (e) { console.error(e.message + '\nusage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test] [--tune]'); return 2; }
   if (opts.data) process.env.GABRIEL_DATA = path.resolve(expandHome(opts.data));
   return run(opts);
 }
 
+// ---- --tune: Python packages for the optional embedding tune run (src/tune). Never part of a normal setup. ----
+const venvPython = (venv) => (process.platform === 'win32' ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python'));
+const tstep = (n, text) => console.log(`[${'#'.repeat(n).padEnd(TUNE_STEPS, '-')}] ${String(Math.round((n * 100) / TUNE_STEPS)).padStart(3)}% tune step ${n}/${TUNE_STEPS}: ${text}`);
+
+// Finds Python 3.10 or newer: python, then py -3, then python3. Returns { cmd, args, version } or null.
+function findPython() {
+  for (const [cmd, pre] of [['python', []], ['py', ['-3']], ['python3', []]]) {
+    const r = spawnSync(cmd, [...pre, '-c', 'import sys; print("%d.%d" % sys.version_info[:2])'], { encoding: 'utf8', windowsHide: true });
+    if (r.error || r.status !== 0) continue;
+    const version = (r.stdout || '').trim();
+    const [maj, min] = version.split('.').map(Number);
+    if (maj > 3 || (maj === 3 && min >= 10)) return { cmd, args: pre, version };
+    line(`found Python ${version} (${cmd}): too old, need 3.10 or newer`);
+  }
+  return null;
+}
+
+// Total size in bytes of the files under a folder.
+function dirBytes(dir) {
+  let n = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) n += dirBytes(p);
+    else if (e.isFile()) n += fs.statSync(p).size;
+  }
+  return n;
+}
+
+async function runTune(opts) {
+  const paths = require('./paths.js');
+  const dry = opts.dryRun;
+  const venv = path.join(paths.dataDir(), 'tune-venv');
+  const py = venvPython(venv);
+  const pipSteps = [
+    ['upgrade pip', ['-m', 'pip', 'install', '--upgrade', 'pip']],
+    ['install torch (CPU build)', ['-m', 'pip', 'install', 'torch', '--index-url', TORCH_INDEX]],
+    ['install the tune packages', ['-m', 'pip', 'install', '-r', TUNE_REQ]],
+  ];
+
+  tstep(1, 'find Python 3.10 or newer');
+  const found = findPython();
+  if (found) line(`Python ${found.version} (${[found.cmd, ...found.args].join(' ')})`);
+  else if (dry) line(`(dry run) no Python 3.10 or newer found: a real run stops here. ${PY_HELP}`);
+  else { line(`no Python 3.10 or newer found (tried python, py -3, python3). ${PY_HELP}`); return 1; }
+
+  tstep(2, 'create the venv');
+  line(venv);
+  if (fs.existsSync(py)) line('already there');
+  else if (dry) line(`(dry run) would run: ${found ? [found.cmd, ...found.args].join(' ') : 'python'} -m venv "${venv}"`);
+  else {
+    const r = spawnSync(found.cmd, [...found.args, '-m', 'venv', venv], { stdio: 'inherit', windowsHide: true });
+    if (r.status !== 0) { line(`venv failed (exit ${r.status}). Retry: node "${path.join(SRC, 'setup.js')}" --tune`); return 1; }
+    line('created');
+  }
+
+  for (const [k, [label, args]] of pipSteps.entries()) {
+    tstep(3 + k, label);
+    if (dry) { line(`(dry run) would run: "${py}" ${args.join(' ')}`); continue; }
+    const r = spawnSync(py, args, { stdio: 'inherit', windowsHide: true });
+    if (r.status !== 0) { line(`${label} failed (exit ${r.status}). Retry: node "${path.join(SRC, 'setup.js')}" --tune`); return 1; }
+  }
+
+  tstep(6, 'check the packages');
+  const check = 'import torch, sentence_transformers, onnxruntime, onnx';
+  if (dry) line(`(dry run) would run: "${py}" -c "${check}"`);
+  else {
+    const r = spawnSync(py, ['-c', check], { stdio: 'inherit', windowsHide: true });
+    if (r.status !== 0) { line(`package check failed (exit ${r.status}). Retry: node "${path.join(SRC, 'setup.js')}" --tune`); return 1; }
+    console.log(`tune packages ready (${venv})`);
+    line(`install size: ${(dirBytes(venv) / 1048576).toFixed(0)} MB`);
+  }
+  if (dry) line('(dry run) nothing changed');
+  return 0;
+}
+
 async function run(opts) {
+  if (opts.tune) return runTune(opts);
   const paths = require('./paths.js');
   const { BASE_MODEL: MODEL } = require('./embed.js');   // setup always fetches the base model, even when a tuned one is set
   const { loadProjects } = require('./projects.js');

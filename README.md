@@ -19,6 +19,8 @@ In Claude Code, run:
 
 `add-docs` points gabriel at a folder of doc files and builds its map, so the first question can show it. Gabriel reads Markdown, text, reStructuredText, AsciiDoc, Org, HTML, Word, PowerPoint, OpenDocument, Excel, CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: list them in `"extensions"` in `projects.json` to read them. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md). You can also copy folders into `~/.claude/gabriel-data/docs/<name>/` and run `/gabriel:setup` again, but only while there is no `projects.json`. Each folder there is one doc set.
 
+After you add or change doc files later, run `/gabriel:update`. It adds new folders and rebuilds the changed sets. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md).
+
 To check how well it finds your docs, and to train it on your own questions, see [docs/EVAL.md](docs/EVAL.md) and `/gabriel:retrain`.
 
 ## What you see
@@ -53,10 +55,19 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md): how to add doc sets.
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
 
-## Best results: docs + graphify
+## Best results: graph your code, then write its docs
 
-For a code repo, install the graphify skill and run `/graphify <repo>`.
-gabriel reads the `graphify-out/graph.json` file it makes. It then links doc sections to code names.
+> **Read this first if you use gabriel on a code base.** gabriel can only find what is written down. Good docs about your code help it more than anything else.
+
+1. **Graph the code.** Install the graphify skill and run `/graphify <repo>` in the repo. It writes `graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
+2. **Write the docs from the graph.** Ask Claude to read `graphify-out/` and the code, then write docs for that code base. A doc skill such as `/engineering:documentation` helps. Write these four kinds:
+   - **Technical:** modules and who owns what, main classes, how to add a feature, known bugs.
+   - **Business:** what the system is for, its rules, its terms (a glossary), its states.
+   - **Architecture:** the parts, how they talk, data flow, key decisions. Add a diagram.
+   - **Workflows:** each main flow step by step, from the trigger to the result, with the files it touches.
+3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`. Run `/gabriel:update` after you add or change docs.
+
+Docs that name real files, classes and steps give gabriel the most to link. Check them against the code: a wrong doc misleads gabriel too.
 
 ## Credit
 

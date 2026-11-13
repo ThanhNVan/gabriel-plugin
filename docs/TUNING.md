@@ -11,7 +11,7 @@ The only downloads are the Python packages and the base model, which the trainin
 
 1. Makes training pairs. Each eval question is paired with the doc section that answers it.
 2. Trains the model on those pairs, on the CPU.
-3. Exports the trained model to ONNX and makes it smaller (8-bit).
+3. Exports the trained model to ONNX with torch.onnx, then makes it smaller (8-bit) with onnxruntime quantization.
 4. Scores the old model and the new one on a copy of your data.
 5. Keeps the new model only if the scores pass the keep rule. Otherwise it rolls back.
 
@@ -23,7 +23,17 @@ The only downloads are the Python packages and the base model, which the trainin
 - Disk space for the packages and a copy of your maps. The download size is measured in your setup run.
 - At least 50 reviewed eval questions in one or more projects. See `docs/EVAL.md`.
 
-Set up the venv once:
+Set up the packages once:
+
+```
+node src/setup.js --tune
+```
+
+This is the only setup step that installs the Python packages. A normal setup does not.
+It finds Python, makes a venv in your data folder (`<data>/tune-venv`), and installs the packages.
+Add `--dry-run` to see the steps first. The last line says the packages are ready and how big they are.
+
+Manual steps, if you want them:
 
 ```
 python -m venv <venv>
@@ -34,10 +44,13 @@ python -m venv <venv>
 ## Run it
 
 ```
-node src/tune/tune.js --venv <venv> --yes
+node src/tune/tune.js --yes
 ```
 
-Or run `/gabriel:tune-embeddings --venv <venv>` in Claude Code.
+The venv defaults to `<data>/tune-venv`. If it is missing, the run stops and tells you to run `node src/setup.js --tune`.
+Use `--venv <dir>` to pick another venv.
+
+Or run `/gabriel:tune-embeddings` in Claude Code.
 
 The run prints one progress line per step, like `[###---] 40% step 3/5`. It stops at the first failure.
 

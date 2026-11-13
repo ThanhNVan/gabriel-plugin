@@ -68,6 +68,15 @@ For a code repo, first make a graph. Run this in Claude in the repo:
 
 This makes `graphify-out/graph.json` in the repo. Gabriel reads that file to link docs to code.
 
+**No docs for the code yet? Write them first.** They help gabriel the most. Ask Claude to read `graphify-out/` and the code, and write (for example with `/engineering:documentation`):
+
+- technical docs: modules, main classes, how to add a feature, known bugs;
+- business docs: purpose, rules, a glossary, states;
+- architecture: parts, data flow, key decisions, a diagram;
+- workflows: each main flow from trigger to result, with the files it touches.
+
+Check each doc against the code. A wrong doc misleads gabriel. See the README section "Best results".
+
 Then remove the set (step 8) and add it again with the repo:
 
 ```
@@ -120,3 +129,29 @@ Claude reports the scores before and after. Read the comments at the top of `eva
 Expected line: `<n> projects`
 
 Setup does not clear the old map rows of a removed set. To purge them, delete `mk.db` in the data folder, then run `/gabriel:setup`. This also clears the learned links.
+
+## 9. Add more docs later
+
+You can add doc sets and doc files at any time. Either:
+
+- Add a new doc set with `/gabriel:add-docs <name> <folder>`, or copy a folder into `~/.claude/gabriel-data/docs/<name>/`.
+- Change or add files in a doc set you already have.
+
+Then run:
+
+```
+/gabriel:update
+```
+
+Expected lines: `added doc set <name>` for each new folder, `<name>: map built` for each changed set, and `summary: ...`. A second run right after prints `0 added, 0 rebuilt`. Add `--dry-run` to see what it would do first:
+
+```
+/gabriel:update --dry-run
+```
+
+`/gabriel:update` does not change `eval-cases.json`. It only adds new cases to `eval-cases.suggested.json`, for sections that are not in your cases yet. Then:
+
+1. Open `~/.claude/gabriel-data/private/<name>/eval-cases.suggested.json`. Keep the new cases you want. Rewrite each question in your own words, and save them in `eval-cases.json`.
+2. Retrain the ranking: `/gabriel:retrain <name>`.
+
+A folder dropped into `docs/` is a new doc set only when `projects.json` exists. With no `projects.json`, gabriel already reads every folder under `docs/`.

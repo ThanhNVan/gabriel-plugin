@@ -1,5 +1,6 @@
 // Optional: tune the meaning model on your own eval questions, score it on a copy of your data, keep it only if it wins.
-//   node src/tune/tune.js --venv <dir> [--yes]     the whole run: 5 steps (slow on CPU; see docs/TUNING.md)
+//   node src/tune/tune.js [--venv <dir>] [--yes]   the whole run: 5 steps (slow on CPU; see docs/TUNING.md)
+//                                                  --venv defaults to <dataDir>/tune-venv (made by node src/setup.js --tune)
 //   node src/tune/tune.js --rollback               remove embedModel from projects.json (config only)
 // Your real data does not change until the scores say keep. The scores run on a copy of the data folder,
 // because a model change re-embeds every map and the real maps must stay as they are until the decision.
@@ -72,7 +73,11 @@ function stage(work) {
   }
   // "local" holds tuned models: never linked, so a new export can never write into a real model folder
   linkTree(path.join(real, 'models'), path.join(T, 'models'), new Set(['local']));
-  linkTree(path.join(real, 'docs'), path.join(T, 'docs'));
+  // every doc root inside the data folder (docs/<name>, corpus/tech, …): roots outside it are read in place
+  for (const p of loadProjects()) {
+    const rel = path.relative(real, p.root);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) linkTree(p.root, path.join(T, rel));
+  }
   fs.mkdirSync(path.join(work, 'home'), { recursive: true });   // an empty rules home: the run never reads your ~/.claude
   return T;
 }
@@ -222,8 +227,9 @@ async function main(argv) {
     console.log(`removed embedModel "${cur.embedModel}" from projects.json. The next prompt rebuilds each map once with the default model.`);
     return 0;
   }
-  if (!o.venv) throw new Error('--venv <dir> is required: the Python venv with src/tune/requirements.txt');
-  venvPython(o.venv);   // fails early when the venv is missing
+  if (!o.venv) o.venv = path.join(paths.dataDir(), 'tune-venv');
+  if (!fs.existsSync(o.venv)) throw new Error(`no tune venv at ${o.venv}: run /gabriel:setup --tune first (or node src/setup.js --tune)`);
+  venvPython(o.venv);   // fails early when the venv has no python
   const cur = readConfig();
   if (cur && cur.embedModel) throw new Error(`projects.json already sets embedModel "${cur.embedModel}". Run --rollback first, then tune again.`);
   const projects = loadProjects().map((p) => p.name).filter((n) => fs.existsSync(path.join(paths.privateDir(n), 'eval-cases.json')));

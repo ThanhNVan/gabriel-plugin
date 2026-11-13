@@ -70,4 +70,16 @@ assert.ok(!fs.readdirSync(path.join(d3, 'docs'), { withFileTypes: true }).some((
 assert.match(r5.stdout, /no doc sets yet/);
 console.log('d3 empty folder: exit 0, starter README created, output says "no doc sets yet"');
 
+// 5: --tune dry run prints the venv path and the pip commands, and creates nothing
+{
+  const d5 = path.join(tmp, 'd5');
+  const r = run(['--tune', '--dry-run', '--data', d5]);
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(path.join(d5, 'tune-venv')), r.stdout);
+  assert.match(r.stdout, /pip install torch --index-url https:\/\/download\.pytorch\.org\/whl\/cpu/);
+  assert.match(r.stdout, /pip install -r .*requirements\.txt/);
+  assert.ok(!fs.existsSync(d5), 'tune dry run must not create the data folder');
+  console.log('tune dry run: exit 0, venv path and pip commands printed, nothing created');
+}
+
 console.log('ALL PASSED');
