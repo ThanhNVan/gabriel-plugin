@@ -123,7 +123,25 @@ const graphJson = {
   assert.match(text(r), /map built/);
 }
 
-// 7: no half-written files are left in the data folder
+// 7: a leading ~ in the folder path is the home folder (HOME and USERPROFILE of the child point to a temp home)
+{
+  const userHome = path.join(tmp, 'userhome');
+  writeFiles(path.join(userHome, 'notes'), { 'bikes.md': bikes, 'cooking.md': cooking, 'garden.md': garden, 'filler.md': filler.join('\n') + '\n' });
+  const r = spawnSync(process.execPath, [SETUP, 'add-docs', 'tilde', '~/notes'], { cwd: ROOT, env: { ...env, HOME: userHome, USERPROFILE: userHome }, encoding: 'utf8', timeout: 600000, maxBuffer: 64 * 1024 * 1024 });
+  assert.strictEqual(r.status, 0, text(r));
+  assert.strictEqual(entry('tilde').root, path.join(userHome, 'notes'));
+  assert.match(text(r), /added tilde: 4 docs/);
+  // the helper itself: ~, ~/x, ~\x expand; other paths do not
+  const { expandHome } = require(SETUP);
+  assert.strictEqual(expandHome('~'), os.homedir());
+  assert.strictEqual(expandHome('~/x'), path.join(os.homedir(), 'x'));
+  assert.strictEqual(expandHome('~\\x'), path.join(os.homedir(), 'x'));
+  assert.strictEqual(expandHome(path.join(tmp, 'abs')), path.join(tmp, 'abs'));
+  assert.strictEqual(expandHome('a~b'), 'a~b');
+  console.log('  ~ expands: add-docs tilde ~/notes -> ' + path.join(userHome, 'notes'));
+}
+
+// 8: no half-written files are left in the data folder
 assert.deepStrictEqual(fs.readdirSync(data).filter((f) => f.endsWith('.tmp')), []);
 
 console.log('ALL PASSED');

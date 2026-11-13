@@ -136,7 +136,7 @@ function humanize(text) {
     let m;
     if (line.startsWith('Relevant rules')) out.push('\n📏 Rules that apply');
     else if (line.startsWith('Earlier prompts')) out.push('\n🕘 Similar earlier prompts');
-    else if ((m = line.match(/^(.+?) map \(.*?(?:@(\w+))?, built (\S+);/))) out.push(`\n🧭 ${m[1]} map  (graph ${m[2] || '?'}, built ${m[3]})`);
+    else if ((m = line.match(/^(.+?) map \(.*?(?:@(\w+))?, built (\S+);/))) out.push(`\n🧭 ${m[1]} map  (${m[2] ? `graph ${m[2]}, ` : ''}built ${m[3]})`);
     else if (line.startsWith('Tech docs')) out.push('\n📚 Tech docs (background, not a repo rule)');
     else if ((m = line.match(/^- \[you asked (\S+)\] (.*)/))) out.push(`   ${m[1]}  ${cut(m[2], 90)}`);
     else if ((m = line.match(/^- \[([^\]]+)\] (.*)/))) out.push(`   • ${cut(m[2], 110)}  (${m[1].split(' > ').pop()})`);
@@ -304,7 +304,7 @@ if (require.main === module) {
         if (list.length > 1) console.log(`[${i + 1}/${list.length}] ${getProject(project).label}`);
         try {
           const r = await mk.build(home, { project, log: (m) => console.log(m), progress: (n, total) => { if (n === total || n % 320 === 0) console.log(`meaning numbers ${n}/${total}`); } });
-          console.log(`map built in ${(r.ms / 1000).toFixed(1)} s: ${r.code} code neurons, ${r.docs} doc neurons from ${r.files} files, ${r.synapses} code synapses, ${r.vectors} meaning numbers, graph @${r.commit.slice(0, 8)}`);
+          console.log(`map built in ${(r.ms / 1000).toFixed(1)} s: ${r.code} code neurons, ${r.docs} doc neurons from ${r.files} files${r.skipped ? ` (${r.skipped} skipped: no readable text)` : ''}, ${r.synapses} code synapses, ${r.vectors} meaning numbers, graph @${r.commit.slice(0, 8)}`);
           console.log(`old map merged in: ${r.merged.kept} learned links kept, ${r.merged.dropped} dropped (neuron gone or faded), ${r.merged.sessions} recent session(s) carried over`);
         } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { if (project === mk.defaultProject()) fs.rmSync(path.join(dataDir(home), 'mk.lock'), { force: true }); } catch { /* none */ } }
       }

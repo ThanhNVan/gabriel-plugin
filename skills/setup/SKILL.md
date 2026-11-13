@@ -15,6 +15,6 @@ Flags:
 - `--dry-run`: show what would change, change nothing.
 - `--skip-model`: do not download the meaning model.
 - `--skip-test`: do not run the self-tests.
-- `--yes`: answer yes to every question.
+- `--yes`: setup copies old data from `~/.claude/brain` (step 6). Add-docs also accepts a very large folder (over 20000 files or 500 MB).
 
 Report the summary lines the command prints. Keep them as they are.

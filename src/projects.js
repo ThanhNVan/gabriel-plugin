@@ -3,7 +3,7 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const { dataDir, projectsFile, privateDir, checkName } = require('./paths');
 const DEFAULTS = { layout: 'auto', graph: null, skipDirs: ['graphify-out', 'node_modules', '.git', 'atlas', '_tools'],
-  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, coreDocs: null };
+  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, coreDocs: null, extensions: null };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in)
 const resolveRoot = (r) => { const s = String(r || '');
   if (s.startsWith('~')) return path.join(os.homedir(), s.slice(1).replace(/^[\\/]/, ''));
   return path.isAbsolute(s) ? path.resolve(s) : path.join(dataDir(), s); };
@@ -30,9 +30,16 @@ function loadConfig() {
   });
   const legacyProject = j.legacyProject || null;   // tag for map rows written before projects existed (owner only)
   if (legacyProject && !seen.has(legacyProject)) throw new Error(`legacyProject ${legacyProject} is not a project`);
-  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || ['CLAUDE.md'] }; cacheKey = key; return cache;
+  const embedModel = typeof j.embedModel === 'string' && j.embedModel ? j.embedModel : null;   // optional: a tuned meaning model, e.g. "local/gabriel-tuned"
+  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || ['CLAUDE.md'], embedModel }; cacheKey = key; return cache;
 }
 const loadProjects = () => loadConfig().projects;
 const getProject = (name) => loadProjects().find((p) => p.name === name);
 const projectNames = () => loadProjects().map((p) => p.name);
-module.exports = { loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot };
+const DEFAULT_EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
+// The meaning model id: env GABRIEL_EMBED_MODEL first, then projects.json "embedModel", then the default. Never throws.
+function embedModel() {
+  if (process.env.GABRIEL_EMBED_MODEL) return process.env.GABRIEL_EMBED_MODEL;
+  try { return loadConfig().embedModel || DEFAULT_EMBED_MODEL; } catch { return DEFAULT_EMBED_MODEL; }
+}
+module.exports = { loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL };

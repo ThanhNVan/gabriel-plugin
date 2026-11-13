@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { homeDir, dataDir, tokens, loadThesaurus } = require('./rules.js');
 const paths = require('./paths.js');
+const { extSet, isDocName, extractText } = require('./extract.js');
 
 const DB_VERSION = 5;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index
 const DECAY = 0.55, ROUNDS = 3, FRONTIER = 300, HUB = 600;     // spreading: damping per step, steps, neurons kept per step, a neuron with more links only receives
@@ -31,7 +32,7 @@ const NB_CODE = 3, NB_PER = 4, NB_CHARS = 900;   // map output: neighbors shown 
 const REL = { calls: 1, implements: 1, inherits: 1, extends: 1, dispatches_to: 1, rationale_for: 0.8, conceptually_related_to: 0.6, semantically_similar_to: 0.6, method: 0.7, defines: 0.6, contains: 0.5, references: 0.3, imports: 0.2, imports_from: 0.2, re_exports: 0.2 };
 
 // Projects come from projects.js (file order = routing order). A search looks at one project only, so a new project cannot disturb the answers of the others.
-const { loadConfig, loadProjects, getProject, projectNames } = require('./projects');
+const { loadConfig, loadProjects, getProject, projectNames, embedModel, DEFAULT_EMBED_MODEL } = require('./projects');
 // the default project: the one with a routing prior, else the first that is not a fallback
 const defaultProject = () => { const ps = loadProjects(); return (ps.find((p) => p.prior > 0) || ps.find((p) => !p.fallback) || ps[0] || {}).name; };
 const docsRoot = (project = defaultProject()) => { const p = getProject(project); if (!p) throw new Error('unknown project: ' + project); return p.root; };
@@ -109,11 +110,12 @@ const roleWords = (file) => {
 
 // ---- reading the docs ----
 const AUTO_SKIP = new Set(['graphify-out', 'node_modules', '.git', 'atlas', '_tools']);
-// layout: 'auto' = technical-docs/ when there is one, else every .md; 'technical-docs' = only that folder; 'all-md' = every .md, except skipDirs
-function listDocs(root, layout = 'auto', skipDirs = [...AUTO_SKIP]) {
+// layout: 'auto' = technical-docs/ when there is one, else every doc file; 'technical-docs' = only that folder; 'all-md' = every doc file, except skipDirs
+// exts: a Set of lowercase extensions with the dot (extSet): the project's "extensions", default every default type
+function listDocs(root, layout = 'auto', skipDirs = [...AUTO_SKIP], exts = extSet(null)) {
   const out = [], base = path.join(root, 'technical-docs');
-  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'atlas' && e.name !== '_tools') walk(p); } else if (e.name.endsWith('.md')) out.push(p); } };
-  const walkAll = (d, skip) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!skip.has(e.name)) walkAll(p, skip); } else if (e.name.endsWith('.md')) out.push(p); } };
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'atlas' && e.name !== '_tools') walk(p); } else if (isDocName(e.name, exts)) out.push(p); } };
+  const walkAll = (d, skip) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!skip.has(e.name)) walkAll(p, skip); } else if (isDocName(e.name, exts)) out.push(p); } };
   if (layout === 'all-md') walkAll(root, new Set(skipDirs));
   else if (fs.existsSync(base)) walk(base);
   else if (layout === 'auto') walkAll(root, AUTO_SKIP);   // a project without technical-docs/: every .md under the root, except tool folders
@@ -151,7 +153,7 @@ function chunkDoc(rel, raw) {
   }
   flush();
   const links = [...raw.matchAll(/\]\(([^)#\s]+\.md)(?:#([^)]*))?\)/g)].map((m) => ({ file: path.basename(m[1]), anchor: m[2] || '' }));
-  return { rel, no: (path.basename(rel).match(/^(\d+)/) || [])[1] || path.basename(rel, '.md'), chunks: out, links };
+  return { rel, no: (path.basename(rel).match(/^(\d+)/) || [])[1] || path.parse(rel).name, chunks: out, links };
 }
 
 const PATH_RE = /[\w.\/-]+\.(?:cs|ts|html|scss|py|yml|json|ps1)\b/g;
@@ -163,7 +165,7 @@ async function build(home = homeDir(), opts = {}) {
   const gp = P.graph || null, graphPath = gp ? path.join(root, gp) : null;   // a project without a code graph (the general docs) has none
   if (gp && !fs.existsSync(graphPath)) throw new Error('no ' + gp + ' under ' + root);
   const g = graphPath && fs.existsSync(graphPath) ? JSON.parse(fs.readFileSync(graphPath, 'utf8')) : { nodes: [], links: [], built_at_commit: '' };
-  const files = listDocs(root, P.layout, P.skipDirs);
+  const files = listDocs(root, P.layout, P.skipDirs, extSet(P.extensions));
   const tmp = dbFile(home, project) + '.' + process.pid + '.tmp';
   fs.mkdirSync(path.dirname(tmp), { recursive: true });
   for (const f of fs.readdirSync(path.dirname(tmp))) if (f.startsWith(path.basename(dbFile(home, project)) + '.') && f.endsWith('.tmp')) { try { fs.rmSync(path.join(path.dirname(tmp), f), { force: true }); } catch { /* still in use by a build that is running */ } }
@@ -215,7 +217,13 @@ async function build(home = homeDir(), opts = {}) {
   }
   log(`code synapses ${pair.size}`);
   // 3. doc neurons and their synapses
-  const docs = files.map((f) => chunkDoc(path.relative(root, f).replace(/\\/g, '/'), fs.readFileSync(f, 'utf8')));
+  const docs = [];
+  let skipped = 0;   // files with no readable text (unreadable, empty, scanned PDF, opt-in file too big or skipped)
+  for (const f of files) {
+    const text = await extractText(f);
+    if (!text.trim()) { skipped++; continue; }
+    docs.push(chunkDoc(path.relative(root, f).replace(/\\/g, '/'), text));
+  }
   const docIds = [], byDocName = new Map(), spanChunks = new Map();
   const link = (a, b, w) => { addEdge.run(a, b, w); addEdge.run(b, a, w); deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); };
   for (const d of docs) {
@@ -267,7 +275,7 @@ async function build(home = homeDir(), opts = {}) {
   db.exec('CREATE TABLE df2(word TEXT PRIMARY KEY, n INTEGER); INSERT INTO df2 SELECT word, COUNT(*) FROM kw2 GROUP BY word;');
   db.exec('INSERT INTO df SELECT k.word, n.kind, COUNT(*) FROM kw k JOIN nodes n ON n.id = k.node GROUP BY k.word, n.kind;');
   const setMeta = db.prepare('INSERT INTO meta VALUES(?,?)');
-  for (const [k, v] of Object.entries({ version: DB_VERSION, built: Date.now(), commit: g.built_at_commit || '', root, stamp: JSON.stringify(sources(root, project)), nCode: g.nodes.length, nDoc: docIds.length })) setMeta.run(k, String(v));
+  for (const [k, v] of Object.entries({ version: DB_VERSION, built: Date.now(), commit: g.built_at_commit || '', root, stamp: JSON.stringify(sources(root, project)), nCode: g.nodes.length, nDoc: docIds.length, embed: embedModel() })) setMeta.run(k, String(v));   // embed: the meaning model these numbers come from
   db.exec('COMMIT');
   // 5. meaning numbers for the doc chunks (skipped when the local model is not installed)
   let vecs = 0;
@@ -304,7 +312,7 @@ async function build(home = homeDir(), opts = {}) {
   }
   db.close();
   const merged = integrate(home, tmp, project);         // the project's fresh rows replace its old rows in mk.db; learned links stay where they are
-  return { merged, code: g.nodes.length, docs: docIds.length, files: docs.length, synapses: pair.size, vectors: vecs, commit: g.built_at_commit || '', ms: Date.now() - t0 };
+  return { merged, code: g.nodes.length, docs: docIds.length, files: docs.length, skipped, synapses: pair.size, vectors: vecs, commit: g.built_at_commit || '', ms: Date.now() - t0 };
 }
 
 // ---- learning: one store (this file), keyed by stable names, merged on every rebuild ----
@@ -493,7 +501,7 @@ function status(home = homeDir(), project = defaultProject()) {
 // What the map was built from: the graph file and every technical doc. Cheap to compare (a few stat calls).
 function sources(root, project) {
   const P = getProject(project) || {}, st = (f) => { try { const s = fs.statSync(f); return `${Math.round(s.mtimeMs)}:${s.size}`; } catch { return 'none'; } };
-  return { graph: st(path.join(root, P.graph || 'graphify-out/graph.json')), docs: listDocs(root, P.layout, P.skipDirs).map((f) => path.relative(root, f).replace(/\\/g, '/') + '@' + st(f)).join('|') };
+  return { graph: st(path.join(root, P.graph || 'graphify-out/graph.json')), docs: listDocs(root, P.layout, P.skipDirs, extSet(P.extensions)).map((f) => path.relative(root, f).replace(/\\/g, '/') + '@' + st(f)).join('|') };
 }
 
 // no rows yet: a map is due only for the default project, and only when its graph file exists (the other projects are built on request)
@@ -504,7 +512,7 @@ function stale(home = homeDir(), project = defaultProject()) { // true when ther
     try {
       const m = Object.fromEntries(db.prepare('SELECT k, v FROM meta WHERE project = ?').all(project).map((r) => [r.k, r.v]));
       if (!m.root) return graphOnDisk(project);   // this project has no rows yet
-      return Number(m.version) !== DB_VERSION || m.stamp !== JSON.stringify(sources(m.root, project));
+      return Number(m.version) !== DB_VERSION || m.stamp !== JSON.stringify(sources(m.root, project)) || (m.embed || DEFAULT_EMBED_MODEL) !== embedModel();   // a new meaning model = rebuild once (old maps have no "embed" row: they used the default)
     } finally { db.close(); }
   } catch { return graphOnDisk(project); }   // the other projects are built on request, so no map is not "stale"
 }

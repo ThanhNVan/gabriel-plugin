@@ -85,4 +85,11 @@ The question index adds plain questions for each doc section. It helps a questio
 1. Write `<data>/private/<name>/doc-questions.json`. Keys are doc keys from the map (they start with `d|`). Each key maps to a list of questions.
 2. Run `node src/brain.js build-dq --project <name>`. It writes `dq.<name>.bin` and `dq.<name>.idx.json`.
 
-Without these two files the map works as before.
+The index is used in two ways:
+
+- When a project has the index, its 15 closest sections join the candidate pool.
+- A trained ranking (`rank.json`) can use the match as one signal.
+
+The rescue step is off. It lets a strong match pass the gate alone, but its threshold is 9 (`Q_GATE` in `src/mk.js`), and a meaning score cannot reach 9. Nothing sets a lower value, so the rescue never fires.
+
+Without these two files for a set, the map works without the index.

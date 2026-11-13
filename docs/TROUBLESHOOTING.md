@@ -2,6 +2,8 @@
 
 Start with `/gabriel:status`. It shows one line for each doc set: the map is built, stale, or missing.
 
+**The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. From a local folder, it is that folder: local-path marketplaces load in place.
+
 For a direct check, run:
 
 ```
@@ -23,6 +25,14 @@ A map appears only when a prompt matches your docs well enough. Check these in o
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
 4. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt. Its `aliases` in `projects.json` count as a match.
 5. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again.
+
+## A PDF shows no text
+
+Setup prints `found N docs` with the count per type. Check these in order.
+
+1. **The PDF is a scan.** A scanned PDF holds pictures, not text, so the map has nothing to read. Run OCR on the PDF first, then add the new file. Setup counts the file, but the map skips it.
+2. **`pdfjs-dist` is missing.** Add-docs prints `PDF files found but pdfjs-dist is not installed: run npm ci --omit=dev in the plugin folder`. Run `npm ci --omit=dev` in the plugin folder, then add the set again. Setup alone does not install it: it skips npm when the main package is already there.
+3. **The set does not list PDFs.** A set with `"extensions": ["md"]` in `projects.json` skips PDFs. Add `"pdf"` to the list, then run setup again.
 
 ## The hook seems slow or times out
 
@@ -92,7 +102,7 @@ Fix: run `/gabriel:setup` again. It installs the packages again. Your data folde
 
 Each error leaves `projects.json` unchanged:
 
-- `0 docs found in <folder>`: the folder has no `.md` files. Only Markdown is read.
+- `0 docs found in <folder>`: the folder has no files of a type gabriel reads. See the type list in [ADDING-DOCS](ADDING-DOCS.md).
 - `folder not found: <folder>`: check the path.
 - `project <name> already exists`: pick another name, or remove the old entry from `projects.json`.
 - `bad project name: <name>`: use lowercase letters, digits, `-` and `_`.

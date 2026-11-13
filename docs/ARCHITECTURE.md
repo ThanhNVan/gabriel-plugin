@@ -68,7 +68,7 @@ flowchart LR
 - **Which files.** `layout: "auto"` reads `technical-docs/` when it exists. Otherwise it reads every `.md` file, except tool folders (`graphify-out`, `node_modules`, `.git`, `atlas`, `_tools`). `layout: "technical-docs"` reads only that folder. `layout: "all-md"` reads every `.md` file except `skipDirs`.
 - **Chunks.** Text is split at headings and at spaces. Each chunk is at most 450 characters and keeps its heading path.
 - **Code nodes.** When a project sets `graph`, the file is read from the project root. Links get a weight by relation: `calls` and `implements` 1.0, `method` 0.7, `defines` 0.6, `contains` 0.5, `references` 0.3, `imports` 0.2.
-- **One file.** All projects share `mk.db`. Each row has a project tag. A build writes a temporary file, then replaces `mk.db`.
+- **One file.** All projects share `mk.db`. Each row has a project tag. A build writes a temporary file, then replaces only the rows of the project it builds. Rows of a removed project stay until `mk.db` is deleted.
 - **Learned links.** A rebuild keeps learned links that still point to a node. It drops the rest.
 - **Build command.** `node src/brain.js build-mk [name|all]`. Setup runs it for each project.
 - **Background rebuild.** The hook checks for changes at most once a minute. If a doc or the graph changed, it starts a rebuild. The old map keeps serving until the new one is ready. A lock stops a second rebuild for 10 minutes.
@@ -92,7 +92,7 @@ A "session gate" also applies. A weak match is a match that is not named in the 
 - **Default.** Docs are ranked by their activation score.
 - **Trained weights (optional).** If a project has `private/<name>/rank.json`, docs are ranked with its weights (key `w`). Signals include word and meaning scores, heading match, file depth and file size.
 - **Picking.** At most 6 docs. At most 2 per file. One per section. Only docs within 3 points of the top score.
-- **Training.** `src/train-rank.js` trains the weights from your own questions. In this version it reads a question file for one project name written into the code. It is not ready for other doc sets.
+- **Training.** `node src/train-rank.js --project <name>` trains the weights from your own questions, for any doc set. See [EVAL](EVAL.md).
 
 ## Routing and fallback
 
@@ -135,9 +135,14 @@ An item sent once in a session is not sent again in that session.
 The question index helps the map match a question that uses different words from the doc.
 
 - You write a few questions for each section in `private/<name>/doc-questions.json`.
-- `node src/brain.js build-dq` writes `dq.bin` and `dq.idx.json` in the data folder.
+- `node src/brain.js build-dq --project <name>` writes `dq.<name>.bin` and `dq.<name>.idx.json` in the data folder.
 
-In this version the index has no effect on results. Its rescue threshold is set to 9, and no match reaches that value.
+The index is used in two ways:
+
+- When a project has the index, its 15 closest sections join the candidate pool.
+- A trained ranking (`rank.json`) can use the match as one signal.
+
+The rescue step is off. It lets a strong match pass the gate alone, but its threshold is 9 (`Q_GATE` in `src/mk.js`), and a meaning score cannot reach 9. Nothing sets a lower value, so the rescue never fires.
 
 ## Prompt history
 
@@ -150,7 +155,7 @@ Each prompt that reaches the search (4 words or more, not a slash command, not a
 1. Check Node.js (22.5 or newer).
 2. Install npm packages with `npm ci --omit=dev`.
 3. Create the data folder.
-4. If there are no doc sets, create `docs/notes/README.md`.
+4. If there are no doc sets, create the starter file `docs/README.md` (a file, not a doc set).
 5. Download the meaning model.
 6. Copy data from an old brain folder. Copies only, and only with `--yes`.
 7. Build the rules graph.
@@ -175,7 +180,7 @@ flowchart TD
   DATA --> HIS["history/: prompts, vectors, graph.db"]
   DATA --> SEEN["seen/: dedupe state, 7 days"]
   DATA --> PRI["private/name/: rank.json, doc-questions.json"]
-  DATA --> DQ["dq.bin, dq.idx.json: question index"]
+  DATA --> DQ["dq.NAME.bin, dq.NAME.idx.json: question index"]
 ```
 
 | Path (in the data folder) | What it holds |
@@ -188,8 +193,8 @@ flowchart TD
 | `models/` | The meaning model files. |
 | `history/` | Your prompts (one `YYYY-MM.<machine>.jsonl` file per month), their meaning numbers, and `graph.db`. |
 | `seen/` | Dedupe state per session. Removed after 7 days. |
-| `private/<name>/` | Optional files for ranking and questions: `rank.json`, `doc-questions.json`, `eval-cases.json`. Also `privacy-words.txt` and `thesaurus.local.json` for your own word lists. |
-| `dq.bin`, `dq.idx.json` | The question index. Optional. |
+| `private/<name>/` | Optional files for ranking and questions: `rank.json`, `doc-questions.json`, `eval-cases.json`. Also `privacy-words.txt` and `thesaurus.local.json` for your own word lists. `notes/EVAL-MK.md` is the eval report. |
+| `dq.<name>.bin`, `dq.<name>.idx.json` | The question index for one doc set. Optional. |
 | `*.lock`, `mk-check`, `history-check` | Small lock and timing files. |
 
 The plugin's code reads the `CLAUDE.md` and memory files from `~/.claude`. It never writes there.

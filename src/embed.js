@@ -4,25 +4,31 @@ const fs = require('fs');
 const path = require('path');
 const { dataDir, writeAtomic } = require('./rules.js');
 const paths = require('./paths.js');
+const { embedModel, DEFAULT_EMBED_MODEL } = require('./projects.js');
 
-const MODEL = 'Xenova/all-MiniLM-L6-v2';                             // 23 MB, 384 numbers per text
+const BASE_MODEL = DEFAULT_EMBED_MODEL;                              // 23 MB, 384 numbers per text; the model setup downloads
+const LOCAL_ID = /^local\/[a-z0-9][a-z0-9_-]{0,63}$/i;               // a tuned model: <modelsDir>/local/<name>/, read from disk only (src/tune)
 const vecFile = (home) => path.join(dataDir(home), 'vectors.json');
 
 const embedText = (n) => (n.section ? n.section + ': ' : '') + n.text.slice(0, 300);
 const ehash = (n) => crypto.createHash('sha1').update(embedText(n)).digest('hex').slice(0, 16);
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); // the CLI exits on its own, so a pending timer is fine
 
-let embedderP;
-function getEmbedder(allowDownload = false) { // null when the package or the model is not installed
+const embedders = new Map();   // model id -> embedder promise (one load per model per process)
+function getEmbedder(allowDownload = false, model = embedModel()) { // null when the package or the model is not installed; never throws
   if (process.env.GABRIEL_NO_DOWNLOAD === '1') allowDownload = false;   // setup --skip-model: words-only, never fetch the model
-  embedderP ||= (async () => {
-    const tf = await import('@huggingface/transformers');
+  const local = model.startsWith('local/');
+  if (local) allowDownload = false;                                     // a tuned model is never downloaded
+  if (!embedders.has(model)) embedders.set(model, (async () => {
+    if (local && !LOCAL_ID.test(model)) return null;
     const dir = paths.modelsDir();
+    if (local && !fs.existsSync(path.join(dir, ...model.split('/')))) return null;   // tuned model not exported yet: words-only
+    const tf = await import('@huggingface/transformers');
     tf.env.cacheDir = dir; tf.env.localModelPath = dir; tf.env.allowLocalModels = true; tf.env.allowRemoteModels = allowDownload;
-    const ext = await tf.pipeline('feature-extraction', MODEL, { dtype: 'q8', local_files_only: !allowDownload });
+    const ext = await tf.pipeline('feature-extraction', model, { dtype: 'q8', local_files_only: !allowDownload });
     return async (texts) => (await ext(texts, { pooling: 'mean', normalize: true })).tolist();
-  })().catch(() => null);
-  return embedderP;
+  })().catch(() => null));
+  return embedders.get(model);
 }
 
 function readVectors(home, model) { // Map hash -> Float32Array, or null when absent or made by another model
@@ -35,7 +41,7 @@ function readVectors(home, model) { // Map hash -> Float32Array, or null when ab
   } catch { return null; }
 }
 
-async function embedNodes(home, g, embedFn, model = MODEL) { // vectors are keyed by text hash, so only new or changed text is embedded
+async function embedNodes(home, g, embedFn, model = embedModel()) { // vectors are keyed by text hash, so only new or changed text is embedded
   const old = readVectors(home, model) || new Map(), want = new Map(), vecs = new Map();
   for (const n of g.nodes) if (!n.inContext) want.set(ehash(n), embedText(n));
   const missing = [...want].filter(([h]) => !old.has(h));
@@ -47,4 +53,5 @@ async function embedNodes(home, g, embedFn, model = MODEL) { // vectors are keye
   return { total: vecs.size, added: missing.length };
 }
 
-module.exports = { MODEL, ehash, withTimeout, getEmbedder, readVectors, embedNodes };
+// MODEL is the id in use now (a getter: env, then projects.json, then the default). BASE_MODEL is always the downloaded one.
+module.exports = { get MODEL() { return embedModel(); }, BASE_MODEL, embedText, ehash, withTimeout, getEmbedder, readVectors, embedNodes };

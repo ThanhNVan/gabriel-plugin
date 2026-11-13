@@ -9,5 +9,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.2"
+  },
+  "optionalDependencies": {
+    "pdfjs-dist": "4.10.38"
   }
 }

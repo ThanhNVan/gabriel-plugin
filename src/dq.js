@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { dataDir } = require('./rules.js');
 const paths = require('./paths.js');
+const { embedModel, DEFAULT_EMBED_MODEL } = require('./projects.js');
 
 const files = (home, project) => {
   const dir = dataDir(home);
@@ -25,7 +26,7 @@ async function embedAll(home, project) {
   out.forEach((v, i) => all.set(v, i * dim));
   fs.mkdirSync(dataDir(home), { recursive: true });
   fs.writeFileSync(f.bin, Buffer.from(all.buffer, all.byteOffset, all.byteLength));
-  fs.writeFileSync(f.idx, JSON.stringify({ keys, dim }));
+  fs.writeFileSync(f.idx, JSON.stringify({ keys, dim, model: embedModel() }));
   cache.delete(project + '|' + dataDir(home));
   return { questions: texts.length, sections: Object.keys(qs).length, dim };
 }
@@ -37,7 +38,9 @@ function load(home, project) {
   try {
     const f = files(home, project), idx = JSON.parse(fs.readFileSync(f.idx, 'utf8')), b = fs.readFileSync(f.bin);
     const vecs = new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
-    loaded = vecs.length === idx.keys.length * idx.dim ? { keys: idx.keys, vecs, dim: idx.dim } : null;
+    // an index made by another meaning model is ignored (no index, like a missing one) until build-dq runs again
+    const sameModel = (idx.model || DEFAULT_EMBED_MODEL) === embedModel();   // an index without a "model" field was made by the default model
+    loaded = sameModel && vecs.length === idx.keys.length * idx.dim ? { keys: idx.keys, vecs, dim: idx.dim } : null;
   } catch { loaded = null; }
   cache.set(key, loaded);
   return loaded;

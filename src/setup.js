@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { SUPPORTED, OPT_IN, extSet, isDocName, skipName, pdfHasSupport } = require('./extract.js');
 
 const SRC = __dirname;
 const ROOT = path.resolve(__dirname, '..');
@@ -17,6 +18,14 @@ const GRAPHIFY_SKILL = path.join(os.homedir(), '.claude', 'skills', 'graphify', 
 const ONLY_STEPS = { model: [5], build: [7, 8], test: [9] };
 
 const line = (msg) => console.log('  ' + msg);
+
+// A leading ~, ~/ or ~\ means the home folder. Any other path is returned as it is.
+function expandHome(p) {
+  const s = String(p);
+  if (s === '~') return os.homedir();
+  if (/^~[\\/]/.test(s)) return path.join(os.homedir(), s.slice(2));
+  return s;
+}
 const step = (n, text) => console.log(`[${'#'.repeat(n).padEnd(TOTAL, '-')}] ${String(n * 10).padStart(3)}% step ${n}/${TOTAL}: ${text}`);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
@@ -47,20 +56,20 @@ function runNode(args, { skipModel = false, heap = false, capture = false } = {}
   });
 }
 
-// Counts .md files under a doc folder (skips the same folders the map skips). Returns null when the folder is missing.
-function countDocs(root) {
+// Counts the doc files under a doc folder (skips the same folders the map skips). Returns null when the folder is missing.
+function countDocs(root, extensions) {
   if (!root || !fs.existsSync(root)) return null;
-  const skip = new Set(['graphify-out', 'node_modules', '.git', 'atlas', '_tools']);
+  const skip = new Set(['graphify-out', 'node_modules', '.git', 'atlas', '_tools']), exts = extSet(extensions);
   let n = 0;
   const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-    if (e.isDirectory()) { if (!skip.has(e.name)) walk(path.join(d, e.name)); } else if (e.name.endsWith('.md')) n++; } };
+    if (e.isDirectory()) { if (!skip.has(e.name)) walk(path.join(d, e.name)); } else if (isDocName(e.name, exts)) n++; } };
   walk(root);
   return n;
 }
 
 async function fetchModel(modelsDir, modelFile) {
   const embedPath = path.join(SRC, 'embed.js');
-  const script = `const e=require(${JSON.stringify(embedPath)});e.getEmbedder(true).then((p)=>process.exit(p?0:1));`;
+  const script = `const e=require(${JSON.stringify(embedPath)});e.getEmbedder(true, e.BASE_MODEL).then((p)=>process.exit(p?0:1));`;
   for (let attempt = 0; attempt <= RETRY_WAITS.length; attempt++) {
     if (attempt > 0) {
       line(`retry ${attempt} of ${RETRY_WAITS.length} in ${RETRY_WAITS[attempt - 1] / 1000} s`);
@@ -74,25 +83,36 @@ async function fetchModel(modelsDir, modelFile) {
 }
 
 // ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>] ----
-const DOC_EXT = ['.md'], CODE_EXT = ['.cs', '.ts', '.js', '.py', '.java', '.go'];   // DOC_EXT: the map reads Markdown only (mk.js listDocs)
+const DOC_EXT = SUPPORTED, CODE_EXT = ['.cs', '.ts', '.js', '.py', '.java', '.go'];   // DOC_EXT: the default types the map reads (extract.js); opt-in types (OPT_IN) are counted apart
 const ADD_SKIP = new Set(['graphify-out', 'node_modules', '.git']);
 const MAX_DOC_FILES = 20000, MAX_DOC_BYTES = 500 * 1024 * 1024;
 const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]';
 
-// Doc files under a folder (paths relative to it, subfolders kept) and their total size.
+// Doc files under a folder (paths relative to it, subfolders kept), their total size, and the opt-in files left out (count per extension).
 function listDocFiles(root) {
-  const files = [];
+  const files = [], optIn = new Map(), readable = extSet(DOC_EXT);
   let bytes = 0;
   const walk = (dir, rel) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name), r = path.join(rel, e.name);
       if (e.isDirectory()) { if (!ADD_SKIP.has(e.name)) walk(p, r); }
-      else if (DOC_EXT.includes(path.extname(e.name).toLowerCase())) { files.push(r); bytes += fs.statSync(p).size; }
+      else if (isDocName(e.name, readable)) { files.push(r); bytes += fs.statSync(p).size; }
+      else {
+        const x = path.extname(e.name).toLowerCase();
+        if (OPT_IN.includes(x) && !skipName(e.name)) optIn.set(x, (optIn.get(x) || 0) + 1);
+      }
     }
   };
   walk(root, '');
-  return { files, bytes };
+  return { files, bytes, optIn };
 }
+
+// "8 .md, 3 .pdf, 1 .docx": counts per extension, most files first
+const countLine = (files) => {
+  const by = new Map();
+  for (const f of files) { const x = path.extname(f).toLowerCase(); by.set(x, (by.get(x) || 0) + 1); }
+  return [...by].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([x, n]) => `${n} ${x}`).join(', ');
+};
 
 // True when a code file sits within two levels of the folder (the folder itself is level 0).
 function hasCodeFiles(root) {
@@ -118,7 +138,7 @@ function writeJsonAtomic(file, obj) {
 }
 
 // Adds one doc set. Prints its lines. Returns the exit code. Every check runs before any write, so an error leaves projects.json unchanged.
-function addDocs(argv) {
+async function addDocs(argv) {
   const { checkName, dataDir, docsDir, projectsFile } = require('./paths.js');
   const { loadProjects } = require('./projects.js');
   const fail = (msg) => { console.error(msg); return 1; };
@@ -130,7 +150,7 @@ function addDocs(argv) {
     else if (a === '--code' || a === '--data') {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
-      if (a === '--code') opt.code = v; else process.env.GABRIEL_DATA = path.resolve(v);
+      if (a === '--code') opt.code = v; else process.env.GABRIEL_DATA = path.resolve(expandHome(v));
     } else if (a.startsWith('--')) throw new Error('unknown option: ' + a);
     else pos.push(a);
   }
@@ -138,17 +158,22 @@ function addDocs(argv) {
   const [name, folderArg] = pos;
 
   checkName(name);
-  const folder = path.resolve(folderArg);
+  const folder = path.resolve(expandHome(folderArg));
   if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return fail(`folder not found: ${folderArg}`);
-  const { files, bytes } = listDocFiles(folder);
+  const { files, bytes, optIn } = listDocFiles(folder);
   if (!files.length) return fail(`0 docs found in ${folderArg}`);
+  console.log(`found ${files.length} docs: ${countLine(files)}`);
+  for (const [x, n] of optIn) console.log(`${n} ${x} files not read (add "${x.slice(1)}" to extensions to include them)`);
+  if (files.some((f) => path.extname(f).toLowerCase() === '.pdf') && !(await pdfHasSupport())) {
+    console.log('PDF files found but pdfjs-dist is not installed: run npm ci --omit=dev in the plugin folder');
+  }
   if (loadProjects().some((p) => p.name === name)) return fail(`project ${name} already exists`);
   if ((files.length > MAX_DOC_FILES || bytes > MAX_DOC_BYTES) && !opt.yes) {
     return fail(`too big: ${files.length} files, ${(bytes / 1048576).toFixed(1)} MB (limit ${MAX_DOC_FILES} files, ${MAX_DOC_BYTES / 1048576} MB). Add --yes to add it anyway.`);
   }
   const dest = docsDir(name);
   if (opt.copy && fs.existsSync(dest)) return fail(`folder already exists: ${dest}. Remove it or pick another name.`);
-  const codeDir = opt.code ? path.resolve(opt.code) : folder;
+  const codeDir = opt.code ? path.resolve(expandHome(opt.code)) : folder;
   if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
 
   // code graph: the --code repo first, then the docs folder
@@ -200,17 +225,17 @@ function addDocs(argv) {
 
 async function main(argv) {
   if (argv[0] === 'add-docs') {
-    try { return addDocs(argv.slice(1)); } catch (e) { console.error(e.message); return 1; }
+    try { return await addDocs(argv.slice(1)); } catch (e) { console.error(e.message); return 1; }
   }
   let opts;
   try { opts = parseArgs(argv); } catch (e) { console.error(e.message + '\nusage: node src/setup.js [--dry-run] [--skip-model] [--skip-test] [--yes] [--data <dir>] [--only model|build|test]'); return 2; }
-  if (opts.data) process.env.GABRIEL_DATA = path.resolve(opts.data);
+  if (opts.data) process.env.GABRIEL_DATA = path.resolve(expandHome(opts.data));
   return run(opts);
 }
 
 async function run(opts) {
   const paths = require('./paths.js');
-  const { MODEL } = require('./embed.js');
+  const { BASE_MODEL: MODEL } = require('./embed.js');   // setup always fetches the base model, even when a tuned one is set
   const { loadProjects } = require('./projects.js');
   const { migrate } = require('./migrate-data.js');
   const dataDir = paths.dataDir();
@@ -236,7 +261,7 @@ async function run(opts) {
     if (installed && installed === pin) line(`already installed (${pin})`);
     else if (dry) line(`(dry run) would run: npm ci --omit=dev in ${ROOT}`);
     else {
-      const r = spawnSync('npm', ['ci', '--omit=dev'], { cwd: ROOT, shell: true, stdio: 'inherit' });
+      const r = spawnSync('npm ci --omit=dev', { cwd: ROOT, shell: true, stdio: 'inherit' });
       if (r.status !== 0) {
         line(`npm install failed. Retry: cd "${ROOT}" && npm ci --omit=dev`);
         return 1;
@@ -344,7 +369,7 @@ async function run(opts) {
     if (opts.skipTest) line('skipped (--skip-test)');
     else if (dry) line('(dry run) would run: npm test');
     else {
-      const r = spawnSync('npm', ['test'], { cwd: ROOT, shell: true, stdio: 'inherit' });
+      const r = spawnSync('npm test', { cwd: ROOT, shell: true, stdio: 'inherit' });
       line(r.status === 0 ? 'tests passed' : `tests failed (exit ${r.status}). Setup continues; see the output above.`);
     }
   }
@@ -357,7 +382,7 @@ async function run(opts) {
     try { projects = loadProjects(); } catch (e) { line(`cannot read projects: ${e.message}`); }
     line(`${projects.length} project${projects.length === 1 ? '' : 's'}`);
     for (const p of projects) {
-      const n = countDocs(p.root);
+      const n = countDocs(p.root, p.extensions);
       line(`  ${p.name}${n === null ? '' : `: ${n} doc${n === 1 ? '' : 's'}`}`);
     }
     if (!fs.existsSync(GRAPHIFY_SKILL)) {
@@ -372,4 +397,4 @@ if (require.main === module) {
   main(process.argv.slice(2)).then((code) => process.exit(code), (e) => { console.error(e && e.stack || e); process.exit(1); });
 }
 
-module.exports = { main };
+module.exports = { main, expandHome };

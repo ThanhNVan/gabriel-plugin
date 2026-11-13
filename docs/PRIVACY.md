@@ -20,6 +20,7 @@ This page says what gabriel stores, where, and what it sends. It covers version 
 - Setup can be run with `--skip-model`. Then no model is downloaded. gabriel runs in words-only mode.
 - If the model download fails, setup retries 3 times. It then continues in words-only mode.
 - The hook itself never downloads anything. It uses the model only if it is already on disk.
+- Setup step 6 reads the old folder `~/.claude/brain`, only to plan a copy of its data. It copies only with `--yes`, and it never deletes anything.
 
 ## What is stored, and where
 
@@ -36,6 +37,8 @@ Everything is in one data folder, `~/.claude/gabriel-data`. Set `GABRIEL_DATA` t
 | `history/graph.db` | Word links built from your prompts. | Yes, in word form. |
 | `seen/` | Which items were sent in each session. | Item text. Removed after 7 days. |
 | `private/<name>/` | Files you add yourself: ranking weights, questions, eval cases. | Yes, if you add private text. |
+| `private/<name>/notes/EVAL-MK.md` | Eval report from `eval/eval-map.js --report`, for the default project: every question and its result. | Yes. It repeats your questions. |
+| `dq.<name>.bin`, `dq.<name>.idx.json` | Question index for one doc set: meaning numbers and section keys. | Numbers and keys only. The numbers come from your questions. |
 | `models/` | The meaning model. | No. |
 
 Plugin folder: code only. It holds no data. It is replaced when the plugin updates.
@@ -77,6 +80,8 @@ node "<plugin folder>/src/brain.js" forget "<text of the prompt>"
 2. Delete the data folder: `~/.claude/gabriel-data` (or the folder set in `GABRIEL_DATA`).
 
 That removes the map, the history, the model, the seen state and your private files. The plugin folder holds no data, so nothing else is left behind.
+
+A removed doc set keeps its rows in `mk.db`. To purge them, delete `mk.db` and run `/gabriel:setup`. Learned links are lost too.
 
 To forget only the learned links, run `node "<plugin folder>/src/brain.js" learn-reset`. To forget only prompt history, delete the `history/` folder.
 
