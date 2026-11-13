@@ -39,6 +39,9 @@ function sources(home) {
   let files;   // the rule files named in projects.json (fail open: the host's default file only)
   try { files = require('./projects.js').loadConfig().ruleFiles; } catch { files = paths.defaultRuleFiles(); }
   for (const f of files) if (fs.existsSync(path.join(home, f))) list.push({ rel: f, abs: path.join(home, f), note: false });
+  // the plugin's default preferences, only when the user has no preferences.md of their own
+  const def = path.join(paths.pluginRoot(), 'defaults', 'preferences.md');
+  if (!fs.existsSync(path.join(home, 'preferences.md')) && fs.existsSync(def)) list.push({ rel: 'gabriel/default-preferences.md', abs: def, note: false });
   const proj = path.join(home, 'projects');
   if (fs.existsSync(proj)) {
     for (const p of fs.readdirSync(proj)) {

@@ -6,6 +6,30 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 - It builds a local map of your doc folders. A code graph adds code names to the map.
 - Prompts that match nothing get no extra text.
 
+> [!WARNING]
+> **The setup is big.** Plan an afternoon, not five minutes. The plugin installs fast, but gabriel is only as good as the docs you give it. The full setup is: graph your code, write or collect docs, add them, then write a few test questions. It pays off later. See [Pros and cons](#pros-and-cons).
+
+## Pros and cons
+
+**Pros: it pays off once set up**
+
+- **Knows which file.** Each prompt gets the doc sections and code names that fit it. Claude starts in the right place instead of searching.
+- **Knows the flows.** Workflow and architecture docs, plus one-hop code graph links, show how the parts connect.
+- **Quiet when it should be.** Prompts that match nothing get no extra text.
+- **Local.** After setup, nothing leaves your machine. No API key, no cloud index.
+- **Gets better with use.** It learns from the files you open after a map. You can retrain its ranking on your own questions, and keep the new weights only if they score better.
+- **One brain, many tools.** Claude Code, Codex CLI, Gemini CLI, GitHub Copilot and any other tool share the same data folder.
+- **Your rules, when they fit.** It adds only the rules that match the prompt, not the whole rule file.
+
+**Cons: the cost is up front**
+
+- **Big setup.** The best results need a code graph (`/graphify`) and good docs: architecture, workflows, business rules. Writing them takes hours. `/gabriel:setup` helps, but you still review what is written.
+- **Docs go stale.** The map is only as current as your docs and graph. Run `/gabriel:update` after doc changes and `/graphify` after big code changes.
+- **A lead, not proof.** The map can point at the wrong doc. Claude must still confirm in the code.
+- **More text per prompt.** A matched prompt costs extra tokens for the added block.
+- **Disk space.** The meaning model is 22.6 MB. PDF support adds about 36 MB. The optional fine-tune adds about 1.3 GB of Python packages.
+- **Not equal on every tool.** Copilot cannot get the map on each prompt. It has to call gabriel itself. See [docs/HOSTS.md](docs/HOSTS.md).
+
 ## Install
 
 In Claude Code, run:
@@ -38,7 +62,7 @@ The `map` skill tells Claude how to read this block. Claude treats it as a lead,
 
 ## What leaves your machine
 
-After setup, gabriel sends nothing. Setup downloads npm packages and one meaning model (22.6 MB) once.
+After setup, gabriel sends nothing. Setup downloads npm packages and one meaning model (22.6 MB) once. If you say yes during the first setup, it also downloads public docs for your languages and frameworks. It asks first and shows the list.
 Claude Code still sends your prompts, and the text gabriel adds, to Claude as usual.
 
 ## Requirements

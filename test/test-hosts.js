@@ -121,6 +121,7 @@ const run = (args, input, extra = {}) => spawnSync(process.execPath, [BRAIN, ...
   const claudeHome = path.join(tmp, 'claude-home'), claudeData = path.join(tmp, 'claude-data');
   fs.mkdirSync(claudeHome, { recursive: true });
   fs.writeFileSync(path.join(claudeHome, 'CLAUDE.md'), '# Rules\n- Never commit or push anything. The user does.\n');
+  fs.writeFileSync(path.join(claudeHome, 'preferences.md'), '');   // an own preferences.md (even empty) keeps the plugin defaults out of the golden bytes
   fs.mkdirSync(path.join(claudeHome, 'projects', 'p1', 'memory'), { recursive: true });
   fs.writeFileSync(path.join(claudeHome, 'projects', 'p1', 'memory', 'feedback-tests.md'), '---\nname: test-rules\ntype: feedback\n---\n- Run the unit tests before saying the work is done and report the result.\n');
   const input = JSON.stringify({ session_id: 'golden-1', cwd: 'C:\\work\\demo', prompt: PROMPT });

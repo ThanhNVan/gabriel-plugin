@@ -9,6 +9,16 @@ const ROOT = path.resolve(__dirname, '..');
 const TIMEOUT_MS = 600000;
 const lastLine = (s) => (s || '').split(/\r?\n/).filter(Boolean).pop() || '';
 
+// One run at a time: two runs share the real data folder and models, and failed at random when they overlapped.
+const LOCK = path.join(require('node:os').tmpdir(), 'gabriel-test.lock');
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+try { fs.writeFileSync(LOCK, String(process.pid), { flag: 'wx' }); } catch {
+  const other = Number(fs.readFileSync(LOCK, 'utf8')) || 0;
+  if (other && other !== process.pid && alive(other)) { console.error(`another test run is going (pid ${other}). Wait for it, or delete ${LOCK} if it is stuck.`); process.exit(1); }
+  fs.writeFileSync(LOCK, String(process.pid));   // the old run is gone: take its lock
+}
+process.on('exit', () => { try { if (fs.readFileSync(LOCK, 'utf8') === String(process.pid)) fs.rmSync(LOCK); } catch { /* gone */ } });
+
 const files = fs.readdirSync(__dirname).filter((f) => /^test-.*\.js$/.test(f)).sort();
 let failed = 0;
 

@@ -7,7 +7,7 @@
     {
       "name": "gabriel",
       "source": "./",
-      "description": "Local doc and rules map for Claude Code: adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine."
+      "description": "Local doc and rules map for AI coding agents (Claude Code, Codex CLI, Gemini CLI, Copilot): adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine."
     }
   ]
 }

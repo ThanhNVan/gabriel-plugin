@@ -45,7 +45,7 @@ The hook never blocks a prompt. Any error means it prints nothing. The hook time
 
 ## Rules graph
 
-- **Sources.** The files named in `ruleFiles` in `projects.json`. With no setting, the host's default file: `CLAUDE.md` in `~/.claude` (Claude Code), `AGENTS.md` in `~/.codex` (Codex CLI), `GEMINI.md` in `~/.gemini` (Gemini CLI). It also reads memory notes under `projects/*/memory/` in the same folder, except `MEMORY.md`.
+- **Sources.** The files named in `ruleFiles` in `projects.json`. With no setting, the host's default file: `CLAUDE.md` in `~/.claude` (Claude Code), `AGENTS.md` in `~/.codex` (Codex CLI), `GEMINI.md` in `~/.gemini` (Gemini CLI). It also reads memory notes under `projects/*/memory/` in the same folder, except `MEMORY.md`. When that folder has no `preferences.md`, it adds the plugin's `defaults/preferences.md` (general working rules). Put your own `preferences.md` there to replace them.
 - **Nodes.** Each bullet or paragraph is one node. The nearest heading is its section.
 - **Note headers.** A note can set `valid-until: YYYY-MM-DD` to drop out after that day. It can set `supersedes: <note name>` to drop an older note.
 - **Skipped lines.** A line with `key`, `token`, `secret` or `password` and a long value is never stored.

@@ -1,10 +1,15 @@
 {
   "name": "gabriel",
-  "version": "0.1.0",
-  "description": "Local doc and rules map for Claude Code: adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine.",
+  "version": "0.2.0",
+  "description": "Local doc and rules map for AI coding agents (Claude Code, Codex CLI, Gemini CLI, Copilot): adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine.",
   "author": {
     "name": "ThanhNVan @ AIC Lab FPT University"
   },
   "license": "MIT",
-  "keywords": ["memory", "docs", "retrieval", "local"]
+  "keywords": [
+    "memory",
+    "docs",
+    "retrieval",
+    "local"
+  ]
 }

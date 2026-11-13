@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-11-13)
+
+- Hosts: Codex CLI and Gemini CLI hooks (`node src/setup.js --host <name> [--apply]`, `--remove-host`), GitHub Copilot through its instructions file (`--host copilot` prints the lines), and `brain.js context` for any other tool. Data folder `~/.gabriel` by default; `--data <dir>` for hosts that do not see your env.
+- First run of `/gabriel:setup`: a warning that the full setup is big, then optional steps, each asked first: install graphify, superpowers and ponytail; graph a project; write technical, business, architecture and workflow docs with Mermaid diagrams; download docs for your stack from well-known, high-trust sources. `--onboard` runs these steps again later.
+- `/gabriel:update --stack` fetches the stack docs again.
+- Tips: one short tip per session in the hook note. Off with `"tips": false` in `projects.json`.
+- Default preferences (`defaults/preferences.md`), used only when your rules folder has no `preferences.md`.
+- Optional fine-tune of the meaning model (`/gabriel:tune-embeddings`, `node src/setup.js --tune`), kept only when it scores better.
+- More doc formats: Word, PowerPoint, OpenDocument, Excel, CSV, TSV, PDF (optional `pdfjs-dist`); JSON, JSON Lines and YAML opt-in.
+- Tests: one test run at a time (a lock file), the tune keep branch, the tune fixture run.
 - `/gabriel:update` (`node src/setup.js --update`): adds new doc folders, rebuilds only the stale doc sets, and suggests eval cases for new sections (merged into `eval-cases.suggested.json`; `eval-cases.json` is never touched). `--dry-run` changes nothing. Safe to run again.
 
 ## 0.1.0 (2026-11-13)

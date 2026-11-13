@@ -282,7 +282,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { decide, parseArgs };
+module.exports = { decide, parseArgs, keepModel };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }).catch((e) => {

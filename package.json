@@ -1,7 +1,12 @@
 {
-  "name": "claude-brain",
+  "name": "gabriel",
+  "version": "0.2.0",
   "private": true,
-  "description": "Brain graph: rules and memory as a graph, matched to each prompt by words, synonyms and meaning.",
+  "description": "Local doc and rules map for AI coding agents (Claude Code, Codex CLI, Gemini CLI, Copilot): adds the few doc sections, rules and code links that fit each prompt. Your docs, your machine.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "test": "node test/run-all.js",
     "privacy": "node tools/check-public.js",

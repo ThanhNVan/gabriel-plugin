@@ -250,14 +250,14 @@ async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
-      await emit(host.writeOutput({ text: '', note: setupHint(sid) }));
+      await emit(host.writeOutput({ text: '', note: setupHint(sid) || require('./tips.js').tipFor(sid) }));
     };
     if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return await hintOnly();
     const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
     const { text: additionalContext, skipped, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
     const note = skipped ? `(${skipped} item${skipped > 1 ? 's' : ''} already in context, not repeated)` : '';
-    const hint = setupHint(sid);
+    const hint = setupHint(sid) || require('./tips.js').tipFor(sid);   // the setup hint first; after setup, one tip per session
     if (!additionalContext) {
       const msg = [note ? '🧭 Brain: ' + note : '', hint].filter(Boolean).join('\n');
       await emit(host.writeOutput({ text: '', note: msg }));
