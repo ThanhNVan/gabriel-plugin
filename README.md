@@ -60,7 +60,7 @@ To check how well it finds your docs, and to train it on your own questions, see
 | `/gabriel:update [--dry-run] [--stack]` | Adds new doc folders, rebuilds changed maps, suggests test questions. `--stack` fetches stack docs again. |
 | `/gabriel:refresh-docs <code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, retrains. |
 | `/gabriel:status` | Shows each doc set and when its map was built. |
-| `/gabriel:retrain <name>` | Retrains the ranking on your test questions. Keeps the new weights only if they score better. |
+| `/gabriel:retrain [name]` | Retrains the ranking on your test questions. With a name, keeps the new weights only if they score no worse. With no name, retrains the default doc set and always keeps the new weights (old ones saved as `rank.prev.json`). |
 | `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
 
 The `map` skill is not a command. It tells Claude how to read the map block.

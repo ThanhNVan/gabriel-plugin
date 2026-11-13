@@ -29,7 +29,7 @@ Lint and Mermaid need the dev packages (`npm ci` installs them). When a package 
 
 The owner word list is `private/privacy-words.txt` in the data folder or in the repo. The `private/` folder is not in git. Without the file, the scan reports 0 hits and still passes.
 
-`npm run prepack` runs the privacy scan with `--release`. Run it before a release.
+`npm run prepack` runs the privacy scan with `--release`. Run it before a release. With `--release`, a missing word list is an error, not a pass.
 
 ## Add a host adapter
 
@@ -76,4 +76,4 @@ This note comes from `docs/TROUBLESHOOTING.md`. The cache folder is outside this
 - Check the map is current: `node src/brain.js mk-status all`.
 - Learned links: `node src/brain.js learn-show`, and `learn-reset` to clear them.
 
-The hook also starts these builds in the background when a doc or the code graph changes. See [01-architecture.md](01-architecture.md).
+The hook also rebuilds the default project in the background when its docs or code graph change. Other projects are rebuilt only by `build-mk` or `/gabriel:update`. See [findings.md](findings.md).

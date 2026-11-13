@@ -11,4 +11,4 @@ Run this command with the argument the user gave, if any:
 node "${CLAUDE_PLUGIN_ROOT}/src/retrain.js" $ARGUMENTS
 ```
 
-Report the before and after scores. Then say whether the new weights were kept.
+Report the before and after scores. Then say whether the new weights were kept. With no name, they always replace the old ones (saved as `rank.prev.json`): say so, and warn when the strict score fell.

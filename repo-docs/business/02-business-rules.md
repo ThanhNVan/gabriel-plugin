@@ -131,8 +131,8 @@ A file opened or edited counts only if a map was shown in the same session no mo
 ## Eval and tuning
 
 ### R26 Retrain keeps new weights only when the strict score does not fall
-The strict count of the new weights must be at least the old count. Otherwise the current weights stay. If there is no eval case file, retrain only writes suggested cases.
-- Where: `src/retrain.js` (`newS.n >= oldS.n`, the `eval-cases.json` check).
+With a doc set name, the strict count of the new weights must be at least the old count. Otherwise the current weights stay. With no name, the new weights always replace the old ones, and the old file is saved as `rank.prev.json`. If there is no eval case file, retrain only writes suggested cases.
+- Where: `src/retrain.js` `keepNew()`, the `eval-cases.json` check.
 
 ### R27 Model tune keeps the tuned model only when it wins
 The tuned model is kept only when the held-out total rises, no doc set's held-out count falls by more than 1, and the full strict and quiet counts do not fall.

@@ -15,7 +15,7 @@ In `src/retrain.js`:
 3. **Score the current weights.** `eval/eval-map.js --project <name>` prints the strict count, for example `strict 12/15`. A strict pass means the expected doc section and code class are found. The quiet count means unrelated questions show no map block.
 4. **Train.** `src/train-rank.js --project <name> --out <temp file>` writes new weights to a temp file. If the meaning model is not installed, training is skipped and the current weights stay.
 5. **Score the new weights.** `eval/eval-map.js --project <name> --rank <temp file>`.
-6. **Keep or keep the current weights.** The new weights are copied to the doc set's rank file (default `<data>/private/<name>/rank.json`) only when the new strict count is at least the old one. Otherwise the current file stays. The temp file is removed in every case. See [R26](../02-business-rules.md#r26-retrain-keeps-new-weights-only-when-the-strict-score-does-not-fall).
+6. **Keep or keep the current weights.** The new weights are copied to the doc set's rank file (default `<data>/private/<name>/rank.json`) only when the new strict count is at least the old one. Otherwise the current file stays. With no name, they are always copied, after a backup as `rank.prev.json`. The temp file is removed in every case. See [R26](../02-business-rules.md#r26-retrain-keeps-new-weights-only-when-the-strict-score-does-not-fall).
 
 Optional tune, in `src/tune/tune.js`: it scores the current and the tuned meaning model on a copy of the data folder, then keeps the tuned model only when `decide()` passes ([R27](../02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins)). `--rollback` removes the tuned model setting from `projects.json`.
 

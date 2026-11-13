@@ -60,7 +60,7 @@ Run `node src/retrain.js <name>`. It does these steps:
 2. Scores the current weights.
 3. Trains new weights into a temp file.
 4. Scores the new weights.
-5. Keeps the new weights only when the strict count is not lower.
+5. Keeps the new weights only when the strict count is not lower. With no name (the default project), it always keeps the new weights, and saves the old file as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`.
 
 It prints both scores. If there are no cases yet, it writes suggestions and stops.
 

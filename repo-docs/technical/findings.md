@@ -10,4 +10,6 @@ Known gaps, and places where the docs and the code disagree. Each item was check
 
 ## Doc and code disagree
 
+5. **Background rebuild covers only the default project.** `refreshMapInBackground()` in `src/brain.js` calls `mk.stale(home)` and spawns `build-mk` with no name. Both fall back to `defaultProject()`. So changed docs in any other doc set are not rebuilt until `/gabriel:update` or `build-mk <name>`. `docs/ADDING-DOCS.md` §2 and §9 and `docs/ARCHITECTURE.md` (Background rebuild) say changed docs rebuild in the background, with no such limit. Fix: check every project in the background, or say the limit in those docs.
+
 4. **Rules matching leaves out the score floor.** `docs/ARCHITECTURE.md` (Rules graph, Matching) says a node needs 2 or more matching words. `wordScores` in `src/rules.js` also needs a score of at least `MIN_SCORE` (2.5). One exact term passes alone only when it is 8 or more characters, has a dash or dot, and has an idf of 3 or more. Fix: add both to the doc.

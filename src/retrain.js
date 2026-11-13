@@ -2,7 +2,8 @@
 //   node src/retrain.js [name]     (default: the default project)
 // 1. No eval-cases.json yet: write suggested cases (eval/suggest-cases.js) and stop. You review and save them, then run again.
 // 2. Rebuild the project's map (brain.js build-mk), score the current weights (eval-map), train new weights into a temp file (train-rank --out),
-//    score those (eval-map --rank). Copy them to the project's rank file only when the new strict count is not lower.
+//    score those (eval-map --rank). With a name: copy them to the project's rank file only when the new strict count is not lower.
+//    With no name: always copy them (the owner's choice), after a backup of the old file as rank.prev.json next to it.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -11,7 +12,12 @@ const mk = require('./mk.js');
 const paths = require('./paths.js');
 const { getProject } = require('./projects.js');
 
-const name = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : mk.defaultProject();
+// Keep the new weights? A named run keeps them only when the strict count does not fall. A run with no name always keeps them.
+function keepNew(named, oldS, newS) { return !named || !!(oldS && newS && newS.n >= oldS.n); }
+if (require.main !== module) { module.exports = { keepNew }; return; }
+
+const named = !!(process.argv[2] && !process.argv[2].startsWith('--'));
+const name = named ? process.argv[2] : mk.defaultProject();
 const P = getProject(name);
 if (!P) throw new Error('unknown project: ' + name);
 const ROOT = path.resolve(__dirname, '..');
@@ -53,10 +59,13 @@ const show = (label, s) => (s ? `${label}: strict ${s.n}/${s.t}` : `${label}: no
     if (!after.ok) { console.error(after.out.trim()); process.exitCode = 1; return; }
     const newS = strictOf(after.out);
     console.log(show('new weights', newS));
-    if (oldS && newS && newS.n >= oldS.n) {
+    if (keepNew(named, oldS, newS)) {
       fs.mkdirSync(path.dirname(P.rank), { recursive: true });
+      const prev = path.join(path.dirname(P.rank), 'rank.prev.json');
+      if (!named && fs.existsSync(P.rank)) { fs.copyFileSync(P.rank, prev); console.log(`old weights saved: ${prev}`); }
       fs.copyFileSync(tmp, P.rank);
-      console.log(`kept the new weights: ${P.rank}`);
+      const fell = oldS && newS && newS.n < oldS.n;
+      console.log(`kept the new weights: ${P.rank}${named ? '' : ` (no name given: always replaced${fell ? `, although strict fell ${oldS.n} -> ${newS.n}` : ''})`}`);
     } else {
       console.log(`kept the current weights: the new strict count is lower (${newS ? newS.n : '?'} < ${oldS ? oldS.n : '?'})`);
     }

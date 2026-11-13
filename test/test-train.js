@@ -94,6 +94,12 @@ try {
   else assert.match(r.stdout, /meaning model is missing/);
   step('retrain sample: prints the scores, exit 0');
 
+  const { keepNew } = require('../src/retrain.js');
+  assert.strictEqual(keepNew(true, { n: 5 }, { n: 4 }), false, 'named: a lower strict count keeps the old weights');
+  assert.strictEqual(keepNew(true, { n: 5 }, { n: 5 }), true, 'named: an equal count keeps the new weights');
+  assert.strictEqual(keepNew(false, { n: 5 }, { n: 4 }), true, 'no name: always keeps the new weights');
+  step('retrain keep rule: guarded with a name, always with no name');
+
   r = cli('src/retrain.js', ['bare']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /no eval cases for bare yet/);

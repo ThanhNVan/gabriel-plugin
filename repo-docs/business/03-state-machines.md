@@ -23,7 +23,7 @@ stateDiagram-v2
   Ready --> Stale : a doc, the graph, the format or the model changed (R16)
   Stale --> Building : background check starts a build (R18) or update runs
   note right of Missing
-    Only the default doc set with a graph file is built in the background.
+    Only the default doc set is rebuilt in the background.
     Other doc sets are built on request (R19, R22).
   end note
 ```
