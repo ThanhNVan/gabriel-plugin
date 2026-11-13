@@ -139,7 +139,13 @@ You can add doc sets and doc files at any time. Either:
 - Add a new doc set with `/gabriel:add-docs <name> <folder>`, or copy a folder into `~/.gabriel/docs/<name>/`.
 - Change or add files in a doc set you already have.
 
-Then run:
+You often do not need a command:
+
+- A new folder under `~/.gabriel/docs/` (any depth inside it) is added on its own. On a later prompt, gabriel sees it and runs the update in the background (at most once every 10 minutes). The folder must hold at least one file; an empty folder is ignored.
+- `~/.gabriel/docs/stack/` is made by setup for docs about your languages and frameworks. Put files there (in subfolders if you like) and it becomes the `stack` doc set the same way.
+- Changed files in a doc set you already have are rebuilt in the background too.
+
+To do it now and see the result, run:
 
 ```
 /gabriel:update

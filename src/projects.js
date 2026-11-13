@@ -7,6 +7,8 @@ const DEFAULTS = { layout: 'auto', graph: null, skipDirs: ['graphify-out', 'node
 const resolveRoot = (r) => { const s = String(r || '');
   if (s.startsWith('~')) return path.join(os.homedir(), s.slice(1).replace(/^[\\/]/, ''));
   return path.isAbsolute(s) ? path.resolve(s) : path.join(dataDir(), s); };
+// A folder with at least one file (any depth, hidden files not counted). An empty folder such as docs/stack is not a doc set yet.
+const hasFiles = (dir) => { try { return fs.readdirSync(dir, { recursive: true, withFileTypes: true }).some((e) => e.isFile() && !e.name.startsWith('.')); } catch { return false; } };
 let cache, cacheKey;
 function loadConfig() {
   const file = projectsFile();
@@ -18,7 +20,7 @@ function loadConfig() {
     if (j.version !== 1) throw new Error(`projects.json version ${j.version} is not supported (expected 1)`);
   } else {
     const docs = path.join(dataDir(), 'docs');
-    j = { projects: fs.existsSync(docs) ? fs.readdirSync(docs, { withFileTypes: true }).filter((e) => e.isDirectory())
+    j = { projects: fs.existsSync(docs) ? fs.readdirSync(docs, { withFileTypes: true }).filter((e) => e.isDirectory() && hasFiles(path.join(docs, e.name)))
       .map((e) => ({ name: e.name, root: path.join('docs', e.name) })) : [] };
   }
   const seen = new Set();
@@ -42,4 +44,4 @@ function embedModel() {
   if (process.env.GABRIEL_EMBED_MODEL) return process.env.GABRIEL_EMBED_MODEL;
   try { return loadConfig().embedModel || DEFAULT_EMBED_MODEL; } catch { return DEFAULT_EMBED_MODEL; }
 }
-module.exports = { loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL };
+module.exports = { hasFiles, loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL };

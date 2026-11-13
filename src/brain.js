@@ -78,6 +78,27 @@ function touchedHook(host) {
 }
 
 // When a doc or the code graph changed since the map was built, rebuild it in the background (once per 10 minutes). The old map keeps serving.
+// A folder under <data>/docs with files that is not a doc set yet: run `setup.js --update` in the background, which adds it and builds its map.
+// Only with a projects.json (without one, auto mode already reads every folder there). At most one run per 10 minutes. True when started.
+function registerNewDocFolders(home) {
+  const docs = path.join(dataDir(home), 'docs');
+  if (!fs.existsSync(paths.projectsFile()) || !fs.existsSync(docs)) return false;
+  const projects = require('./projects.js');
+  const list = projects.loadProjects(), roots = new Set(list.map((p) => path.resolve(p.root))), names = new Set(list.map((p) => p.name));
+  const fresh = fs.readdirSync(docs, { withFileTypes: true }).some((e) => {
+    if (!e.isDirectory() || names.has(e.name)) return false;
+    const dir = path.join(docs, e.name);
+    try { paths.checkName(e.name); } catch { return false; }
+    return !roots.has(path.resolve(dir)) && projects.hasFiles(dir);
+  });
+  if (!fresh) return false;
+  const lock = path.join(dataDir(home), 'docs-add.lock');
+  if (fs.existsSync(lock) && Date.now() - fs.statSync(lock).mtimeMs < MK_LOCK_MS) return false;
+  fs.writeFileSync(lock, String(Date.now()));
+  spawn(process.execPath, [path.join(__dirname, 'setup.js'), '--update'], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref();
+  return true;
+}
+
 function refreshMapInBackground(home) {
   try {
     if (process.env.BRAIN_HOME || process.env.GABRIEL_NO_BACKGROUND) return; // set only by the tests: they must never start a real map build
@@ -87,6 +108,7 @@ function refreshMapInBackground(home) {
     try { due = Date.now() - fs.statSync(stamp).mtimeMs > 60000; } catch { /* no stamp yet */ }
     if (!due) return;
     try { fs.writeFileSync(stamp, ''); } catch { /* data folder missing: check every time */ }
+    if (registerNewDocFolders(home)) return;   // the update also builds their maps
     if (!mk.stale(home)) return;
     const lock = path.join(dataDir(home), 'mk.lock');
     if (fs.existsSync(lock) && Date.now() - fs.statSync(lock).mtimeMs < MK_LOCK_MS) return;

@@ -1,7 +1,6 @@
 // Self-test for brain.js. Uses a fake ~/.claude in a temp folder. Prints "ALL PASSED" or throws.
 const assert = require('assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { brainPath, tempHome, runBrain } = require('./test-util.js');
 const brain = require(brainPath);

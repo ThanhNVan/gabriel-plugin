@@ -66,7 +66,8 @@ fs.mkdirSync(d3, { recursive: true });
 const r5 = run(['--skip-model', '--skip-test', '--data', d3]);
 assert.strictEqual(r5.status, 0, r5.stdout + r5.stderr);
 assert.ok(fs.existsSync(path.join(d3, 'docs', 'README.md')), 'starter README must be created');
-assert.ok(!fs.readdirSync(path.join(d3, 'docs'), { withFileTypes: true }).some((e) => e.isDirectory()), 'no starter folder');
+assert.ok(!fs.readdirSync(path.join(d3, 'docs'), { withFileTypes: true }).some((e) => e.isDirectory() && e.name !== 'stack'), 'no starter folder');
+assert.ok(fs.existsSync(path.join(d3, 'docs', 'stack')), 'setup makes the empty docs/stack folder');
 assert.match(r5.stdout, /no doc sets yet/);
 console.log('d3 empty folder: exit 0, starter README created, output says "no doc sets yet"');
 

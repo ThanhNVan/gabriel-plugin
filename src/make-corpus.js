@@ -13,7 +13,7 @@ const SKIP_DIR = new Set(['.git', 'includes', 'snippets', 'media', 'images', 'no
 const LICENSE = { 'dotnet-docs': 'dotnet/docs, CC BY 4.0 (text), MIT (code)', 'azure-arch-center': 'MicrosoftDocs/architecture-center, CC BY 4.0', 'dapr-docs': 'dapr/docs, CC BY 4.0', 'ef-core-docs': 'dotnet/EntityFramework.Docs, CC BY 4.0', 'angular-docs': 'angular/angular (adev content), MIT', 'azure-data-guide': 'MicrosoftDocs/architecture-center, CC BY 4.0', 'azure-data-services': 'MicrosoftDocs/azure-docs, CC BY 4.0', 'fabric-docs': 'MicrosoftDocs/fabric-docs, CC BY 4.0', 'spark-docs': 'apache/spark, Apache 2.0', 'flink-docs': 'apache/flink, Apache 2.0', 'hadoop-docs': 'apache/hadoop, Apache 2.0' };
 
 function clean(raw) {
-  let text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n'), title = '';
+  let text = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n'), title = '';
   const fm = text.match(/^---\n([\s\S]*?)\n---\n?/);
   if (fm) { const t = fm[1].match(/^title:\s*(.+)$/m); if (t) title = t[1].replace(/^["']|["']$/g, '').trim(); text = text.slice(fm[0].length); }
   text = text

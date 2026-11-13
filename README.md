@@ -43,7 +43,7 @@ In Claude Code, run:
 
 `add-docs` points gabriel at a folder of doc files and builds its map, so the first question can show it. Gabriel reads Markdown, text, reStructuredText, AsciiDoc, Org, HTML, Word, PowerPoint, OpenDocument, Excel, CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: list them in `"extensions"` in `projects.json` to read them. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md). You can also copy folders into `~/.gabriel/docs/<name>/` (older installs: `~/.claude/gabriel-data/docs/<name>/`) and run `/gabriel:setup` again, but only while there is no `projects.json`. Each folder there is one doc set.
 
-After you add or change doc files later, run `/gabriel:update`. It adds new folders and rebuilds the changed sets. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md).
+After you add or change doc files later, gabriel picks them up in the background on a later prompt: new folders under `~/.gabriel/docs/` (including `docs/stack/`, made by setup for your stack docs) and changed files. Run `/gabriel:update` to do it now. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md).
 
 To check how well it finds your docs, and to train it on your own questions, see [docs/EVAL.md](docs/EVAL.md) and `/gabriel:retrain`.
 

@@ -156,7 +156,7 @@ function chunkDoc(rel, raw) {
   return { rel, no: (path.basename(rel).match(/^(\d+)/) || [])[1] || path.parse(rel).name, chunks: out, links };
 }
 
-const PATH_RE = /[\w.\/-]+\.(?:cs|ts|html|scss|py|yml|json|ps1)\b/g;
+const PATH_RE = /[\w./-]+\.(?:cs|ts|html|scss|py|yml|json|ps1)\b/g;
 const spansOf = (t) => [...t.matchAll(/`([^`]{2,80})`/g)].map((m) => m[1].trim());
 
 // ---- build ----

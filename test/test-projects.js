@@ -4,6 +4,8 @@ const P = () => { for (const m of ['../src/paths.js', '../src/projects.js']) del
 const W = (j) => fs.writeFileSync(path.join(dir, 'projects.json'), JSON.stringify(j));
 // 1: no file -> one project per folder under docs/, defaults applied, no legacy tag, default rule files
 fs.mkdirSync(path.join(dir, 'docs', 'recipes'), { recursive: true });
+fs.writeFileSync(path.join(dir, 'docs', 'recipes', 'rice.md'), '# Rice\n');
+fs.mkdirSync(path.join(dir, 'docs', 'stack'), { recursive: true });   // empty (as setup makes it): not a doc set until it has files
 let ps = P().loadProjects();
 assert.deepStrictEqual(ps.map((p) => p.name), ['recipes']);
 assert.strictEqual(ps[0].root, path.join(dir, 'docs', 'recipes'));

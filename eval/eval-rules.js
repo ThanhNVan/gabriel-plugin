@@ -5,7 +5,6 @@
 //   want: text that must be in the injected rules.   not: text that must NOT be there.   none: nothing may be injected.
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const brain = require('../src/brain.js');
 const home = require('../src/paths.js').rulesHome();
 const mk = require('../src/mk.js');

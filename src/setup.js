@@ -214,6 +214,7 @@ async function addDocs(argv) {
     j = { version: 1, projects: [] };
     for (const e of fs.existsSync(docs) ? fs.readdirSync(docs, { withFileTypes: true }) : []) {
       if (!e.isDirectory() || e.name === name) continue;   // the new name is added below (a --copy just made its folder)
+      if (!require('./projects.js').hasFiles(path.join(docs, e.name))) continue;   // empty (like docs/stack): /gabriel:update adds it once it has files
       try { checkName(e.name); } catch { console.log(`skipped folder with a bad name: ${e.name}`); continue; }
       j.projects.push({ name: e.name, root: 'docs/' + e.name });
     }
@@ -547,8 +548,8 @@ async function run(opts) {
   // 3: data folders
   if (runs(3)) {
     step(3, 'create the data folder');
-    if (dry) line(`(dry run) would create ${dataDir} with docs, private and models`);
-    else for (const d of ['docs', 'private', 'models']) fs.mkdirSync(path.join(dataDir, d), { recursive: true });
+    if (dry) line(`(dry run) would create ${dataDir} with docs, docs/stack, private and models`);
+    else for (const d of ['docs', path.join('docs', 'stack'), 'private', 'models']) fs.mkdirSync(path.join(dataDir, d), { recursive: true });   // docs/stack: stack docs go here; it becomes a doc set once it has files
     line(dataDir);
   }
 
@@ -557,7 +558,8 @@ async function run(opts) {
     step(4, 'add a starter folder when there are no doc sets');
     const docs = path.join(dataDir, 'docs');
     const hasProjectsFile = fs.existsSync(paths.projectsFile());
-    const hasDocFolder = fs.existsSync(docs) && fs.readdirSync(docs, { withFileTypes: true }).some((e) => e.isDirectory());
+    const { hasFiles } = require('./projects.js');   // an empty folder (like docs/stack from step 3) is not a doc set
+    const hasDocFolder = fs.existsSync(docs) && fs.readdirSync(docs, { withFileTypes: true }).some((e) => e.isDirectory() && hasFiles(path.join(docs, e.name)));
     if (hasProjectsFile || hasDocFolder) line('doc sets found, nothing to add');
     else if (dry) line(`(dry run) would create ${path.join(docs, 'README.md')}`);
     else {   // a file, not a folder: a starter folder would become a doc set and block `add-docs <same name>`

@@ -7,6 +7,8 @@
 - Hosts: Codex CLI and Gemini CLI hooks (`node src/setup.js --host <name> [--apply]`, `--remove-host`), GitHub Copilot through its instructions file (`--host copilot` prints the lines), and `brain.js context` for any other tool. Data folder `~/.gabriel` by default; `--data <dir>` for hosts that do not see your env.
 - First run of `/gabriel:setup`: a warning that the full setup is big, then optional steps, each asked first: install graphify, superpowers and ponytail; graph a project; write technical, business, architecture and workflow docs with Mermaid diagrams; download docs for your stack from well-known, high-trust sources. `--onboard` runs these steps again later.
 - `/gabriel:update --stack` fetches the stack docs again.
+- `/gabriel:refresh-docs <code folder> [docs folder]`: `graphify update`, then update the docs the code change touches, then shrink them with a key-idea check (N/N kept), then rebuild the map and retrain the ranking.
+- New folders under `<data>/docs/` are added in the background; setup makes `docs/stack/`.
 - Tips: one short tip per session in the hook note. Off with `"tips": false` in `projects.json`.
 - Default preferences (`defaults/preferences.md`), used only when your rules folder has no `preferences.md`.
 - Optional fine-tune of the meaning model (`/gabriel:tune-embeddings`, `node src/setup.js --tune`), kept only when it scores better.

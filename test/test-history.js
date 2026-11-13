@@ -1,10 +1,9 @@
 // Self-test for history.js and its brain.js hook wiring. Uses only temporary homes.
 const assert = require('assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { brainPath, tempHome, runBrain } = require('./test-util.js');
+const { tempHome, runBrain } = require('./test-util.js');
 const historyPath = path.join(__dirname, '..', 'src', 'history.js');
 const history = require(historyPath);
 const home = (prefix = 'history-test-') => tempHome(prefix);
