@@ -76,6 +76,7 @@ flowchart LR
 - **Learned links.** A rebuild keeps learned links that still point to a node. It drops the rest.
 - **Build command.** `node src/brain.js build-mk [name|all]`. Setup runs it for each project.
 - **Background rebuild.** The hook checks for changes at most once a minute. If a doc or the graph changed, it starts a rebuild. The old map keeps serving until the new one is ready. A lock stops a second rebuild for 10 minutes.
+- **New doc folders.** In the same check, a new folder under `docs/` that holds at least one file starts `setup.js --update` in the background. That adds it as a doc set and builds its map. The lock `docs-add.lock` stops a second run for 10 minutes. An empty folder is ignored.
 
 ## Firing: the spreading search
 
@@ -158,7 +159,7 @@ Each prompt that reaches the search (4 words or more, not a slash command, not a
 
 1. Check Node.js (22.5 or newer).
 2. Install npm packages with `npm ci --omit=dev`.
-3. Create the data folder.
+3. Create the data folder, with `docs/stack/` for stack docs.
 4. If there are no doc sets, create the starter file `docs/README.md` (a file, not a doc set).
 5. Download the meaning model.
 6. Copy data from an old brain folder. Copies only, and only with `--yes`.
@@ -169,13 +170,21 @@ Each prompt that reaches the search (4 words or more, not a slash command, not a
 
 Flags: `--dry-run`, `--skip-model`, `--skip-test`, `--yes`, `--data <dir>`, `--only model|build|test`. Setup is safe to run again.
 
+Other modes of `setup.js`: `--update` (see [ADDING-DOCS](ADDING-DOCS.md) §9), `--host` and `--remove-host` (see [HOSTS](HOSTS.md)), `--tune` (see [TUNING](TUNING.md)).
+
+The first-run onboarding (helper skills, graph, code docs, stack docs) is in `skills/setup/SKILL.md`, not in `setup.js`. Claude runs it and asks before each step. Code docs follow [DOC-LAYOUT](DOC-LAYOUT.md). `/gabriel:refresh-docs` (`skills/refresh-docs/SKILL.md`) keeps them current after code changes.
+
+## Tips
+
+After setup, the hook note shows one short tip per session (`src/tips.js`). Tips go in order. The next index is kept in `tip-index` in the data folder. The user sees the tip; Claude does not. Turn tips off with `"tips": false` in `projects.json`.
+
 ## Files and data
 
 The plugin folder holds code only. It is replaced on update. Your data lives in one folder, `~/.gabriel`. Older installs keep `~/.claude/gabriel-data` while it exists. Set `GABRIEL_DATA` to use another folder.
 
 ```mermaid
 flowchart TD
-  DATA["gabriel-data folder"] --> PJ["projects.json: doc sets"]
+  DATA["data folder"] --> PJ["projects.json: doc sets"]
   DATA --> DOCS["docs/name/: your Markdown"]
   DATA --> MK["mk.db: the map (SQLite)"]
   DATA --> VEC["vectors.json: meaning numbers for rules"]

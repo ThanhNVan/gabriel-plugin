@@ -60,7 +60,8 @@ assert.ok(oldSuggested.length >= 3, 'suggested cases for the three sections');
   assert.match(text(r), /b: map built/);
   assert.match(text(r), /up to date: notes/);
   const pj = readJson(projectsFile).projects;
-  assert.deepStrictEqual(pj.find((p) => p.name === 'b'), { name: 'b', label: 'b', root: 'docs/b' });
+  assert.deepStrictEqual(pj.find((p) => p.name === 'b'), { name: 'b', label: 'b', root: 'docs/b', aliases: ['b'] });   // aliases: naming the set in a prompt routes to it
+  assert.deepStrictEqual(pj.find((p) => p.name === 'notes').aliases, ['notes'], 'add-docs sets aliases too');
   assert.strictEqual(JSON.stringify(pj.find((p) => p.name === 'notes')), before, 'existing entries must not change');
   assert.strictEqual(hash(casesFile), casesHash, 'eval-cases.json must not change');
 }

@@ -1,11 +1,12 @@
 # Privacy
 
-This page says what gabriel stores, where, and what it sends. It covers version 0.1.0.
+This page says what gabriel stores, where, and what it sends. It covers version 0.2.0.
 
 ## Short version
 
 - Your docs, rules and prompt history stay on your machine.
 - Setup downloads two things once: npm packages and one meaning model.
+- Onboarding can also download helper skills and docs for your stack, only if you say yes.
 - After setup, gabriel makes no network calls.
 - Claude Code still sends your prompts, and the text gabriel adds, to Claude as usual. That is how Claude Code works, not part of gabriel.
 
@@ -16,6 +17,8 @@ This page says what gabriel stores, where, and what it sends. It covers version 
 | `/plugin install` | The plugin files | The marketplace you added (a git URL or a local folder). |
 | `/gabriel:setup`, step 2 | npm packages: `@huggingface/transformers` and its dependencies, from the lock file | The npm registry. |
 | `/gabriel:setup`, step 5 | One meaning model, `Xenova/all-MiniLM-L6-v2` (22.6 MB) | The model host (huggingface.co). |
+| First-run onboarding or `--onboard`, only if you say yes | Helper skills (graphify, superpowers, ponytail) and public docs for your stack, saved in `docs/stack/`. It shows the list first. | The skill sources and the official docs sites you approve. |
+| `/gabriel:update --stack`, only if you say yes | The same stack docs again. | The same sites. |
 
 - Setup can be run with `--skip-model`. Then no model is downloaded. gabriel runs in words-only mode.
 - If the model download fails, setup retries 3 times. It then continues in words-only mode.
@@ -36,7 +39,9 @@ Everything is in one data folder, `~/.gabriel`. Older installs keep `~/.claude/g
 | `graph.codex.json`, `graph.gemini.json`, `graph.generic.json` | The same kind of graph for Codex CLI, Gemini CLI and `gabriel context`. | Yes. |
 | `history/*.jsonl` | Your prompts, one file per month and machine. All hosts write here. | Yes. |
 | `history/graph.db` | Word links built from your prompts. | Yes, in word form. |
-| `seen/` | Which items were sent in each session. | Item text. Removed after 7 days. |
+| `seen/` | Which items were sent in each session, and whether its tip was shown. | Item text. Removed after 7 days. |
+| `tip-index` | The number of the next tip. | No. |
+| `docs-add.lock` | Stops a second background update for 10 minutes. | No. |
 | `private/<name>/` | Files you add yourself: ranking weights, questions, eval cases. | Yes, if you add private text. |
 | `private/<name>/notes/EVAL-MK.md` | Eval report from `eval/eval-map.js --report`, for the default project: every question and its result. | Yes. It repeats your questions. |
 | `dq.<name>.bin`, `dq.<name>.idx.json` | Question index for one doc set: meaning numbers and section keys. | Numbers and keys only. The numbers come from your questions. |

@@ -24,7 +24,7 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 **Cons: the cost is up front**
 
 - **Big setup.** The best results need a code graph (`/graphify`) and good docs: architecture, workflows, business rules. Writing them takes hours. `/gabriel:setup` helps, but you still review what is written.
-- **Docs go stale.** The map is only as current as your docs and graph. Run `/gabriel:update` after doc changes and `/graphify` after big code changes.
+- **Docs go stale.** The map is only as current as your docs and graph. After code changes, run `/gabriel:refresh-docs <code folder>`: it updates the graph, fixes the docs the change touches, then rebuilds the map and retrains. After you edit docs by hand, `/gabriel:update` is enough.
 - **A lead, not proof.** The map can point at the wrong doc. Claude must still confirm in the code.
 - **More text per prompt.** A matched prompt costs extra tokens for the added block.
 - **Disk space.** The meaning model is 22.6 MB. PDF support adds about 36 MB. The optional fine-tune adds about 1.3 GB of Python packages.
@@ -41,11 +41,29 @@ In Claude Code, run:
 /gabriel:add-docs notes ~/notes
 ```
 
+On a first install, `/gabriel:setup` warns that the full setup is big, then offers four optional steps, each asked first: install helper skills (graphify, superpowers, ponytail), graph a project, write its docs, and download docs for your stack. Run `/gabriel:setup --onboard` to offer them again later.
+
+Installed from a local folder? Claude Code runs a copy in `~/.claude/plugins/cache/`. After you change the folder, run `claude plugin update gabriel@gabriel` and restart Claude Code.
+
 `add-docs` points gabriel at a folder of doc files and builds its map, so the first question can show it. Gabriel reads Markdown, text, reStructuredText, AsciiDoc, Org, HTML, Word, PowerPoint, OpenDocument, Excel, CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: list them in `"extensions"` in `projects.json` to read them. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md). You can also copy folders into `~/.gabriel/docs/<name>/` (older installs: `~/.claude/gabriel-data/docs/<name>/`) and run `/gabriel:setup` again, but only while there is no `projects.json`. Each folder there is one doc set.
 
 After you add or change doc files later, gabriel picks them up in the background on a later prompt: new folders under `~/.gabriel/docs/` (including `docs/stack/`, made by setup for your stack docs) and changed files. Run `/gabriel:update` to do it now. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md).
 
 To check how well it finds your docs, and to train it on your own questions, see [docs/EVAL.md](docs/EVAL.md) and `/gabriel:retrain`.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `/gabriel:setup` | Installs and checks gabriel. First run: the onboarding steps. |
+| `/gabriel:add-docs <name> <folder> [--code <repo>]` | Adds a doc set and builds its map. |
+| `/gabriel:update [--dry-run] [--stack]` | Adds new doc folders, rebuilds changed maps, suggests test questions. `--stack` fetches stack docs again. |
+| `/gabriel:refresh-docs <code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, retrains. |
+| `/gabriel:status` | Shows each doc set and when its map was built. |
+| `/gabriel:retrain <name>` | Retrains the ranking on your test questions. Keeps the new weights only if they score better. |
+| `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
+
+The `map` skill is not a command. It tells Claude how to read the map block.
 
 ## What you see
 
@@ -80,6 +98,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): common problems and fixes.
 - [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md): how to add doc sets.
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
+- [docs/TUNING.md](docs/TUNING.md): the optional fine-tune of the meaning model.
 - [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md): the folder layout and lean rules for the code docs that setup writes and refresh-docs keeps.
 
 ## Best results: graph your code, then write its docs
@@ -87,14 +106,13 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 > **Read this first if you use gabriel on a code base.** gabriel can only find what is written down. Good docs about your code help it more than anything else.
 
 1. **Graph the code.** Install the graphify skill and run `/graphify <repo>` in the repo. It writes `graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
-2. **Write the docs from the graph.** Ask Claude to read `graphify-out/` and the code, then write docs for that code base. A doc skill such as `/engineering:documentation` helps. Write these four kinds:
-   - **Technical:** modules and who owns what, main classes, how to add a feature, known bugs.
-   - **Business:** what the system is for, its rules, its terms (a glossary), its states.
-   - **Architecture:** the parts, how they talk, data flow, key decisions. Add a diagram.
-   - **Workflows:** each main flow step by step, from the trigger to the result, with the files it touches.
-3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`. Run `/gabriel:update` after you add or change docs.
+2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
+   - **Business** (`docs/business/`): what the system is for, its rules, its states, a glossary, and one page per main workflow, from trigger to result.
+   - **Technical** (`docs/technical/`): architecture, modules, how to build, test and add a feature, known bugs.
+3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`.
+4. **Keep them current:** after code changes, run `/gabriel:refresh-docs <repo>`.
 
-Docs that name real files, classes and steps give gabriel the most to link. Check them against the code: a wrong doc misleads gabriel too.
+Docs that name real files, classes and steps give gabriel the most to link. Keep them lean: one fact in one place, no copied code. Check them against the code: a wrong doc misleads gabriel too.
 
 ## Credit
 

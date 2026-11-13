@@ -4,7 +4,7 @@ A doc set is one folder of doc files. Gabriel builds a map from it. The map find
 
 Gabriel reads Markdown, plain text, reStructuredText, AsciiDoc, Org, HTML, Word (.docx), PowerPoint (.pptx), OpenDocument (.odt, .odp), Excel (.xlsx), CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. A scanned PDF has only pictures, so it has no text and is skipped. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: they are read only when the set lists them. Set `"extensions": ["md","pdf"]` in `projects.json` to limit a set to some types. For opt-in types, list the name without the dot, like `"json"`, `"jsonl"`, `"ndjson"`, `"yaml"` or `"yml"`.
 
-Your data folder is `~/.gabriel/`. On Windows that is `C:\Users\<you>\.gabriel\`. Older installs use `~/.gabriel/` instead, as long as that folder exists. The examples below use `~/.gabriel/`. Use your own folder's path.
+Your data folder is `~/.gabriel/`. On Windows that is `C:\Users\<you>\.gabriel\`. Older installs use `~/.claude/gabriel-data/` instead, as long as that folder exists. The examples below use `~/.gabriel/`. Use your own folder's path.
 
 **The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. A local-folder marketplace is copied there too, so edits in your folder are not used until you run `claude plugin update gabriel@gabriel` and restart Claude Code.
 

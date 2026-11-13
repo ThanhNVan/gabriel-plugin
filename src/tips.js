@@ -11,7 +11,7 @@ const TIPS = [
   'Name the project in your prompt ("in <project>, how do I ...") to get its map from any folder.',
   'Working on many projects at once? Start the prompt with the project name, then the skill: "in project A, ...".',
   "The map is a lead, not proof. Ask Claude to open the doc or file it names and confirm in the code.",
-  "Lines with ↔ are one-hop links in the code graph. Re-run /graphify after big code changes to keep them current.",
+  "Lines with ↔ are one-hop links in the code graph. Run /gabriel:refresh-docs <code folder> after code changes to keep them current.",
   "Write a few test questions for a doc set (eval-cases.json), then /gabriel:retrain <name>. New weights are kept only if they score better.",
   "gabriel learns from the files you open after a map. Open the file it named and it ranks that file higher next time.",
   'A prompt you want gone from "Similar earlier prompts"? node src/brain.js forget "<words>".',

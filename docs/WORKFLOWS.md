@@ -22,6 +22,8 @@ You add the plugin, install it, and run `/gabriel:setup`. Setup runs 10 steps. T
 
 Code: `skills/setup/SKILL.md` runs `src/setup.js`. The 10 steps are in `run()` in `src/setup.js`. `skills/add-docs/SKILL.md` runs `add-docs()` in `src/setup.js`.
 
+On a first install (or with `--onboard`), the setup skill then offers four optional steps, each asked first: install helper skills, graph a project, write its docs in the [DOC-LAYOUT](DOC-LAYOUT.md) layout, and download stack docs into `docs/stack/`. These run in Claude, not in `setup.js`.
+
 ```mermaid
 flowchart TD
   A["Add the marketplace: /plugin marketplace add"] --> B["Install: /plugin install gabriel@gabriel"]
@@ -30,7 +32,7 @@ flowchart TD
   S1 --> D1{"Node new enough?"}
   D1 -- "no" --> X1["Stop: install Node 22.5 or newer"]
   D1 -- "yes" --> S2["Step 2: npm ci --omit=dev when the pinned package differs"]
-  S2 --> S3["Step 3: create data folder with docs, private, models"]
+  S2 --> S3["Step 3: create data folder with docs, docs/stack, private, models"]
   S3 --> S4["Step 4: add starter docs/README.md when there are no doc sets"]
   S4 --> S5["Step 5: download the meaning model once"]
   S5 --> D5{"Model on disk?"}
@@ -150,6 +152,8 @@ flowchart TD
 ## 5. Add docs later
 
 You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions.
+
+You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and retrains.
 
 Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
 

@@ -787,11 +787,17 @@ function hadMap(home, session, project) {   // did this session already get a ma
   let db; try { db = new (sqlite())(dbFile(home), { readOnly: true }); } catch { return false; }
   try { const r = db.prepare('SELECT project FROM last WHERE session = ?').get(session); return !!r && (r.project || legacyProject() || defaultProject()) === project; } catch { return false; } finally { try { db.close(); } catch { /* closed */ } }
 }
+// Projects named in the (lower-case) prompt by an alias. When one matched alias sits inside a longer matched one
+// ("gabriel" in "gabriel-dev": the dash is a word boundary), only the longer one counts.
+function namedProjects(projects, lc) {
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const hits = projects.map((p) => ({ p, a: (p.aliases || []).map((a) => a.toLowerCase()).filter((a) => new RegExp('\\b' + esc(a) + '\\b').test(lc)) })).filter((x) => x.a.length);
+  return hits.filter((x) => !x.a.every((a) => hits.some((y) => y !== x && y.a.some((b) => b.length > a.length && b.includes(a))))).map((x) => x.p.name);
+}
 function searchAll(home, text, opts = {}) {
   const lc = String(text || '').toLowerCase(), cwd = String(opts.cwd || '').toLowerCase();
   const ps = loadProjects(), main = ps.filter((p) => !p.fallback), fb = ps.find((p) => p.fallback);
-  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const named = main.filter((p) => (p.aliases || []).some((a) => new RegExp('\\b' + esc(a.toLowerCase()) + '\\b').test(lc))).map((p) => p.name);
+  const named = namedProjects(main, lc);
   const hits = [];
   for (const p of main) {   // file order; a tie keeps the earlier project
     const r = search(home, text, { ...opts, project: p.name, learn: p.learn ? opts.learn : false });
@@ -825,7 +831,7 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   const pj = res.project || defaultProject(), P = getProject(pj) || {}, pn = P.label || pj;
   let out = P.fallback
     ? `${pn} (general programming and architecture, from public docs; built ${new Date(res.built).toISOString().slice(0, 10)}; background reading, not a rule of this repo):\n`
-    : `${pn} map (spreading search over ${P.graph ? 'technical-docs + code graph' : 'docs'}${res.commit ? ' @' + res.commit.slice(0, 8) : ''}, built ${new Date(res.built).toISOString().slice(0, 10)}; start here, then confirm in the code, the map can be old):\n`;
+    : `${pn} map (spreading search over ${P.graph ? 'docs + code graph' : 'docs'}${res.commit ? ' @' + res.commit.slice(0, 8) : ''}, built ${new Date(res.built).toISOString().slice(0, 10)}; start here, then confirm in the code, the map can be old):\n`;
   const add = (s) => { if (out.length - nbUsed + s.length + 1 <= (lim.max ?? MAX_CHARS)) out += s + '\n'; };
   let nbUsed = 0;   // neighbor lines have their own budget, so they never push a code hit out
   const addNb = (s) => { if (nbUsed + s.length + 1 <= NB_CHARS) { out += s + '\n'; nbUsed += s.length + 1; } };
@@ -840,4 +846,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { defaultProject, projectNames, dbFile, docsRoot, build, stale, hasMap, search, searchAll, format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };
+module.exports = { defaultProject, projectNames, dbFile, docsRoot, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };

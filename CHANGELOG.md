@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New doc sets (`add-docs`, `/gabriel:update`) get `aliases: [<name>]`, so naming the set in a prompt routes to it. The map header now says "docs + code graph" instead of "technical-docs + code graph". When one alias sits inside a longer one ("gabriel" in "gabriel-dev"), only the longer one counts as named (`namedProjects()` in `src/mk.js`).
+
 - Code docs from setup and refresh-docs follow one layout (`docs/DOC-LAYOUT.md`): `business/` (domain map, rules, states, glossary, `workflows/W<nn>-*.md`) and `technical/` (architecture, modules, dev workflow, findings), with an index. Lean rules: one fact in one place, name the code instead of copying it, no per-method docs, no line numbers, size limits. Refresh-docs lists what it cuts as over-detail.
 
 ## 0.2.0 (2026-11-13)

@@ -17,6 +17,14 @@ fs.writeFileSync(path.join(process.env.GABRIEL_DATA, 'projects.json'), JSON.stri
 ] }));
 const mk = require('../src/mk.js');
 
+// Naming: the longer alias wins when a shorter one sits inside it ("gabriel" in "gabriel-dev").
+{
+  const ps = [{ name: 'g', aliases: ['gabriel'] }, { name: 'gd', aliases: ['gabriel-dev'] }];
+  assert.deepStrictEqual(mk.namedProjects(ps, 'in gabriel-dev, how does x work'), ['gd']);
+  assert.deepStrictEqual(mk.namedProjects(ps, 'in gabriel, how does x work'), ['g']);
+  assert.deepStrictEqual(mk.namedProjects(ps, 'gabriel and gabriel-dev'), ['gd'], 'the short name inside the long one is not counted separately');
+}
+
 const write = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
 write(path.join(root, 'technical-docs', 'for-dev', '01-intro.md'), [
   '# 01 — Intro', '', '## Orders', '',

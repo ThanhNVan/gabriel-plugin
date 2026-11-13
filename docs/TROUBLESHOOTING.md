@@ -121,6 +121,10 @@ To use other settings (aliases, layout, a code graph), edit `projects.json`. See
 
 With no `eval-cases.json`, retrain writes suggested cases and stops. Review them, rewrite the questions in your own words, and save the file as `eval-cases.json`. Then run retrain again. See [EVAL](EVAL.md).
 
+## Changes in the plugin folder are not used
+
+Claude Code runs a copy of the plugin from `~/.claude/plugins/cache/`, even when you installed it from a local folder. Run `claude plugin update gabriel@gabriel`, then restart Claude Code. Codex CLI and Gemini CLI hooks run the folder you set up, so they need no update.
+
 ## Step 9 says "tests failed"
 
 Setup step 9 runs `npm test` in the plugin folder. A failure there does not stop setup. Run `npm test` in the plugin folder to see which test failed.

@@ -1,0 +1,48 @@
+# Glossary
+
+Terms in the order a reader meets them.
+
+- **Prompt hook**: the step that runs on each prompt and adds context. Claude Code runs it as `brain.js hook`.
+- **Rules graph**: the graph of rule notes (from rule files and memory). Built into `graph.json`. See `src/rules.js`.
+- **Rule**: one item of the rules graph: a bullet or a paragraph of a rule file or memory note.
+- **Rule file**: a file the host always loads, or a file a prompt may use: for example `CLAUDE.md`, `AGENTS.md`, `preferences.md`.
+- **Memory note**: a note in a project's `memory/` folder.
+- **In context**: already loaded by the host, so gabriel never returns it again.
+- **Doc set**: one named folder of docs that gabriel maps. It is an entry in `projects.json`. Also called a project.
+- **Alias**: a name in `projects.json` that routes a prompt to a doc set when the prompt uses it.
+- **cwdHints**: folder-name hints in `projects.json`. When the working folder path contains one, the doc set gets a small boost.
+- **Map**: the searchable form of a doc set, in `mk.db`. Built from its docs and its code graph.
+- **Map block**: the text the hook adds for the map: doc hits, code hits, and `↔` links.
+- **Neuron**: one node of the map: a doc section or a code class or file.
+- **Synapse**: a link between two neurons in the map.
+- **Code graph**: `graphify-out/graph.json`, made by `/graphify` for a code repo. gabriel reads it to build code neurons and links.
+- **Seed**: a neuron that a prompt directly hits (by words or meaning). A search spreads from its seeds.
+- **Spreading search**: the map search. It starts from seeds and passes weight to linked neurons for a few rounds.
+- **Fallback**: the general public docs doc set. It answers only when no doc set does, and is marked as background reading.
+- **Sources**: the files a map was built from: the graph and every doc file. A change in them makes the map stale.
+- **Stale**: a map whose sources, format or model changed since the build.
+- **Learned link**: a link the map gets from use: a file opened after a map was shown. See [03-state-machines.md](03-state-machines.md#learned-link).
+- **Session**: one Claude Code conversation, with its own seen list and its own last map.
+- **Seen list**: the items already sent in a session. Used to avoid sending the same item twice.
+- **Compaction**: when the host shortens the conversation. The seen list resets then.
+- **Prompt history**: the saved prompts, redacted, in `history/`. Used for "Similar earlier prompts".
+- **Similar earlier prompt**: a saved prompt whose meaning is close to the new prompt (score 0.60 or more).
+- **Keyword graph**: links between keywords of past prompts, in `src/graphdb.js`.
+- **Meaning model**: a small local model (`Xenova/all-MiniLM-L6-v2`) that turns text into numbers. Used for meaning search.
+- **Vector**: the numbers the meaning model gives for one text. Kept in `vectors.json` or `mk.db`.
+- **Words and synonyms**: the search without the meaning model. Synonyms come from `src/thesaurus.json` and the user's private thesaurus.
+- **Data folder**: the folder with all gabriel state. Set by `GABRIEL_DATA`, or `~/.gabriel` by default.
+- **Host**: the tool that runs gabriel: `claude`, `codex`, `gemini`, `copilot` or `generic`.
+- **Host adapter**: the code in `src/hosts/` that reads a host's input and writes its output.
+- **Rules home**: the host's rules folder, for example `~/.claude`.
+- **Setup hint**: the one-line note to run `/gabriel:setup`, shown until setup is done.
+- **Tip**: one short tip per session, shown to the user only.
+- **Eval case**: one test question with the doc section and code class it should find. Kept in `private/<name>/eval-cases.json`.
+- **Suggested case**: an eval case that gabriel writes from a doc section. The user reviews it before it counts.
+- **Strict score**: the count of eval cases where the expected doc section and code class are found. A case that allows either one passes with one of them. Output line: `strict N/T`.
+- **Quiet score**: the count of unrelated questions that show no map block.
+- **Held-out cases**: eval cases kept back from training. Used to judge a tuned model.
+- **Rank weights** (`rank.json`): the ranking settings of one doc set, trained by retrain.
+- **Retrain**: train new rank weights and keep them only when the strict score does not fall. See [W06](workflows/W06-eval-and-retrain.md).
+- **Tune**: optional fine-tune of the meaning model on the user's eval cases. Kept only when it wins.
+- **Stack docs**: public docs for the user's languages and frameworks, saved under `docs/stack/`. Background reading.

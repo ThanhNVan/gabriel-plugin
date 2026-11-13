@@ -216,10 +216,10 @@ async function addDocs(argv) {
       if (!e.isDirectory() || e.name === name) continue;   // the new name is added below (a --copy just made its folder)
       if (!require('./projects.js').hasFiles(path.join(docs, e.name))) continue;   // empty (like docs/stack): /gabriel:update adds it once it has files
       try { checkName(e.name); } catch { console.log(`skipped folder with a bad name: ${e.name}`); continue; }
-      j.projects.push({ name: e.name, root: 'docs/' + e.name });
+      j.projects.push({ name: e.name, root: 'docs/' + e.name, aliases: [e.name] });   // aliases: naming the set in a prompt routes to it
     }
   }
-  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph });
+  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph, aliases: [name] });
   try { writeJsonAtomic(file, j); }
   catch (e) { if (opt.copy) fs.rmSync(dest, { recursive: true, force: true }); return fail(`cannot write projects.json: ${e.message}`); }
 
@@ -278,7 +278,7 @@ async function update(argv) {
     }
     for (const f of add) {
       if (dry) { line(`(dry run) would add doc set ${f}`); continue; }
-      j.projects.push({ name: f, label: f, root: 'docs/' + f });
+      j.projects.push({ name: f, label: f, root: 'docs/' + f, aliases: [f] });
     }
     if (!dry && add.length) writeJsonAtomic(file, j);
     for (const f of add) { if (!dry) line(`added doc set ${f}`); counts.added++; }
