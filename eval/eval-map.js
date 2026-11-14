@@ -10,7 +10,9 @@
 //   node eval/eval-map.js --min 0.7           exit 1 when the strict pass rate of the chosen questions is under 70% (or an unrelated question leaks)
 //   node eval/eval-map.js --project <name>      one project (default: the default project). Cases: <private>/<name>/eval-cases.json
 //   node eval/eval-map.js --all                 every project that has an eval-cases.json, one block each
+//   node eval/eval-map.js --route --cwd <dir>   route as if the prompt came from that working folder (cwdHints); a case can set its own "cwd"
 //   node eval/eval-map.js --rank <rank.json>    test these doc ranking weights (from train-rank.js) instead of the project's rank file
+//   node eval/eval-map.js --why                 for each DOC or FAIL: its miss class (section-rank, not-in-pool, wrong-doc, code-only-miss), then the counts
 //   --cases <file> overrides the cases file (one project only). No cases file: prints a note and exits 0. See docs/EVAL.md.
 // A case: q (the question), doc / sec (regular expressions for a doc file and its section), code (regex for a code name),
 // any (pass when the doc OR the code matches), none (nothing may be returned). Matching ignores case.
@@ -39,6 +41,20 @@ function judge(c, res) {
   return lenient ? 'DOC' : 'FAIL';
 }
 
+// --why: the miss class of a DOC or FAIL. In order: the section is shown but the code name is missing; the section is a candidate but not shown;
+// a candidate or shown doc is the right file but no candidate has the section; anything else is the wrong doc.
+function whyOf(c, res) {
+  if (!c.doc) return 'wrong-doc';
+  const isDoc = (x) => rx(c.doc).test(x.file), isSec = (x) => isDoc(x) && (!c.sec || rx(c.sec).test(x.sec));
+  const shown = (res ? res.docs : []).map((d) => ({ file: d.n.file, sec: d.n.section || '' }));
+  const cands = res && res.cands ? res.cands : [];
+  const codeOk = c.code ? (res ? res.code : []).some((x) => rx(c.code).test(x.n.label)) : true;
+  if (shown.some(isSec) && !codeOk) return 'code-only-miss';
+  if (cands.some(isSec)) return 'section-rank';
+  if (shown.concat(cands).some(isDoc)) return 'not-in-pool';
+  return 'wrong-doc';
+}
+
 function judgeRendered(c, res, root = res) {
   if (!res) return judge(c, res);
   const project = res.project || mk.defaultProject(), P = require('../src/projects.js').getProject(project) || {};
@@ -64,9 +80,9 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
     const start = Date.now();
     const pv = embed ? (await embed([c.q]))[0] : null;
     // --route: the real router picks the project; an answer from the wrong project counts as no answer (a miss), and any answer to an unrelated question is a leak
-    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, ...rankOpt });
+    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), ...rankOpt });
     const own = c.project || DEFAULT, res = flag('--route') && res0 && !c.none ? (res0.project === own ? res0 : (res0.also || []).find((a) => a.project === own) || null) : res0;   // the right project's block may be the main one or a second, shorter one
-    rows.push({ c, status: judge(c, res), renderedStatus: judgeRendered(c, res, res0), alsoN: res0 && res0.also ? res0.also.length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
+    rows.push({ c, status: judge(c, res), renderedStatus: judgeRendered(c, res, res0), why: flag('--why') ? whyOf(c, res) : null, alsoN: res0 && res0.also ? res0.also.length : 0, blockN: res0 ? mk.format(res0).length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
     if (rows.length % 25 === 0) console.log(`progress ${rows.length}/${cases.length}`);
   }
   if (opt('--json')) fs.writeFileSync(opt('--json'), JSON.stringify(rows, null, 2) + '\n');
@@ -80,7 +96,7 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const out = (s = '') => { lines.push(s); console.log(s); };
   const L = (require('../src/projects.js').getProject(DEFAULT) || {}).label || DEFAULT;   // the project's own label, e.g. "Notes"
   out(`${L} map eval: ${rows.length} questions (${pos.length} ${L}, ${neg.length} unrelated), ${embed ? 'with' : 'without'} meaning, learned links ignored`);
-  out(`  ${(L + ' questions').padEnd(21)}strict ${rate(pos, strict)}   right doc or code ${rate(pos, lenient)}`);
+  out(`  ${(L + ' questions').padEnd(20)} strict ${rate(pos, strict)}   right doc or code ${rate(pos, lenient)}`);
   out(`  unrelated questions  quiet ${rate(neg, strict)}   (a LEAK is a map shown for an unrelated question)`);
   for (const s of ['dev', 'held', 'fresh', 'train2', 'blind', 'blind2', 'blind3', 'blind4', 'blind5', 'blind6']) { const p = pos.filter((r) => r.c.set === s); if (p.length) out(`  set ${s.padEnd(6)}           strict ${rate(p, strict)}   right doc or code ${rate(p, lenient)}`); }
   for (const pj of [...new Set(others.map((r) => r.c.project))]) { const p = others.filter((r) => r.c.project === pj); if (p.length) out(`  project ${pj.padEnd(5)}         strict ${rate(p, strict)}   right doc or code ${rate(p, lenient)}`); }
@@ -89,10 +105,17 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   out('  by area (strict): ' + areas.filter((a) => a !== 'NEG' && pos.some((r) => r.c.id.startsWith(a + '-'))).map((a) => { const p = pos.filter((r) => r.c.id.startsWith(a + '-')); return `${a} ${p.filter(strict).length}/${p.length}`; }).join('   '));
   if (flag('--route')) { const shown = rows.filter((r) => !r.c.none); out(`  second project block shown for ${rate(shown, (r) => r.alsoN > 0)} of the questions (the cost of a close call: a few more lines)`); }
   const ms = rows.map((r) => r.ms); out(`  search time: average ${Math.round(ms.reduce((a, b) => a + b, 0) / Math.max(ms.length, 1))} ms, slowest ${Math.max(0, ...ms)} ms (the hook timeout is 60,000 ms; the map search stops after 11,000 ms)`);
+  const blocks = rows.filter((r) => r.blockN > 0), bl = blocks.map((r) => r.blockN);   // the block the hook shows (mk.format of the result, second-project blocks included)
+  out(`  block chars: average ${Math.round(bl.reduce((a, b) => a + b, 0) / Math.max(bl.length, 1))}, largest ${Math.max(0, ...bl)}; second-set block for ${flag('--route') ? `${blocks.filter((r) => r.alsoN > 0).length}/${blocks.length} questions` : 'n/a'}`);
   if (knownRows.length) out('  known, not counted: ' + knownRows.map((r) => `${r.c.id} (${r.status}): ${r.c.why || ''}`).join('; '));
   const bad = rows.filter((r) => !strict(r)), shown = flag('--fails') ? bad : bad.slice(0, 40);
   if (bad.length) out(`\nnot strict-OK (${bad.length})${shown.length < bad.length ? `, first ${shown.length} (use --fails for all)` : ''}:`);
   for (const r of shown) out(`  ${r.status.padEnd(4)} ${r.c.id.padEnd(8)} [${r.c.set},${r.c.tier}] "${r.c.q}"\n         want: ${[r.c.doc && 'doc~' + r.c.doc, r.c.sec && 'sec~' + r.c.sec, r.c.code && 'code~' + r.c.code, r.c.none && 'nothing'].filter(Boolean).join('  ')}${r.c.any ? '  (doc OR code)' : ''}\n         got:  ${r.docs.slice(0, 3).join(' | ') || '-'}  //  ${r.code.slice(0, 3).join(', ') || '-'}`);
+  if (flag('--why')) {
+    const misses = pos.filter((r) => r.status === 'DOC' || r.status === 'FAIL'), n = (k) => misses.filter((r) => r.why === k).length;
+    for (const r of misses) out(`why ${r.c.id} ${r.why}`);
+    out(`why classes: section-rank ${n('section-rank')}, not-in-pool ${n('not-in-pool')}, wrong-doc ${n('wrong-doc')}, code-only-miss ${n('code-only-miss')}`);
+  }
 
   if (flag('--report')) {
     const md = [];

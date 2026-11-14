@@ -36,6 +36,7 @@ const { loadConfig, loadProjects, getProject, projectNames, embedModel, DEFAULT_
 // the default project: the one with a routing prior, else the first that is not a fallback
 const defaultProject = () => { const ps = loadProjects(); return (ps.find((p) => p.prior > 0) || ps.find((p) => !p.fallback) || ps[0] || {}).name; };
 const docsRoot = (project = defaultProject()) => { const p = getProject(project); if (!p) throw new Error('unknown project: ' + project); return p.root; };
+const graphPathOf = (project) => { const P = getProject(project) || {}; return P.graph ? path.join(docsRoot(project), P.graph) : null; };   // the project's code graph file (null when it sets none); build() and status use the same rule
 const legacyProject = () => loadConfig().legacyProject;
 const isFallback = (project) => !!(getProject(project) || {}).fallback;   // the general docs: answer only when no project does
 const dbFile = (home) => path.join(dataDir(home), 'mk.db');   // one file for all projects; every row carries its project
@@ -163,7 +164,7 @@ const spansOf = (t) => [...t.matchAll(/`([^`]{2,80})`/g)].map((m) => m[1].trim()
 async function build(home = homeDir(), opts = {}) {
   const project = opts.project || defaultProject(), P = getProject(project) || {}, root = opts.root || docsRoot(project), t0 = Date.now(), log = opts.log || (() => {});
   const gp = P.graph || null, graphPath = gp ? path.join(root, gp) : null;   // a project without a code graph (the general docs) has none
-  if (gp && !fs.existsSync(graphPath)) throw new Error('no ' + gp + ' under ' + root);
+  if (graphPath && !fs.existsSync(graphPath)) throw new Error(`graph not found: ${graphPath}; run /graphify on the code repo, or fix "graph" for ${project} in projects.json`);   // before any write: the old map stays
   const g = graphPath && fs.existsSync(graphPath) ? JSON.parse(fs.readFileSync(graphPath, 'utf8')) : { nodes: [], links: [], built_at_commit: '' };
   const files = listDocs(root, P.layout, P.skipDirs, extSet(P.extensions));
   const tmp = dbFile(home, project) + '.' + process.pid + '.tmp';
@@ -225,6 +226,7 @@ async function build(home = homeDir(), opts = {}) {
     docs.push(chunkDoc(path.relative(root, f).replace(/\\/g, '/'), text));
   }
   const docIds = [], byDocName = new Map(), spanChunks = new Map();
+  let linkedChunks = 0;   // doc chunks with at least one link to a code neuron
   const link = (a, b, w) => { addEdge.run(a, b, w); addEdge.run(b, a, w); deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); };
   for (const d of docs) {
     d.ids = [];
@@ -240,20 +242,24 @@ async function build(home = homeDir(), opts = {}) {
       if (prev) link(prev, id, 0.3);                      // next chunk in the same file
       prev = id;
       for (const s of new Set(sp)) (spanChunks.get(s) || spanChunks.set(s, []).get(s)).push(id);
-      // doc -> code: a cited file path, a cited symbol
+      // doc -> code: a cited file path, a cited symbol (toCode counts the links to code neurons from this chunk)
+      let toCode = 0;
       for (const p0 of new Set([...c.text.matchAll(PATH_RE)].map((m) => m[0]))) {
         const p = p0.replace(/^src\//, '').replace(/^\.\//, '');
         const hit = byFile.get(p) || [...byFile].find(([f]) => f.endsWith('/' + p))?.[1];
         if (!hit) continue;
         const base = path.basename(p).replace(/\.[^.]+$/, '');
         const top = hit.slice().sort((x, y) => (labelOf.get(x) === base ? 0 : 1) - (labelOf.get(y) === base ? 0 : 1)).slice(0, 6);
-        for (const t of top) link(id, t, 1);
+        for (const t of top) { link(id, t, 1); toCode++; }
       }
       for (const s of new Set(sp)) {
-        const sym = s.replace(/\(\)$/, '').split('.').pop();
-        const hit = byLabel.get(sym) || byLabel.get(s);
-        if (hit && hit.length <= 3 && /^[A-Z]/.test(sym)) for (const t of hit) link(id, t, 0.9);
+        const sym = s.replace(/\(\)$/, '').split('.').pop(), name = s.replace(/\(\)$/, '');
+        // a lowercase name links only as an exact label (graphify writes functions as name()), at 4+ characters, camelCase or a call: `addDocs`, `addDocs()`
+        const lower = /^[a-z]/.test(sym) && name.length >= 4 && (/[A-Z]/.test(name.slice(1)) || /\(\)$/.test(s));
+        const hit = lower ? byLabel.get(name + '()') || byLabel.get(s) : byLabel.get(sym) || byLabel.get(s);
+        if (hit && hit.length <= 3 && (lower || /^[A-Z]/.test(sym))) for (const t of hit) { link(id, t, 0.9); toCode++; }
       }
+      if (toCode) linkedChunks++;
     }
     byDocName.set(path.basename(d.rel), d);
   }
@@ -268,6 +274,7 @@ async function build(home = homeDir(), opts = {}) {
   for (const d of docs) for (const c of d.chunks) { const k = d.rel + '::' + c.section; (bySec.get(k) || bySec.set(k, []).get(k)).push(c.id); }
   for (const ids of bySec.values()) if (ids.length <= 8) for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) link(ids[i], ids[j], 0.4);
   log(`doc neurons ${docIds.length} from ${docs.length} files`);
+  if (g.nodes.length && docIds.length && linkedChunks * 100 < docIds.length) log(`warning: the docs name almost none of this graph's code (${linkedChunks} of ${docIds.length} sections link to it); is the code graph the right repo?`);
   // 4. degrees, word counts per layer, meta
   const setDeg = db.prepare('UPDATE nodes SET deg = ? WHERE id = ?');
   for (const [id, d] of deg) setDeg.run(d, id);
@@ -312,7 +319,7 @@ async function build(home = homeDir(), opts = {}) {
   }
   db.close();
   const merged = integrate(home, tmp, project);         // the project's fresh rows replace its old rows in mk.db; learned links stay where they are
-  return { merged, code: g.nodes.length, docs: docIds.length, files: docs.length, skipped, synapses: pair.size, vectors: vecs, commit: g.built_at_commit || '', ms: Date.now() - t0 };
+  return { merged, code: g.nodes.length, docs: docIds.length, files: docs.length, skipped, synapses: pair.size, vectors: vecs, commit: g.built_at_commit || '', ms: Date.now() - t0, docLinked: linkedChunks };
 }
 
 // ---- learning: one store (this file), keyed by stable names, merged on every rebuild ----
@@ -727,7 +734,7 @@ function search(home, text, opts = {}) {
       }
     }
     // doc ranking: a few signals per candidate section, combined with weights learned from written-down questions (rank.json, made by train-rank.js)
-    let feat;
+    let feat, why = null;   // why: the candidates in rank order (only for opts.why, see eval-map.js --why)
     const W = opts.rankW === undefined ? loadRank(project) : opts.rankW;
     if (opts.pv && (W || opts.feat)) {
       try {
@@ -765,6 +772,7 @@ function search(home, text, opts = {}) {
         if (W) {
           const picked = rankDocs(rows, W).map((r) => ({ a: r.z, n: r.n }));
           if (picked.length) docs = picked;
+          if (opts.why) why = rows.map((r) => ({ r, z: r.f.reduce((s, v, i) => s + v * (W[i] || 0), 0) })).sort((a, b) => b.z - a.z).slice(0, 40).map(({ r }) => ({ file: r.n.file, sec: r.n.section || '' }));
         }
       } catch { /* keep the plain ranking */ }
     }
@@ -774,7 +782,9 @@ function search(home, text, opts = {}) {
       const nb = db.prepare("SELECT n.label, n.file, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
       for (const c of code.slice(0, NB_CODE)) c.nb = nb.all(c.n.id, NB_PER);
     } catch { /* neighbors are optional */ }
-    return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat };
+    // --why only: the candidate sections in rank order (the ranked list when no rank file is used)
+    const cands = opts.why ? (why || ranked.filter(([id]) => info.get(id)?.kind === 'doc').slice(0, 40).map(([id]) => ({ file: info.get(id).file, sec: info.get(id).section || '' }))) : undefined;
+    return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands };
   } catch { return null; } finally { try { db.close(); } catch { /* already closed */ } }
 }
 
@@ -846,4 +856,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { defaultProject, projectNames, dbFile, docsRoot, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };
+module.exports = { defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };

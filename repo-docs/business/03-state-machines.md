@@ -9,7 +9,7 @@ A doc set is a project in `projects.json`. Its map lives in `mk.db`, one set of 
 | State | Meaning | How to see it |
 |---|---|---|
 | Missing | No rows for this doc set yet. | `brain.js mk-status` says "no map". |
-| Building | A build is running. The lock file `mk.lock` (for the default set) or the build is in progress. | Lock file younger than 10 minutes. |
+| Building | A build is running. A background build holds `mk.lock`, which names its doc set. | Lock file younger than 10 minutes. |
 | Ready | Rows match the current docs, graph, format and model. | `mk-status` says "ok". |
 | Stale | Rows exist, but a source changed. The old rows still serve. | `mk-status` says "STALE". |
 
@@ -23,7 +23,7 @@ stateDiagram-v2
   Ready --> Stale : a doc, the graph, the format or the model changed (R16)
   Stale --> Building : background check starts a build (R18) or update runs
   note right of Missing
-    Only the default doc set is rebuilt in the background.
+    The background check rebuilds the first stale doc set; a set whose graph file is missing is skipped.
     Other doc sets are built on request (R19, R22).
   end note
 ```

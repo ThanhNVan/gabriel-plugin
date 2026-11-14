@@ -41,6 +41,7 @@ Everything is in one data folder, `~/.gabriel`. Older installs keep `~/.claude/g
 | `history/graph.db` | Word links built from your prompts. | Yes, in word form. |
 | `seen/` | Which items were sent in each session, and whether its tip was shown. | Item text. Removed after 7 days. |
 | `tip-index` | The number of the next tip. | No. |
+| `onboarding.json` | Which first-run steps are done or skipped, the folders picked, and the date. | Folder paths only. |
 | `docs-add.lock` | Stops a second background update for 10 minutes. | No. |
 | `private/<name>/` | Files you add yourself: ranking weights, questions, eval cases. | Yes, if you add private text. |
 | `private/<name>/notes/EVAL-MK.md` | Eval report from `eval/eval-map.js --report`, for the default project: every question and its result. | Yes. It repeats your questions. |

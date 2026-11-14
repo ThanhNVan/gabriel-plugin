@@ -2,7 +2,7 @@
 name: update
 description: Update gabriel after you add or change doc files. Adds new doc folders, rebuilds the changed doc sets and suggests test questions for new sections. Usage: /gabriel:update [--dry-run] [--stack]
 disable-model-invocation: true
-argument-hint: [--dry-run] [--stack]
+argument-hint: [--dry-run: show only] [--stack: refetch stack docs]
 ---
 
 With `--stack`, first fetch the stack docs again (the docs setup downloaded for your languages and frameworks), then run the update below:

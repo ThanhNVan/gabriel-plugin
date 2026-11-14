@@ -50,7 +50,7 @@ The hook never blocks a prompt. Any error means it prints nothing. The hook time
 - **Note headers.** A note can set `valid-until: YYYY-MM-DD` to drop out after that day. It can set `supersedes: <note name>` to drop an older note.
 - **Skipped lines.** A line with `key`, `token`, `secret` or `password` and a long value is never stored.
 - **Already in context.** Nodes from the host's always-loaded file (`CLAUDE.md`, `AGENTS.md` or `GEMINI.md`) and files it imports are loaded every session. gabriel never injects them again.
-- **Matching.** Words count with an inverse-frequency weight. Synonyms from `src/thesaurus.json` count half. A node needs 2 or more matching words, or one strong exact term such as a long name with a dash or dot.
+- **Matching.** Words count with an inverse-frequency weight. Synonyms from `src/thesaurus.json` count half. A node passes in one of two ways. It has 2 or more matching words with a total score of at least 2.5. Or it has one strong exact term: 8 or more characters, a dash or dot in it, and an inverse-frequency weight of 3 or more. Rule code: `src/rules.js` `wordScores()`.
 - **Meaning.** A small local model scores each node against the prompt. A meaning score needs to reach 0.3 unless words already matched.
 - **Output.** Up to 6 rules. The block stays under 2400 characters. Each rule line is cut at 320 characters.
 - **Storage.** `graph.json` in the data folder for Claude Code, and `graph.<host>.json` for the other hosts. It is rebuilt when a source file changes.
@@ -71,11 +71,14 @@ flowchart LR
 
 - **Which files.** `layout: "auto"` reads `technical-docs/` when it exists. Otherwise it reads every `.md` file, except tool folders (`graphify-out`, `node_modules`, `.git`, `atlas`, `_tools`). `layout: "technical-docs"` reads only that folder. `layout: "all-md"` reads every `.md` file except `skipDirs`.
 - **Chunks.** Text is split at headings and at spaces. Each chunk is at most 450 characters and keeps its heading path.
-- **Code nodes.** When a project sets `graph`, the file is read from the project root. Links get a weight by relation: `calls` and `implements` 1.0, `method` 0.7, `defines` 0.6, `contains` 0.5, `references` 0.3, `imports` 0.2.
+- **Code nodes.** When a project sets `graph`, the file is read from the project root. If that file is missing, the build stops before it writes, and the old map stays. Links get a weight by relation: `calls` and `implements` 1.0, `method` 0.7, `defines` 0.6, `contains` 0.5, `references` 0.3, `imports` 0.2. The full table is `REL` in `src/mk.js`.
+- **Doc-to-code links.** A doc section links to a code node when it cites the node's file path, or names it in backticks: a capitalized name (`TireRepair`), or a name of 4+ characters that is camelCase or ends in `()` (`addDocs()`). A name that matches more than 3 nodes does not link.
+- **Code check.** After the build, if under 1% of the doc sections link to code, a `warning:` line says the code graph may be the wrong repo. The build still finishes. See [TROUBLESHOOTING](TROUBLESHOOTING.md).
 - **One file.** All projects share `mk.db`. Each row has a project tag. A build writes a temporary file, then replaces only the rows of the project it builds. Rows of a removed project stay until `mk.db` is deleted.
 - **Learned links.** A rebuild keeps learned links that still point to a node. It drops the rest.
 - **Build command.** `node src/brain.js build-mk [name|all]`. Setup runs it for each project.
-- **Background rebuild.** The hook checks for changes at most once a minute. If a doc or the graph changed, it starts a rebuild. The old map keeps serving until the new one is ready. A lock stops a second rebuild for 10 minutes.
+- **Background rebuild.** The hook checks for changes at most once a minute. The check goes through the doc sets in order and starts the first stale one. A set whose graph file is missing is skipped. The old map keeps serving until the new one is ready. The lock file `mk.lock` names the set being built and counts as held for 10 minutes.
+- **Relink.** `add-docs <name> --code <repo> --relink` sets only the `graph` entry of one set, then rebuilds its map. See [ADDING-DOCS](ADDING-DOCS.md).
 - **New doc folders.** In the same check, a new folder under `docs/` that holds at least one file starts `setup.js --update` in the background. That adds it as a doc set and builds its map. The lock `docs-add.lock` stops a second run for 10 minutes. An empty folder is ignored.
 
 ## Firing: the spreading search

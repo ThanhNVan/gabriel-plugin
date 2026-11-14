@@ -41,6 +41,8 @@ Each `workflows/W<nn>-<name>.md` has these parts, in this order:
 
 Over-detailed docs go stale fast and hide the one fact the reader needs. Every line must help someone do a task or understand a decision.
 
+Check a folder with `node tools/check-docs.js <docs folder> [--code <repo>] [--no-size]`. It reports size, long code blocks, line numbers, placeholders, broken links and (with `--code`) missing code paths, then `check-docs: <n> hits`.
+
 - **One fact, one place.** Write it once and link to it. Repeated facts drift apart.
 - **Name the code, do not copy it.** Give the file path and the class or function name. No code blocks longer than 5 lines. No line numbers: they change with every edit.
 - **No per-method or per-field docs.** The code and its types say that. Document the job, the flow and the why.

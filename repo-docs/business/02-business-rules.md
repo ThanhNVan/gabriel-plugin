@@ -61,7 +61,8 @@ When a doc set sets `sessionGate: true`, a weak match is dropped if the prompt d
 
 ### R12 A named doc set gets the prompt first
 A prompt that names a doc set by one of its aliases adds 1.2 points to that set.
-- Where: `src/mk.js` `searchAll()` (`named`, `ROUTE_NAMED`). The `cwdHints` in `projects.json` add 0.3 when the folder matches.
+- When one alias sits inside a longer alias that also matches (`gabriel` inside `gabriel-dev`), only the longer one counts.
+- Where: `src/mk.js` `searchAll()` (`named`, `ROUTE_NAMED`), `namedProjects()`. The `cwdHints` in `projects.json` add 0.3 when the folder matches. `add-docs --code <repo>` sets `cwdHints` to the lower-case repo name, or to the git repo's name when the repo sits inside one.
 
 ### R13 A map is a lead, not proof
 The map block says to confirm in the code, and that the map can be old. The `map` skill tells the model to name the doc or file and check it. A `↔` line is a one-hop link with no direction.
@@ -91,8 +92,9 @@ A build writes a temp file. The new rows replace the old ones in one transaction
 
 ### R18 Background builds: one at a time, checked each minute
 - The hook checks for stale maps at most once a minute.
-- One background build runs at a time. Its lock counts as held for 10 minutes.
-- Where: `src/brain.js` `refreshMapInBackground()` (`mk-check`, `MK_LOCK_MS`).
+- The check looks at every doc set and starts the first stale one. A set whose graph file is missing is skipped, so it cannot fail every time.
+- One background build runs at a time. Its lock file `mk.lock` names the set. The lock counts as held for 10 minutes. A build removes it when it is the default set or the named set.
+- Where: `src/brain.js` `refreshMapInBackground()` (`mk-check`, `MK_LOCK_MS`), `mk.graphPathOf()`; `src/brain.js` build mode (lock removal).
 
 ### R19 New doc folders join only when they hold files
 A folder under `docs/` becomes a doc set only when it has at least one file (hidden files do not count). Under `projects.json`, this happens in `/gabriel:update` (or a background run of it, at most once per 10 minutes).
@@ -109,6 +111,7 @@ A name uses lower-case letters, digits, `-` and `_`, up to 40 characters. It mus
 - A name already in `projects.json` is refused.
 - A folder over 20000 files or 500 MB needs `--yes`.
 - `--copy` refuses to overwrite an existing folder.
+- `--code <repo>` with no `graphify-out/graph.json` in that repo stops before any write. See [R33](#r33-a-code-graph-must-exist-and-match-the-docs).
 - Where: `src/setup.js` `addDocs()`, `MAX_DOC_FILES`, `MAX_DOC_BYTES`.
 
 ## Learning from use
@@ -131,7 +134,7 @@ A file opened or edited counts only if a map was shown in the same session no mo
 ## Eval and tuning
 
 ### R26 Retrain keeps new weights only when the strict score does not fall
-With a doc set name, the strict count of the new weights must be at least the old count. Otherwise the current weights stay. With no name, the new weights always replace the old ones, and the old file is saved as `rank.prev.json`. If there is no eval case file, retrain only writes suggested cases.
+With a doc set name, the strict count of the new weights must be at least the old count. Otherwise the current weights stay. With no name, the new weights always replace the old ones, and the old file is saved as `rank.prev.json`. If either strict count is missing, a named run keeps the current weights. If there is no eval case file, retrain only writes suggested cases.
 - Where: `src/retrain.js` `keepNew()`, the `eval-cases.json` check.
 
 ### R27 Model tune keeps the tuned model only when it wins
@@ -165,3 +168,13 @@ Without `--apply`, `setup.js --host` prints the config and changes nothing. With
 ### R32 Old data is copied, never deleted
 Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. Without it, setup only shows the plan. A failed copy leaves the old data as it was.
 - Where: `src/setup.js` `run()` step 6; `src/migrate-data.js` `migrate()`.
+
+## Code graph
+
+### R33 A code graph must exist and match the docs
+- A doc set with a `graph` entry whose file is missing fails to build with `graph not found`. The old map stays.
+- `add-docs --code <repo>` needs `<repo>/graphify-out/graph.json`. With no file, it stops. It does not fall back to the docs folder.
+- A build that finds almost no code (under 1% of doc sections link to it) prints a warning. The build still finishes. A section links by a cited file path or a backticked name: capitalized, or camelCase or `name()` with 4+ characters (rule in [ARCHITECTURE](../../docs/ARCHITECTURE.md), Map build).
+- `add-docs <name> --code <repo> --relink` sets only that set's `graph` and rebuilds its map. The same graph check applies.
+- `mk-status all` shows the graph path of each set, and `GRAPH MISSING` when the file is gone.
+- Where: `src/mk.js` `build()`, `graphPathOf()`; `src/setup.js` `addDocs()`, `relinkDocs()`; `src/brain.js` `mk-status` mode.

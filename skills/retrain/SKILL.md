@@ -2,7 +2,7 @@
 name: retrain
 description: Retrain gabriel's ranking weights for one doc set or for all. Usage: /gabriel:retrain [name]
 disable-model-invocation: true
-argument-hint: [name]
+argument-hint: [name: doc set; none = default set, always replace weights]
 ---
 
 Run this command with the argument the user gave, if any:

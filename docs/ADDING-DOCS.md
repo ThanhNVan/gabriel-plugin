@@ -77,13 +77,25 @@ This makes `graphify-out/graph.json` in the repo. Gabriel reads that file to lin
 
 Check each doc against the code. A wrong doc misleads gabriel. See the README section "Best results".
 
-Then remove the set (step 8) and add it again with the repo:
+Then add the set with the repo:
 
 ```
 /gabriel:add-docs <name> <folder> --code <repo>
 ```
 
 Expected line: `code graph found: linking docs to code`
+
+With `--code`, the repo must hold `graphify-out/graph.json`. If it does not, add-docs stops before it writes anything. There is no fallback to a graph in the docs folder. Without `--code`, a graph in the docs folder is still used when present.
+
+The build warns when almost no doc section links to the code. It prints `warning: the docs name almost none of this graph's code (<k> of <n> sections link to it); is the code graph the right repo?` The build summary ends with `, <k> doc sections linked to code`. If the repo is wrong, fix it with `--relink`. It changes only the code graph of an existing set, then rebuilds its map:
+
+```
+/gabriel:add-docs <name> --code <repo> --relink
+```
+
+With `--code`, the set also gets `cwdHints`: the lower-case name of the code repo. If the repo sits inside a git repo, the git repo's name is used. A prompt run from that folder then leans toward this set. `--relink` does not change `cwdHints`.
+
+Business docs with no code names can get the same warning. That is expected. See [TROUBLESHOOTING](TROUBLESHOOTING.md).
 
 ## 6. A very small set may show no map
 
@@ -166,4 +178,6 @@ A folder dropped into `docs/` is a new doc set only when `projects.json` exists.
 
 ## 10. projects.json fields
 
+- `"aliases": ["name"]`: a prompt that names the set routes to it. `add-docs` and `--update` set it. `--update` adds `[name]` to any older set that has none, and prints `set alias for <name>`.
+- `"cwdHints": ["repo-name"]`: set by `add-docs --code`. A prompt run from a folder with this name adds a small score to the set.
 - `"sessionGate": true`: on the first prompt of a session, a weak match that names no doc set and comes from outside its folder shows nothing. Default: `false`. Use it when several doc sets overlap.

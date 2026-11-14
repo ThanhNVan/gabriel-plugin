@@ -51,7 +51,7 @@ function parseArgs(argv) {
     } else throw new Error('unknown option: ' + a);
   }
   if (o.only === 'tune') { o.only = null; o.tune = true; }
-  if (o.only && !ONLY_STEPS[o.only]) throw new Error('--only must be model, build, test or tune');
+  if (o.only && !ONLY_STEPS[o.only]) throw new Error('--only must be model, build, test or tune');   // tune is valid: it is mapped to --tune above
   if (o.tune && o.only) throw new Error('--tune cannot be used with --only');
   return o;
 }
@@ -90,11 +90,11 @@ async function fetchModel(modelsDir, modelFile) {
   return false;
 }
 
-// ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>] ----
+// ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]; or add-docs <name> --code <repo> --relink ----
 const DOC_EXT = SUPPORTED, CODE_EXT = ['.cs', '.ts', '.js', '.py', '.java', '.go'];   // DOC_EXT: the default types the map reads (extract.js); opt-in types (OPT_IN) are counted apart
 const ADD_SKIP = new Set(['graphify-out', 'node_modules', '.git']);
 const MAX_DOC_FILES = 20000, MAX_DOC_BYTES = 500 * 1024 * 1024;
-const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]';
+const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]\n       node src/setup.js add-docs <name> --code <repo> --relink [--data <dir>]';
 
 // Doc files under a folder (paths relative to it, subfolders kept), their total size, and the opt-in files left out (count per extension).
 function listDocFiles(root) {
@@ -145,16 +145,35 @@ function writeJsonAtomic(file, obj) {
   catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 }
 
+// Rebuilds one doc set's map in a child process (it reads projects.json, so call it after the write). Prints the map line. Returns the exit status.
+function buildMap(name) {
+  const r = runNode([path.join(SRC, 'brain.js'), 'build-mk', name], { heap: true, capture: true });
+  const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean);
+  console.log(out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)');
+  for (const l of out) if (/^warning: /.test(l)) console.log(l);   // e.g. the docs name almost none of the graph's code
+  return r.status;
+}
+
+// cwdHints for --code: the lower-case name of the git repo root above codeDir (walks up for a .git entry; no git call), else codeDir's own name.
+function codeHintName(codeDir) {
+  for (let d = codeDir; ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, '.git'))) return path.basename(d).toLowerCase();
+    if (path.dirname(d) === d) break;   // drive root
+  }
+  return path.basename(codeDir).toLowerCase();
+}
+
 // Adds one doc set. Prints its lines. Returns the exit code. Every check runs before any write, so an error leaves projects.json unchanged.
 async function addDocs(argv) {
   const { checkName, dataDir, docsDir, projectsFile } = require('./paths.js');
   const { loadProjects } = require('./projects.js');
   const fail = (msg) => { console.error(msg); return 1; };
-  const opt = { copy: false, code: null, yes: false }, pos = [];
+  const opt = { copy: false, code: null, yes: false, relink: false }, pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--copy') opt.copy = true;
     else if (a === '--yes') opt.yes = true;
+    else if (a === '--relink') opt.relink = true;
     else if (a === '--code' || a === '--data') {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
@@ -162,7 +181,8 @@ async function addDocs(argv) {
     } else if (a.startsWith('--')) throw new Error('unknown option: ' + a);
     else pos.push(a);
   }
-  if (pos.length !== 2) throw new Error(ADD_USAGE);
+  if (opt.relink ? pos.length !== 1 : pos.length !== 2) throw new Error(ADD_USAGE);
+  if (opt.relink) return relinkDocs(pos[0], opt);
   const [name, folderArg] = pos;
 
   checkName(name);
@@ -183,6 +203,8 @@ async function addDocs(argv) {
   if (opt.copy && fs.existsSync(dest)) return fail(`folder already exists: ${dest}. Remove it or pick another name.`);
   const codeDir = opt.code ? path.resolve(expandHome(opt.code)) : folder;
   if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+  // with --code, the graph must be in that repo (no fallback to the docs folder)
+  if (opt.code && !fs.existsSync(path.join(codeDir, 'graphify-out', 'graph.json'))) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
 
   // code graph: the --code repo first, then the docs folder
   const root = opt.copy ? dest : folder;
@@ -219,16 +241,42 @@ async function addDocs(argv) {
       j.projects.push({ name: e.name, root: 'docs/' + e.name, aliases: [e.name] });   // aliases: naming the set in a prompt routes to it
     }
   }
-  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph, aliases: [name] });
+  const hints = opt.code ? { cwdHints: [codeHintName(codeDir)] } : {};
+  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph, aliases: [name], ...hints });
   try { writeJsonAtomic(file, j); }
   catch (e) { if (opt.copy) fs.rmSync(dest, { recursive: true, force: true }); return fail(`cannot write projects.json: ${e.message}`); }
 
   // build the map (a child process reads projects.json, so this runs after the write)
-  const r = runNode([path.join(SRC, 'brain.js'), 'build-mk', name], { heap: true, capture: true });
-  const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean);
-  console.log(out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)');
-  if (r.status !== 0) return fail(`${name} is in projects.json but its map was not built. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${name}`);
+  if (buildMap(name) !== 0) return fail(`${name} is in projects.json but its map was not built. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${name}`);
   console.log(`added ${name}: ${files.length} docs`);
+  return 0;
+}
+
+// ---- --relink: node src/setup.js add-docs <name> --code <repo> --relink. Sets only the code graph of an existing doc set, then rebuilds its map ----
+function relinkDocs(name, opt) {
+  const { checkName, projectsFile } = require('./paths.js');
+  const { loadProjects } = require('./projects.js');
+  const fail = (msg) => { console.error(msg); return 1; };
+  checkName(name);
+  const file = projectsFile();
+  const P = fs.existsSync(file) ? loadProjects().find((p) => p.name === name) : null;
+  if (!P) return fail(`unknown doc set: ${name}`);
+  if (!opt.code) return fail('--relink needs --code <repo>');
+  const codeDir = path.resolve(expandHome(opt.code));
+  if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+  const graphFile = path.join(codeDir, 'graphify-out', 'graph.json');
+  if (!fs.existsSync(graphFile)) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
+  const graph = graphRel(P.root, graphFile);   // relative to the doc set's root, as add-docs stores it
+  if (!graph) return fail('code graph is on another drive, so it cannot be linked. The docs work without it.');
+  const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (j.version !== 1) throw new Error(`projects.json version ${j.version} is not supported (expected 1)`);
+  const entry = (j.projects || []).find((p) => p.name === name);
+  if (!entry) return fail(`unknown doc set: ${name}`);
+  entry.graph = graph;
+  try { writeJsonAtomic(file, j); }
+  catch (e) { return fail(`cannot write projects.json: ${e.message}`); }
+  console.log(`relinked ${name}: graph ${graph}`);
+  if (buildMap(name) !== 0) return fail(`${name} is in projects.json but its map was not built. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${name}`);
   return 0;
 }
 
@@ -257,6 +305,15 @@ async function update(argv) {
   const counts = { added: 0, rebuilt: 0, upToDate: 0, newCases: 0, failed: 0 };
   const mapLine = (r) => { const out = `${r.stdout || ''}${r.stderr || ''}`.split('\n').map((s) => s.trim()).filter(Boolean); return out.find((l) => /^map (built|not built)/.test(l)) || out[out.length - 1] || '(no output)'; };
   if (dry) console.log('(dry run) nothing will be changed');
+
+  // 0: sets made before aliases existed get their name as alias (so a prompt that names the set routes to it)
+  if (fs.existsSync(file)) {
+    const j0 = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (j0.version !== 1) throw new Error(`projects.json version ${j0.version} is not supported (expected 1)`);
+    let aliased = 0;
+    for (const p of j0.projects || []) if (!p.fallback && !(p.aliases || []).length) { p.aliases = [p.name]; aliased++; line(`set alias for ${p.name}`); }
+    if (aliased && !dry) writeJsonAtomic(file, j0);
+  }
 
   // 1: new folders under docs/ become doc sets (only when projects.json exists: with no file, auto mode already sees them)
   ustep(1, 'register new doc folders');

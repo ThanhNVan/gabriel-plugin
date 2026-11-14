@@ -72,8 +72,8 @@ This note comes from `docs/TROUBLESHOOTING.md`. The cache folder is outside this
 
 ## Rebuild a map by hand
 
-- One project: `node src/brain.js build-mk <name>`. All projects: `build-mk all`. Each run takes about a minute.
-- Check the map is current: `node src/brain.js mk-status all`.
+- One project: `node src/brain.js build-mk <name>`. All projects: `build-mk all`. Each run takes about a minute. A project whose graph file is missing fails with `graph not found` and keeps its old map. See [TROUBLESHOOTING](../../docs/TROUBLESHOOTING.md).
+- Check the map is current: `node src/brain.js mk-status all`. Under each set with a problem, it prints a `fix:` line with the one command that fixes it.
 - Learned links: `node src/brain.js learn-show`, and `learn-reset` to clear them.
 
-The hook also rebuilds the default project in the background when its docs or code graph change. Other projects are rebuilt only by `build-mk` or `/gabriel:update`. See [findings.md](findings.md).
+The hook also rebuilds a project in the background when its docs or code graph change: one stale project per check, at most once a minute. A project whose graph file is missing is skipped. `node src/brain.js mk-status all` shows each graph path, and `GRAPH MISSING` when it is gone.

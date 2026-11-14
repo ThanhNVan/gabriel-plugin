@@ -141,6 +141,94 @@ const graphJson = {
   console.log('  ~ expands: add-docs tilde ~/notes -> ' + path.join(userHome, 'notes'));
 }
 
+// 9: --code with no graphify-out/graph.json in that repo: fails before any write (no docs-folder fallback)
+{
+  const before = hashProjects();
+  const docs = writeFiles(path.join(tmp, 'nograph-docs'), { 'bikes.md': bikes, 'graphify-out/graph.json': JSON.stringify(graphJson) });
+  const repo = path.join(tmp, 'repo-no-graph');
+  fs.mkdirSync(repo, { recursive: true });
+  const r = run(['nograph', docs, '--code', repo]);
+  assert.strictEqual(r.status, 1, text(r));
+  assert.match(text(r), /no graphify-out\/graph.json in /, text(r));
+  assert.strictEqual(hashProjects(), before, 'projects.json must not change');
+  assert.strictEqual(entry('nograph'), undefined, 'no entry for the failed name');
+  console.log(`  error: ${text(r).trim()}`);
+}
+
+// 10: the wrong-repo warning: docs that name none of the code graph get it; docs that name a class do not
+{
+  const repo = writeFiles(path.join(tmp, 'warn-repo'), { 'src/tire.cs': 'class TireRepair {}\n', 'graphify-out/graph.json': JSON.stringify(graphJson) });
+  const named = writeFiles(path.join(tmp, 'warn-named'), { 'bikes.md': bikes + '\nCall `TireRepair` to start.\n' });
+  assert.strictEqual(run(['named-code', named, '--code', repo]).status, 0);
+  const unnamed = writeFiles(path.join(tmp, 'warn-unnamed'), { 'cooking.md': cooking, 'garden.md': garden });
+  const added = run(['unnamed-code', unnamed, '--code', repo]);
+  assert.strictEqual(added.status, 0);
+  assert.match(text(added), /warning: the docs name almost none/, 'add-docs shows the wrong-repo warning too');
+  // build-mk prints the whole build log
+  const build = (name) => spawnSync(process.execPath, [BRAIN, 'build-mk', name], { cwd: ROOT, env, encoding: 'utf8', timeout: 600000, maxBuffer: 64 * 1024 * 1024 });
+  const a = build('named-code');
+  assert.strictEqual(a.status, 0, text(a));
+  assert.match(text(a), /map built .*, \d+ doc sections linked to code/, text(a));
+  assert.doesNotMatch(text(a), /warning: the docs name almost none/, text(a));
+  const b = build('unnamed-code');
+  assert.strictEqual(b.status, 0, text(b));
+  assert.match(text(b), /warning: the docs name almost none of this graph's code \(0 of \d+ sections link to it\); is the code graph the right repo\?/, text(b));
+  assert.match(text(b), /map built .*, 0 doc sections linked to code/, text(b));
+  console.log('  warning: unnamed docs warned; named docs not warned');
+}
+
+// 11: --relink: only the graph of an existing set changes (other fields kept), the map is rebuilt; bad calls fail
+{
+  const repoA = writeFiles(path.join(tmp, 'relink-a'), { 'src/tire.cs': 'class TireRepair {}\n', 'graphify-out/graph.json': JSON.stringify(graphJson) });
+  const docsR = writeFiles(path.join(tmp, 'relink-docs'), { 'bikes.md': bikes });
+  assert.strictEqual(run(['relinked', docsR, '--code', repoA]).status, 0);
+  const before = entry('relinked');
+  const repoB = writeFiles(path.join(tmp, 'relink-b'), { 'src/tire.cs': 'class TireRepair {}\n', 'graphify-out/graph.json': JSON.stringify({ ...graphJson, built_at_commit: 'ffff0000aaaa1111bbbb2222cccc3333dddd4444' }) });
+  const r = run(['relinked', '--code', repoB, '--relink']);
+  assert.strictEqual(r.status, 0, text(r));
+  const after = entry('relinked');
+  const wantGraph = path.relative(docsR, path.join(repoB, 'graphify-out', 'graph.json')).split(path.sep).join('/');
+  assert.strictEqual(after.graph, wantGraph);
+  const restBefore = { ...before, graph: null }, restAfter = { ...after, graph: null };
+  assert.deepStrictEqual(restAfter, restBefore, 'other fields must not change');
+  assert.match(text(r), /relinked relinked: graph /);
+  assert.match(text(r), /map built/);
+  console.log(`  relink: graph ${before.graph} -> ${after.graph}; map rebuilt`);
+
+  const hash = hashProjects();
+  const errs = [
+    [['ghost-x', '--code', repoB, '--relink'], 'unknown doc set: ghost-x'],
+    [['relinked', '--relink'], '--relink needs --code <repo>'],
+    [['relinked', '--code', path.join(tmp, 'relink-missing'), '--relink'], 'code folder not found'],
+  ];
+  fs.mkdirSync(path.join(tmp, 'relink-none'), { recursive: true });
+  errs.push([['relinked', '--code', path.join(tmp, 'relink-none'), '--relink'], 'no graphify-out/graph.json in']);
+  for (const [args, msg] of errs) {
+    const e = run(args);
+    assert.strictEqual(e.status, 1, text(e));
+    assert.ok(text(e).includes(msg), `expected "${msg}" in: ${text(e)}`);
+  }
+  assert.strictEqual(hashProjects(), hash, 'projects.json must not change on relink errors');
+  console.log('  relink errors: unknown set, no --code, no graph: exit 1, projects.json unchanged');
+}
+
+// 12: cwdHints come from --code: the lower-case repo name; a code folder inside a git repo uses the git repo root's name
+{
+  const repo = writeFiles(path.join(tmp, 'Hint-Repo'), { 'src/tire.cs': 'class TireRepair {}\n', 'graphify-out/graph.json': JSON.stringify(graphJson) });
+  const docs = writeFiles(path.join(tmp, 'hint-docs'), { 'bikes.md': bikes });
+  const r = run(['hinted', docs, '--code', repo]);
+  assert.strictEqual(r.status, 0, text(r));
+  assert.deepStrictEqual(entry('hinted').cwdHints, ['hint-repo'], 'add-docs --code sets a lower-case cwd hint');
+
+  const gitRepo = writeFiles(path.join(tmp, 'Git-Root'), { 'sub/graphify-out/graph.json': JSON.stringify(graphJson), 'sub/src/tire.cs': 'class TireRepair {}\n' });
+  fs.mkdirSync(path.join(gitRepo, '.git'));
+  const docs2 = writeFiles(path.join(tmp, 'git-docs'), { 'bikes.md': bikes });
+  const r2 = run(['gitsub', docs2, '--code', path.join(gitRepo, 'sub')]);
+  assert.strictEqual(r2.status, 0, text(r2));
+  assert.deepStrictEqual(entry('gitsub').cwdHints, ['git-root'], 'a code folder inside a git repo uses the git repo root name');
+  console.log('  cwdHints: --code repo name (lower case); git repo root name for a folder inside it');
+}
+
 // 8: no half-written files are left in the data folder
 assert.deepStrictEqual(fs.readdirSync(data).filter((f) => f.endsWith('.tmp')), []);
 

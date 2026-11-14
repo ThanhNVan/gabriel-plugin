@@ -10,7 +10,7 @@ Graph communities: [Brain Context Engine], [Prompt History Hook], [Tips Module].
 
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
-| `src/brain.js` | The entry. Runs the prompt hook, the post-tool hook, the `context` text, and the build and status modes. Gathers rules, map and history, then dedupes and writes output. | `build`, `query`, `search`, `searchFull`, `embedNodes`, `format`, `tokens`, `capText`, `contextText` | `hooks/hooks.json`; the hook commands written by `hosts/codex.js` and `hosts/gemini.js`; `setup.js` build steps; `skills/status`; `eval/eval-rules.js` |
+| `src/brain.js` | The entry. Runs the prompt hook, the post-tool hook, the `context` text, and the build and status modes. Gathers rules, map and history, then dedupes and writes output. `refreshMapInBackground()` starts one stale map build at a time (lock `mk.lock`, which names the set). `mk-status all` prints each set's graph path and `GRAPH MISSING`. | `build`, `query`, `search`, `searchFull`, `embedNodes`, `format`, `tokens`, `capText`, `contextText` | `hooks/hooks.json`; the hook commands written by `hosts/codex.js` and `hosts/gemini.js`; `setup.js` build steps; `skills/status`; `eval/eval-rules.js` |
 | `src/tips.js` | Picks one tip per session for the hook note. Off with `"tips": false` in `projects.json`. | `TIPS`, `tipFor` | `brain.js` |
 | `src/history.js` | Saves each prompt (secrets hidden) to a monthly JSONL file. Finds earlier similar prompts by meaning. | `redact`, `isAutomated`, `append`, `load`, `embedHistory`, `searchHistory`, `formatHistory`, `forget`, `machineId` | `brain.js`, `graphdb.js`, `eval/wide-test.js` |
 | `src/graphdb.js` | Keeps a keyword graph of saved prompts in `history/graph.db`. Derived: rebuilt when needed. | `sync`, `related`, `top`, `lexical`, `dbFile` | `brain.js` |
@@ -47,7 +47,7 @@ Graph communities: [Search and Refresh], [Embedding Cache], [Doc Chunking and Bu
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
 | `src/embed.js` | Loads the local embedding model (never downloads from the hook). Reads and writes `vectors.json`. | `MODEL` (getter), `BASE_MODEL`, `embedText`, `ehash`, `withTimeout`, `getEmbedder`, `readVectors`, `embedNodes` | `brain.js`, `dq.js`, `mk.js`, `setup.js`, `train-rank.js`, `tune/export-pairs.js`, `eval/eval-rerank.js` |
-| `src/mk.js` | Builds `mk.db` for one project from its docs and code graph. Runs the spreading search, routes a prompt to a project, and learns from files opened after a map was shown. | `defaultProject`, `projectNames`, `dbFile`, `docsRoot`, `build`, `stale`, `hasMap`, `search`, `searchAll`, `format`, `chunkDoc`, `listDocs`, `rankDocs`, `remember`, `touched`, `learnShow`, `learnReset`, `status` | `brain.js`, `setup.js`, `retrain.js`, `train-rank.js`, `tune/tune.js`, `tune/export-pairs.js`, `eval/eval-model.js`, `eval/eval-rules.js`, `eval/measure-hook.js`, `eval/suggest-cases.js` |
+| `src/mk.js` | Builds `mk.db` for one project from its docs and code graph. `build()` fails when the set's graph file is missing, and warns when the docs link to almost no code. `namedProjects()` picks the aliases named in a prompt. Runs the spreading search, routes a prompt to a project, and learns from files opened after a map was shown. | `defaultProject`, `projectNames`, `dbFile`, `docsRoot`, `graphPathOf`, `build`, `stale`, `hasMap`, `search`, `searchAll`, `namedProjects`, `format`, `chunkDoc`, `listDocs`, `rankDocs`, `remember`, `touched`, `learnShow`, `learnReset`, `status` | `brain.js`, `setup.js`, `retrain.js`, `train-rank.js`, `tune/tune.js`, `tune/export-pairs.js`, `eval/eval-model.js`, `eval/eval-rules.js`, `eval/measure-hook.js`, `eval/suggest-cases.js` |
 | `src/extract.js` | Reads one doc file and returns Markdown-like text (headings as `#` lines). Never throws. | `SUPPORTED`, `OPT_IN`, `extSet`, `isDocName`, `skipName`, `extractText`, `pdfHasSupport` | `mk.js`, `setup.js` |
 | `src/dq.js` | Question index: embeds the written questions of each doc section into `dq.<project>.bin`. | `embedAll`, `load` | `brain.js` (`build-dq`), `mk.js` |
 | `src/make-corpus.js` | Turns downloaded public Markdown docs into a corpus folder for the map. Run by hand. | none (script) | run by hand |
@@ -58,7 +58,7 @@ Graph communities: [Setup and Doc Install], [Data Migration].
 
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
-| `src/setup.js` | The one-shot setup and the `--update`, `add-docs` and host modes. Installs packages, fetches the model, builds maps, writes host hook files (`--host`, `--apply`). | `main`, `expandHome` | `skills/setup`, `skills/add-docs`, `skills/update` |
+| `src/setup.js` | The one-shot setup and the `--update`, `add-docs` and host modes. Installs packages, fetches the model, builds maps, writes host hook files (`--host`, `--apply`). `addDocs()` checks `--code` before any write, and `buildMap()` runs the map build. `relinkDocs()` handles `--relink`. | `main`, `expandHome` | `skills/setup`, `skills/add-docs`, `skills/update` |
 | `src/migrate-data.js` | Copies old brain data into the new data folder. Copies and checks; never deletes the source. | `MOVES`, `migrate` | `setup.js`, run by hand |
 
 ## Tuning and ranking
@@ -67,7 +67,7 @@ Graph communities: [Retrain Script], [Ranking Training], [ONNX Export], [ONNX Ex
 
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
-| `src/retrain.js` | Retrains one project's doc ranking. Keeps the new weights only when the strict score does not drop. Runs `eval/eval-map.js` and `train-rank.js` as child processes. | none (script) | `skills/retrain` |
+| `src/retrain.js` | Retrains one project's doc ranking. Keeps the new weights only when the strict score does not drop. With no name, always keeps them and saves the old file as `rank.prev.json`. `keepNew()` makes that choice. Runs `eval/eval-map.js` and `train-rank.js` as child processes. | `keepNew` (exported for tests) | `skills/retrain` |
 | `src/train-rank.js` | Learns the doc ranking weights from the written questions (no outside model). | none (script) | `retrain.js` |
 | `src/tune/tune.js` | Runs the optional meaning-model tune in five steps. Scores a copy of the data. Keeps the model only when `decide` says so. | `decide`, `parseArgs`, `keepModel` | `skills/tune-embeddings` |
 | `src/tune/export-pairs.js` | Writes training pairs (question and matching section), split by doc file. | `exportPairs`, `mulberry32`, `seededShuffle` | `tune/tune.js` |
@@ -84,7 +84,7 @@ The questions these scripts read sit in each project's private folder. They are 
 
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
-| `eval/eval-map.js` | Scores the default map (or one project, or the real router) on written questions. Prints a summary. | `judge`, `judgeRendered`, `evalProject` | `retrain.js`, `tune/tune.js`, `eval/eval-rerank.js` |
+| `eval/eval-map.js` | Scores the default map (or one project, or the real router) on written questions. Prints a summary. `--why` gives each DOC or FAIL a miss class (`section-rank`, `not-in-pool`, `wrong-doc`, `code-only-miss`) and the counts. | `judge`, `judgeRendered`, `whyOf`, `evalProject` | `retrain.js`, `tune/tune.js`, `eval/eval-rerank.js` |
 | `eval/eval-model.js` | Tries another embedding model in a throwaway home, for several similarity floors. | `judge` (script) | run by hand |
 | `eval/eval-rerank.js` | Offline A/B test of a rerank idea. Changes no live file. | script | run by hand |
 | `eval/eval-rules.js` | Regression check of rules matching on the real rules. Exit 1 on a failure. | script | run by hand |

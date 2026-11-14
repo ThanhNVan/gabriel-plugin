@@ -2,6 +2,7 @@
 name: setup
 description: Install or repair gabriel: packages, model, data folder, maps. Run after install or update.
 disable-model-invocation: true
+argument-hint: [--onboard: rerun first-run steps] [--dry-run: show only] [--skip-model] [--skip-test] [--yes: copy old brain data]
 ---
 
 Run this command and wait for it to finish:
@@ -30,11 +31,15 @@ Before you run the command above, check if this is a new user:
 node -e "const fs=require('fs'),p=require(require('path').join(process.argv[1],'src','paths.js')).projectsFile();console.log(fs.existsSync(p)&&JSON.parse(fs.readFileSync(p,'utf8')).projects.length?'known':'new')" "${CLAUDE_PLUGIN_ROOT}"
 ```
 
-If it prints `known` and `--onboard` was not given, stop after the setup report. With `--onboard`, skip the warning and the setup run, and go straight to the four steps; skip a step the user already has (tools installed, graph present, docs present). If it prints `new`, first warn the user, in these words:
+If it prints `known` and `--onboard` was not given, stop after the setup report. With `--onboard`, skip the warning and the setup run, and go straight to the four steps; skip a step `onboarding.json` marks `done` or the user already has (tools installed, graph present, docs present). If it prints `new`, first warn the user, in these words:
 
 > Heads up: a full gabriel setup is big. Plan an afternoon. It installs helper tools, graphs your code, writes docs and downloads docs for your stack. Every step asks first, and you can stop at any step. It pays off later: gabriel then knows which file and which flow fits each prompt.
 
-Then run setup, then do these four steps in order. Ask each question with AskUserQuestion. Do nothing the user did not pick.
+Then run setup, then do these four steps in order. Do nothing the user did not pick.
+
+**Ask once, then run.** Read `<data>/onboarding.json` if it exists (`<data>` is the folder that `paths.js` `dataDir()` prints, as in step 4). It looks like `{ "tools": "done", "graph": "<folder>", "docs": "skipped", "stack": "done", "at": "<ISO date>" }`. Say which steps are done and when. Then ask one AskUserQuestion (multi-select) with only the steps not `done`: helper tools, graph a project, docs from the graph, stack docs. Run the picked ones in order without more questions, except the confirmations each step needs (installs, downloads, which folder).
+
+**Save progress after each step.** Write `onboarding.json` again with that step's key: `tools`, `graph`, `docs` or `stack`. The value is `done` (for `graph` and `docs`, the folder) or `skipped`. Keep the other keys. A run that stops can then resume at the first step not done.
 
 Work each step the same way, when superpowers is installed:
 
@@ -78,6 +83,8 @@ Add Mermaid diagrams to every doc, not only the workflow one: a picture is read 
 - Workflows: `sequenceDiagram` or `flowchart` per workflow: trigger, decisions, handoffs, result.
 
 Keep each diagram to one screen (about 15 nodes). Split a bigger one. Put a one-line caption above it, and real file or class names on its nodes so gabriel can map them. Check each block renders (balanced brackets, no unquoted special characters in labels).
+
+Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <folder>/docs --code <folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`.
 
 Then add the project so gabriel maps it: `/gabriel:add-docs <name> <folder>/docs --code <folder>`. If the user picked no docs, use `<folder>` as the docs folder.
 

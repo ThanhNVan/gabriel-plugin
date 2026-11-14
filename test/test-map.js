@@ -7,6 +7,7 @@ const path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mk-test-'));
 const home = path.join(tmp, 'home'), root = path.join(tmp, 'docs'), root2 = path.join(tmp, 'docs2');
 process.env.MK_DOCS = root;
+process.env.BRAIN_HOME = home;   // the same rules folder as the mk-status child process, so both read one mk.db
 // the projects come from projects.json in the data folder: write this test's own (the owner's config is never read here)
 process.env.GABRIEL_DATA = path.join(tmp, 'data');
 fs.mkdirSync(process.env.GABRIEL_DATA, { recursive: true });
@@ -72,6 +73,18 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
 
     // unrelated text stays quiet
     assert.strictEqual(mk.search(home, 'recommend a good pasta recipe for tonight'), null, 'unrelated text must give null');
+
+    // code links: a backticked name links to the code node with that exact label (graphify writes functions as name()); short or plain lowercase words do not
+    {
+      const root3 = path.join(tmp, 'docs3'), home3 = path.join(tmp, 'home3');
+      write(path.join(root3, 'technical-docs', '01-repair.md'), '# 01 — Repair\n\n## Patch\n\nCall `tireRepair()` to patch the hole.\n');
+      write(path.join(root3, 'technical-docs', '02-adds.md'), '# 02 — Adds\n\n## Add\n\nRun `addDocs` after each edit.\n');
+      write(path.join(root3, 'technical-docs', '03-short.md'), '# 03 — Short\n\n## Short\n\nRun `run()` and `ab` and `add`.\n');
+      const node3 = (id, label) => ({ id, label, source_file: 'src/' + id + '.ts', source_location: 'L1', community: 1, community_name: 'Tire' });
+      write(path.join(root3, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [node3('a', 'tireRepair()'), node3('b', 'addDocs()'), node3('c', 'run()')], links: [], built_at_commit: 'ccc111' }));
+      const r3 = await mk.build(home3, { root: root3, project: 'beta', noEmbed: true });
+      assert.strictEqual(r3.docLinked, 2, 'the two sections that name a code label link to it; the short names do not');
+    }
 
     // the printed block names the commit and stays short
     const text = mk.format(res);
@@ -154,10 +167,52 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.ok(mk.learnReset(home) >= 0 && mk.learnShow(home, 5, T0).total === 0, 'learn-reset forgets everything');
     assert.ok(mk.status(home).graphCommit === 'abc12345def', 'status reads the graph commit from the first bytes of graph.json');
 
+    // a project whose graph file is missing: the build throws before any write, and the old map rows stay
+    const gfile = path.join(root, 'graphify-out', 'graph.json'), before2 = mk.status(home);
+    fs.renameSync(gfile, gfile + '.away');
+    try {
+      await assert.rejects(mk.build(home, { root, noEmbed: true }), /graph not found/, 'a missing graph must stop the build');
+    } finally { fs.renameSync(gfile + '.away', gfile); }
+    assert.deepStrictEqual(mk.status(home), before2, 'the old map is unchanged after a failed build');
+    assert.ok(mk.search(home, 'how does the order handler save an order', {}).code.some((c) => c.n.label === 'OrderHandler'), 'the old map still answers');
+
+    // mk-status all: the Alpha line shows its graph path, and GRAPH MISSING when the file is gone
+    const statusRun = () => require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'src', 'brain.js'), 'mk-status', 'all'], { env: { ...process.env, BRAIN_HOME: home }, encoding: 'utf8' }).split('\n');
+    const statusAlpha = () => statusRun().find((l) => l.startsWith('Alpha'));
+    // the fix line printed right after a set's status line (null when there is none)
+    const fixOf = (label) => { const ls = statusRun(), i = ls.findIndex((l) => l.startsWith(label)); return i >= 0 && ls[i + 1] && ls[i + 1].startsWith('  fix: ') ? ls[i + 1] : null; };
+    assert.ok(statusAlpha().includes(path.join(root, 'graphify-out', 'graph.json')) && !/GRAPH MISSING/.test(statusAlpha()), 'mk-status shows the graph path');
+    fs.renameSync(gfile, gfile + '.away');
+    try {
+      assert.ok(/GRAPH MISSING/.test(statusAlpha()), 'mk-status flags a missing graph');
+      assert.match(fixOf('Alpha') || '', /^ {2}fix: \/gabriel:add-docs alpha --code .* --relink$/, 'a missing graph gets the add-docs fix');
+    } finally { fs.renameSync(gfile + '.away', gfile); }
+    // Ref docs has no map and no graph: its first problem is the missing map
+    assert.strictEqual(fixOf('Ref docs'), '  fix: node src/brain.js build-mk ref', 'a set with no map gets the build-mk fix');
+    // a healthy set (fresh map, graph, eval cases) prints no fix line; without its eval cases it gets the suggest fix
+    const evalFile = path.join(process.env.GABRIEL_DATA, 'private', 'alpha', 'eval-cases.json');
+    write(evalFile, '[]');
+    assert.strictEqual(fixOf('Alpha'), null, 'a healthy set prints no fix line');
+    fs.rmSync(evalFile);
+    assert.strictEqual(fixOf('Alpha'), '  fix: node eval/suggest-cases.js --project alpha', 'a set with no eval cases gets the suggest-cases fix');
+    write(evalFile, '[]');
+
+    // build-mk: an unknown set name stops with an error (it does not build the default set); a build never clears a lock that names another set
+    const buildCli = (args) => require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'brain.js'), 'build-mk', ...args], { env: { ...process.env, BRAIN_HOME: home, GABRIEL_NO_DOWNLOAD: '1' }, encoding: 'utf8', timeout: 600000 });
+    const unknown = buildCli(['nosuchset']);
+    assert.strictEqual(unknown.status, 1, 'an unknown set name must exit 1');
+    assert.ok((unknown.stdout + unknown.stderr).includes('unknown doc set: nosuchset'), 'the message names the unknown set');
+    const lockFile = path.join(process.env.GABRIEL_DATA, 'mk.lock');
+    fs.writeFileSync(lockFile, 'other');
+    buildCli([]);
+    assert.strictEqual(fs.existsSync(lockFile) && fs.readFileSync(lockFile, 'utf8'), 'other', 'a default-set build must not remove a lock that names another set');
+    fs.rmSync(lockFile, { force: true });
+
     // a changed doc makes the map stale
     await new Promise((ok) => setTimeout(ok, 30));
     fs.appendFileSync(path.join(root, 'technical-docs', 'for-dev', '02-billing.md'), '\nMore text about refunds.\n');
     assert.strictEqual(mk.stale(home), true, 'a changed doc must make the map stale');
+    assert.strictEqual(fixOf('Alpha'), '  fix: /gabriel:update', 'a stale set gets the update fix');
 
     // a broken map file never throws
     fs.writeFileSync(mk.dbFile(home), 'not a database');

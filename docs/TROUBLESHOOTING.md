@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `/gabriel:status`. It shows one line for each doc set: the map is built, stale, or missing.
+Start with `/gabriel:status`. It shows one line for each doc set: the map is built, stale, or missing. Under a set with a problem, a `fix:` line gives the one command that fixes it. Run that command yourself.
 
 **The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. From a local folder, it is that folder: local-path marketplaces load in place.
 
@@ -24,7 +24,7 @@ A map appears only when a prompt matches your docs well enough. Check these in o
 
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
 4. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt. Its `aliases` in `projects.json` count as a match.
-5. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again.
+5. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
 
 ## A PDF shows no text
 
@@ -112,10 +112,53 @@ Each error leaves `projects.json` unchanged:
 
 - `0 docs found in <folder>`: the folder has no files of a type gabriel reads. See the type list in [ADDING-DOCS](ADDING-DOCS.md).
 - `folder not found: <folder>`: check the path.
+- `code folder not found: <folder>`: check the `--code` path.
+- `no graphify-out/graph.json in <repo>: run /graphify <repo> first, or leave out --code`: see [No code graph in the repo](#no-code-graph-in-the-repo).
 - `project <name> already exists`: pick another name, or remove the old entry from `projects.json`.
-- `bad project name: <name>`: use lowercase letters, digits, `-` and `_`.
+- `bad project name: <name>`: use lowercase letters, digits, `-` and `_`, up to 40 characters, starting with a letter or digit.
 
 To use other settings (aliases, layout, a code graph), edit `projects.json`. See `projects.example.json` in the plugin folder.
+
+`--relink` stops with these errors, and changes nothing:
+
+- `unknown doc set: <name>`: the name is not in `projects.json`.
+- `--relink needs --code <repo>`: add `--code`.
+
+## No code graph in the repo
+
+Message: `no graphify-out/graph.json in <repo>: run /graphify <repo> first, or leave out --code`.
+
+Cause: `--code` names a repo with no graph file. With `--code`, gabriel does not look in the docs folder.
+
+Fix: run `/graphify <repo>` in Claude, then run the command again. Or leave out `--code`.
+
+## `graph not found` when a map is built
+
+Message: `graph not found: <path>; run /graphify on the code repo, or fix "graph" for <name> in projects.json`.
+
+Cause: the set's `graph` entry points to a file that is gone. The build stops before it writes, so the old map keeps working. The hook then skips that set in the background check.
+
+Fix, one of:
+
+- Run `/graphify <repo>` to make the graph again, then run `/gabriel:add-docs <name> --code <repo> --relink`.
+- Fix the `graph` entry for the set in `projects.json`.
+- Delete the `graph` entry if the set should have no code links. The set then builds without them.
+
+Check with `node "<plugin folder>/src/brain.js" mk-status all`.
+
+## The docs name almost no code (wrong repo)
+
+Message: `warning: the docs name almost none of this graph's code (<k> of <n> sections link to it); is the code graph the right repo?`
+
+Cause: the code graph is from another repo, or the docs do not name the code. The build still runs, but the links are weak.
+
+Fix: check the repo. If it is wrong, run `/gabriel:add-docs <name> --code <right repo> --relink`. The new build summary should end with a `<k> doc sections linked to code` count above zero. Business docs with no class or file names can show this warning and still be right.
+
+## `GRAPH MISSING` in status
+
+`/gabriel:status` (or `node "<plugin folder>/src/brain.js" mk-status all`) shows `graph <path>   GRAPH MISSING` for a set. The graph file is gone. The background check does not rebuild that set, so its map stops following the docs.
+
+Fix: the same as `graph not found` above. `mk-status all` prints the fix line `fix: /gabriel:add-docs <name> --code <repo> --relink` under the set.
 
 ## `/gabriel:retrain` asks you to review cases
 

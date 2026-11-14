@@ -46,7 +46,9 @@ flowchart TD
   S9 --> AD["/gabriel:add-docs name folder"]
   AD --> D2{"Folder has doc files?"}
   D2 -- "no" --> X2["Stop: 0 docs found, projects.json unchanged"]
-  D2 -- "yes" --> P["Write projects.json, atomic write"]
+  D2 -- "yes" --> D3{"--code given and its graphify-out/graph.json missing?"}
+  D3 -- "yes" --> X3["Stop: no graph in the repo, nothing written"]
+  D3 -- "no" --> P["Write projects.json, atomic write"]
   P --> F["build-mk writes the first map rows for this doc set"]
 ```
 
@@ -126,7 +128,7 @@ Code: `build()`, `chunkDoc()` and `integrate()` in `src/mk.js`. `extractText()` 
 ```mermaid
 flowchart TD
   A["build-mk for one doc set, settings from projects.json"] --> G{"graph.json set and missing?"}
-  G -- "yes" --> E1["Stop: no graph.json under the doc root"]
+  G -- "yes" --> E1["Stop: graph not found, the old map stays"]
   G -- "no" --> L["listDocs: technical-docs folder if present, else every doc file"]
   L --> X["extractText: Markdown, Word, PDF, HTML and more. JSON, JSONL, YAML only when opted in"]
   X --> T{"File has text?"}
@@ -136,6 +138,7 @@ flowchart TD
   CN --> CS["Code synapses from graph edges, weight by relation type"]
   C --> DC["Doc to code links: cited file paths and class names"]
   C --> DD["Doc to doc links: Markdown links, shared names, same section"]
+  DC --> WN["Warning line if under 1 percent of doc sections link to code. Build goes on"]
   CS --> TMP["Write temp file mk.db.PID.tmp: nodes, words, edges, df"]
   DC --> TMP
   DD --> TMP
@@ -178,7 +181,7 @@ flowchart TD
 
 ## 6. Measure and retrain
 
-Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. It keeps the new weights only when the strict pass count does not fall.
+Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`.
 
 Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
 
@@ -194,8 +197,8 @@ flowchart TD
   TR --> D2{"Training worked?"}
   D2 -- "no" --> K0["Keep current weights"]
   D2 -- "yes" --> E2["eval-map --rank temp file: score the new weights"]
-  E2 --> D3{"New strict count at least the old one?"}
-  D3 -- "yes" --> SV["Copy temp file to private rank.json for this doc set"]
+  E2 --> D3{"Name given? New strict count at least the old one? (no name: always yes)"}
+  D3 -- "yes" --> SV["Old file to rank.prev.json if no name. Copy temp file to private rank.json for this doc set"]
   D3 -- "no" --> K1["Keep current weights: the count fell"]
 ```
 

@@ -19,3 +19,7 @@ projects.json
 privacy-words.txt
 *.local.*
 !projects.example.json
+
+# graphify writes local machine paths here
+repo-docs/graphify-out/.graphify_root
+repo-docs/graphify-out/.graphify_python

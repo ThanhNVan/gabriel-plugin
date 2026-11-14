@@ -56,10 +56,10 @@ To check how well it finds your docs, and to train it on your own questions, see
 | Command | What it does |
 |---|---|
 | `/gabriel:setup` | Installs and checks gabriel. First run: the onboarding steps. |
-| `/gabriel:add-docs <name> <folder> [--code <repo>]` | Adds a doc set and builds its map. |
+| `/gabriel:add-docs <name> <folder> [--code <repo>]` | Adds a doc set and builds its map. With `--code`, the repo needs `graphify-out/graph.json`. `--relink` (`/gabriel:add-docs <name> --code <repo> --relink`) changes only the code repo of a set. |
 | `/gabriel:update [--dry-run] [--stack]` | Adds new doc folders, rebuilds changed maps, suggests test questions. `--stack` fetches stack docs again. |
 | `/gabriel:refresh-docs <code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, retrains. |
-| `/gabriel:status` | Shows each doc set and when its map was built. |
+| `/gabriel:status` | Shows each doc set, its code graph, and when its map was built. `GRAPH MISSING` means the graph file is gone. |
 | `/gabriel:retrain [name]` | Retrains the ranking on your test questions. With a name, keeps the new weights only if they score no worse. With no name, retrains the default doc set and always keeps the new weights (old ones saved as `rank.prev.json`). |
 | `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
 
@@ -109,7 +109,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
    - **Business** (`docs/business/`): what the system is for, its rules, its states, a glossary, and one page per main workflow, from trigger to result.
    - **Technical** (`docs/technical/`): architecture, modules, how to build, test and add a feature, known bugs.
-3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`.
+3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`. The repo must have `graphify-out/graph.json` (step 1). If the docs name almost no code, the command warns. Then use `--relink`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 4. **Keep them current:** after code changes, run `/gabriel:refresh-docs <repo>`.
 
 Docs that name real files, classes and steps give gabriel the most to link. Keep them lean: one fact in one place, no copied code. Check them against the code: a wrong doc misleads gabriel too.

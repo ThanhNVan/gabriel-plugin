@@ -14,7 +14,9 @@ const { getProject } = require('./projects.js');
 
 // Keep the new weights? A named run keeps them only when the strict count does not fall. A run with no name always keeps them.
 function keepNew(named, oldS, newS) { return !named || !!(oldS && newS && newS.n >= oldS.n); }
-if (require.main !== module) { module.exports = { keepNew }; return; }
+// Why the current weights were kept: a missing count is named, otherwise the lower count is shown
+function reason(oldS, newS) { return !oldS || !newS ? `no strict count for the ${!oldS ? 'current' : 'new'} weights` : `the new strict count is lower (${newS.n} < ${oldS.n})`; }
+if (require.main !== module) { module.exports = { keepNew, reason }; return; }
 
 const named = !!(process.argv[2] && !process.argv[2].startsWith('--'));
 const name = named ? process.argv[2] : mk.defaultProject();
@@ -67,7 +69,7 @@ const show = (label, s) => (s ? `${label}: strict ${s.n}/${s.t}` : `${label}: no
       const fell = oldS && newS && newS.n < oldS.n;
       console.log(`kept the new weights: ${P.rank}${named ? '' : ` (no name given: always replaced${fell ? `, although strict fell ${oldS.n} -> ${newS.n}` : ''})`}`);
     } else {
-      console.log(`kept the current weights: the new strict count is lower (${newS ? newS.n : '?'} < ${oldS ? oldS.n : '?'})`);
+      console.log(`kept the current weights: ${reason(oldS, newS)}`);
     }
   } finally { try { fs.rmSync(tmp, { force: true }); } catch { /* none */ } }
 })();

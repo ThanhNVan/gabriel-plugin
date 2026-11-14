@@ -32,9 +32,16 @@ Matching ignores case.
 Run `node eval/eval-map.js --project <name>`. It runs every case and prints a summary.
 
 - `--all` scores every project that has a cases file.
+- `--route` lets the real router pick the project. An answer from another project counts as a miss. Add `--cwd <dir>` to route as if the prompt came from that folder (it uses `cwdHints`). A case can also set its own `"cwd"`.
 - `--rank <file>` scores other weights, like a candidate file.
 - `--report` writes `notes/EVAL-MK.md` in the project's private folder.
-- `--min 0.7` exits with 1 when the strict score is under 70%.
+- `--why` says why each miss missed. For each DOC or FAIL it prints `why <id> <class>`, then the counts. The classes:
+  - `section-rank`: the right doc and section are in the candidates, but the map did not show them.
+  - `not-in-pool`: the right doc is a candidate, but no candidate has the right section.
+  - `wrong-doc`: the right doc is not a candidate at all.
+  - `code-only-miss`: the doc and section are shown, but the expected code name is missing.
+- `--min 0.7` exits with 1 when the strict pass rate is under 70%, or when an unrelated question shows a map.
+- The `block chars` line shows the size of the map text the hook would show: the average and the largest, over the questions that got a map. `second-set block for <k>/<m> questions` counts the questions whose result has a second project block (with `--route`; without it the line says `n/a`).
 
 **Strict** means the right doc and the right section are in the map.
 **Right doc or code** means the doc is right, but the section may not be.
@@ -45,7 +52,7 @@ Run `node src/train-rank.js --project <name>` for the honest check. It prints th
 
 - `--write` writes the project's rank file.
 - `--out <file>` writes another file instead.
-- `--train dev,held` trains on these sets only.
+- `--train dev,held` trains on these sets only (default: `dev,held,fresh`).
 - Excluded sets come from `excludeSets` in `<private>/<name>/train.json`. `--exclude-sets a,b` overrides it.
 
 Training uses no random numbers. The same questions and model give the same weights.
@@ -60,7 +67,7 @@ Run `node src/retrain.js <name>`. It does these steps:
 2. Scores the current weights.
 3. Trains new weights into a temp file.
 4. Scores the new weights.
-5. Keeps the new weights only when the strict count is not lower. With no name (the default project), it always keeps the new weights, and saves the old file as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`.
+5. Keeps the new weights only when the strict count is not lower. With no name (the default project), it always keeps the new weights, and saves the old file as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`. If either strict count is missing, a named run keeps the current weights.
 
 It prints both scores. If there are no cases yet, it writes suggestions and stops.
 

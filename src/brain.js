@@ -109,11 +109,15 @@ function refreshMapInBackground(home) {
     if (!due) return;
     try { fs.writeFileSync(stamp, ''); } catch { /* data folder missing: check every time */ }
     if (registerNewDocFolders(home)) return;   // the update also builds their maps
-    if (!mk.stale(home)) return;
+    let staleSet = null;   // the first doc set with a stale map; a set whose graph file is missing would fail every time, so it is skipped
+    for (const p of mk.projectNames()) {
+      try { const g = mk.graphPathOf(p); if (mk.stale(home, p) && !(g && !fs.existsSync(g))) { staleSet = p; break; } } catch { /* a bad doc set is skipped, the others are still checked */ }
+    }
+    if (!staleSet) return;
     const lock = path.join(dataDir(home), 'mk.lock');
     if (fs.existsSync(lock) && Date.now() - fs.statSync(lock).mtimeMs < MK_LOCK_MS) return;
-    fs.writeFileSync(lock, String(Date.now()));
-    spawn(process.execPath, ['--max-old-space-size=4096', __filename, 'build-mk'], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref();
+    fs.writeFileSync(lock, staleSet);   // its age (mtime) is the lock; its text names the set, so that build can clear it
+    spawn(process.execPath, ['--max-old-space-size=4096', __filename, 'build-mk', staleSet], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref();
   } catch { /* never block a prompt */ }
 }
 
@@ -363,14 +367,15 @@ if (require.main === module) {
       const bi = process.argv.indexOf('--project'), project = bi >= 0 ? process.argv[bi + 1] : require('./mk.js').defaultProject();   // node brain.js build-dq [--project <name>]
       try { const r = await require('./dq.js').embedAll(home, project); console.log(`question index: ${r.questions} questions for ${r.sections} sections (${project})`); } catch (e) { console.error('build-dq failed: ' + e.message); process.exitCode = 1; }
     } else if (mode === 'build-mk') { // build a project's map from its docs folder (projects.json); about a minute
-      const mk = require('./mk.js'), list = arg === 'all' ? mk.projectNames() : [getProject(arg) ? arg : mk.defaultProject()];   // node brain.js build-mk [<project name>|all]
+      const mk = require('./mk.js'), bad = !!arg && arg !== 'all' && !getProject(arg), list = bad ? [] : arg === 'all' ? mk.projectNames() : [arg || mk.defaultProject()];   // node brain.js build-mk [<project name>|all]
+      if (bad) { console.log(`unknown doc set: ${arg}`); process.exitCode = 1; }   // a typo must not build the default set
       for (const [i, project] of list.entries()) {
         if (list.length > 1) console.log(`[${i + 1}/${list.length}] ${getProject(project).label}`);
         try {
           const r = await mk.build(home, { project, log: (m) => console.log(m), progress: (n, total) => { if (n === total || n % 320 === 0) console.log(`meaning numbers ${n}/${total}`); } });
-          console.log(`map built in ${(r.ms / 1000).toFixed(1)} s: ${r.code} code neurons, ${r.docs} doc neurons from ${r.files} files${r.skipped ? ` (${r.skipped} skipped: no readable text)` : ''}, ${r.synapses} code synapses, ${r.vectors} meaning numbers, graph @${r.commit.slice(0, 8)}`);
+          console.log(`map built in ${(r.ms / 1000).toFixed(1)} s: ${r.code} code neurons, ${r.docs} doc neurons from ${r.files} files${r.skipped ? ` (${r.skipped} skipped: no readable text)` : ''}, ${r.synapses} code synapses, ${r.vectors} meaning numbers, graph @${r.commit.slice(0, 8)}, ${r.docLinked} doc sections linked to code`);
           console.log(`old map merged in: ${r.merged.kept} learned links kept, ${r.merged.dropped} dropped (neuron gone or faded), ${r.merged.sessions} recent session(s) carried over`);
-        } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { if (project === mk.defaultProject()) fs.rmSync(path.join(dataDir(home), 'mk.lock'), { force: true }); } catch { /* none */ } }
+        } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { const lk = path.join(dataDir(home), 'mk.lock'); let held = ''; try { held = fs.readFileSync(lk, 'utf8'); } catch { /* no lock */ } if (held === '' || held === project) fs.rmSync(lk, { force: true }); } catch { /* none */ } }   // the background lock names the doc set it built; an empty (old-style) lock is cleared
       }
     } else if (mode === 'touched') { // PostToolUse hook (see settings.json): learn from a file that was just opened or edited
       touchedHook(host);
@@ -384,9 +389,19 @@ if (require.main === module) {
       console.log(`forgot ${require('./mk.js').learnReset(home)} learned link(s)`);
     } else if (mode === 'mk-status' && arg === 'all') { // one line per project: node brain.js mk-status all
       const mk = require('./mk.js');
+      // the first problem of a set and the one command that fixes it (null when the set is healthy)
+      const fixFor = (p, s, gp) => {
+        if (gp && !fs.existsSync(gp)) return `/gabriel:add-docs ${p} --code ${path.dirname(path.dirname(gp))} --relink`;
+        if (!s.nDoc) return `node src/brain.js build-mk ${p}`;
+        if (s.stale) return '/gabriel:update';
+        if (!getProject(p).fallback && !fs.existsSync(path.join(paths.privateDir(p), 'eval-cases.json'))) return `node eval/suggest-cases.js --project ${p}`;
+        return null;
+      };
       for (const p of mk.projectNames()) {
-        const s = mk.status(home, p);
-        console.log(`${getProject(p).label.padEnd(9)} ${s.nDoc ? `${s.nCode} code + ${s.nDoc} doc neurons, built ${new Date(s.built).toISOString().slice(0, 16).replace('T', ' ')}${s.mapCommit ? ', @' + s.mapCommit.slice(0, 8) : ''}${s.stale ? '   STALE' : '   ok'}` : 'no map (run: node brain.js build-mk ' + p + ')'}`);
+        const s = mk.status(home, p), gp = mk.graphPathOf(p);
+        console.log(`${getProject(p).label.padEnd(9)} ${s.nDoc ? `${s.nCode} code + ${s.nDoc} doc neurons, built ${new Date(s.built).toISOString().slice(0, 16).replace('T', ' ')}${s.mapCommit ? ', @' + s.mapCommit.slice(0, 8) : ''}${s.stale ? '   STALE' : '   ok'}` : 'no map (run: node brain.js build-mk ' + p + ')'}${gp ? `   graph ${gp}${fs.existsSync(gp) ? '' : '   GRAPH MISSING'}` : ''}`);
+        const fix = fixFor(p, s, gp);
+        if (fix) console.log('  fix: ' + fix);
       }
     } else if (mode === 'mk-status') { // is the map as new as the graph and the docs?
       const s = require('./mk.js').status(home);

@@ -83,4 +83,12 @@ console.log('d3 empty folder: exit 0, starter README created, output says "no do
   console.log('tune dry run: exit 0, venv path and pip commands printed, nothing created');
 }
 
+// --only with a name that is not a step: the error lists every accepted value (tune is mapped to --tune)
+{
+  const r = run(['--only', 'nosuch']);
+  assert.strictEqual(r.status, 2, r.stdout + r.stderr);
+  assert.strictEqual((r.stderr || '').split('\n')[0], '--only must be model, build, test or tune', 'the error lists every accepted value');
+  console.log('--only error: model, build, test or tune');
+}
+
 console.log('ALL PASSED');

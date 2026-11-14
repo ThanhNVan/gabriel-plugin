@@ -114,4 +114,22 @@ assert.ok(oldSuggested.length >= 3, 'suggested cases for the three sections');
   assert.match(text(real), /c: map built/);
 }
 
+// (e) a set with no aliases gets aliases: [name]; a dry run says so and changes nothing
+{
+  writeFiles(path.join(docs, 'old'), { 'bikes.md': bikes, 'filler.md': fillerText });
+  const j = readJson(projectsFile);
+  j.projects.push({ name: 'old', label: 'old', root: path.join(docs, 'old'), layout: 'auto', graph: null });
+  fs.writeFileSync(projectsFile, JSON.stringify(j, null, 2) + '\n');
+  const pjHash = hash(projectsFile);
+  const dry2 = run(['--update', '--dry-run']);
+  assert.strictEqual(dry2.status, 0, text(dry2));
+  assert.match(text(dry2), /set alias for old/);
+  assert.strictEqual(hash(projectsFile), pjHash, 'dry run must not write the alias');
+  const r = run(['--update']);
+  assert.strictEqual(r.status, 0, text(r));
+  assert.match(text(r), /set alias for old/);
+  assert.deepStrictEqual(readJson(projectsFile).projects.find((p) => p.name === 'old').aliases, ['old']);
+  console.log('  aliases: set alias for old (dry run unchanged, real run writes [old])');
+}
+
 console.log('update tests passed');

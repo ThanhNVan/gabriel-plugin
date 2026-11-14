@@ -33,7 +33,8 @@ try {
   fs.writeFileSync(path.join(CORPUS, 'filler.md'), Array.from({ length: 120 }, (_, i) => `${vocab[i % 16]} ${vocab[(i * 7 + 3) % 16]} ${vocab[(i * 5 + 1) % 16]} notes number ${i}.`).join('\n\n') + '\n');
   fs.writeFileSync(path.join(DATA, 'projects.json'), JSON.stringify({ version: 1, projects: [
     { name: 'sample', root: CORPUS, layout: 'all-md', graph: null },
-    { name: 'bare', root: EMPTY, layout: 'all-md', graph: null }] }));
+    { name: 'bare', root: EMPTY, layout: 'all-md', graph: null },
+{ name: 'sample-long-name', root: CORPUS, layout: 'all-md', graph: null }] }));
 
   let r = cli('src/brain.js', ['build-mk', 'sample']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
@@ -61,7 +62,8 @@ try {
   r = cli('eval/eval-map.js', ['--project', 'sample']);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /^ {2}sample questions\s+strict \d+\/3 /m);
-  step('eval-map --project sample prints a strict line');
+  assert.match(r.stdout, /^ {2}block chars: average \d+, largest \d+; second-set block for n\/a$/m);
+  step('eval-map --project sample prints a strict line and the block chars line');
 
   r = cli('eval/eval-map.js', ['--all']);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -87,6 +89,18 @@ try {
     step('SKIP train-rank write (no meaning model here): the no-model message is checked instead');
   }
 
+  // a long doc set name: the summary line still has a space before "strict", so retrain.js can read the score
+  {
+    const cases = path.join(privateDir('sample'), 'eval-cases.json');
+    const b = cli('src/brain.js', ['build-mk', 'sample-long-name']);
+    assert.strictEqual(b.status, 0, b.stdout + b.stderr);
+    const e = cli('eval/eval-map.js', ['--project', 'sample-long-name', '--cases', cases]);
+    assert.match(e.stdout, /^ {2}.+? questions\s+strict \d+\/\d+/m, 'retrain.js strictOf() must match: ' + e.stdout);
+    assert.match(e.stdout, /questions strict|questions +strict/, e.stdout);
+    assert.doesNotMatch(e.stdout, /questionsstrict/, 'a space before strict');
+    step('eval-map summary: a long set name keeps the space before strict');
+  }
+
   r = cli('src/retrain.js', ['sample']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /current weights/);
@@ -100,6 +114,12 @@ try {
   assert.strictEqual(keepNew(false, { n: 5 }, { n: 4 }), true, 'no name: always keeps the new weights');
   step('retrain keep rule: guarded with a name, always with no name');
 
+  const { reason } = require('../src/retrain.js');
+  assert.strictEqual(reason(null, { n: 3 }), 'no strict count for the current weights', 'a missing current count is named');
+  assert.strictEqual(reason({ n: 3 }, null), 'no strict count for the new weights', 'a missing new count is named');
+  assert.strictEqual(reason({ n: 5 }, { n: 4 }), 'the new strict count is lower (4 < 5)', 'a lower count is compared');
+  step('retrain reason: names a missing strict count');
+
   r = cli('src/retrain.js', ['bare']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /no eval cases for bare yet/);
@@ -108,6 +128,19 @@ try {
   r = node(['-e', `process.stdout.write(String(require(${JSON.stringify(path.join(ROOT, 'src', 'dq.js'))}).load(process.env.BRAIN_HOME, 'sample')))`]);
   assert.strictEqual(r.stdout, 'null');
   step('question index: no dq.sample.bin -> no index (map works without it)');
+
+  // --why: one class per DOC or FAIL result. The fixture doc has five sections that all match the question; the map shows only two per file,
+  // so the other sections are candidates that are not shown (section-rank).
+  fs.writeFileSync(path.join(CORPUS, 'lantern.md'), '# Lantern\n\n' + ['Hallway', 'Garden', 'Kitchen', 'Attic', 'Cellar'].map((s) => `## ${s} lamp\n\nThe lantern and the lamp in the ${s.toLowerCase()} glow on the wall.\n`).join('\n'));
+  r = cli('src/brain.js', ['build-mk', 'sample']);
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  fs.writeFileSync(path.join(privateDir('sample'), 'eval-cases.json'), JSON.stringify([{ id: 'WHY-1', q: 'lantern lamp', doc: 'lantern', sec: 'Cellar', set: 'dev', tier: 'easy' }]));
+  r = cli('eval/eval-map.js', ['--project', 'sample', '--why']);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^why WHY-1 (section-rank|not-in-pool|wrong-doc|code-only-miss)$/m);
+  assert.match(r.stdout, /^why classes: section-rank \d+, not-in-pool \d+, wrong-doc \d+, code-only-miss \d+$/m);
+  assert.match(r.stdout, /section-rank\s+1/);
+  step('eval-map --why: one class per miss, then the class counts');
 
   console.log(hasModel ? 'ALL PASSED' : 'ALL PASSED (meaning steps skipped: no local model installed)');
 } finally {

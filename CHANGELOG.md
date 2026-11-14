@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Code graph path: a missing `graph` file now fails the build with `graph not found: <path>` and keeps the old map. `mk-status all` shows each graph path and `GRAPH MISSING`. `add-docs` asks for the code repo when `--code` is missing. The background check now rebuilds any stale doc set, not only the default one (skipping a set whose graph is missing).
+- Skills show a short hint for each argument.
+
 - `/gabriel:retrain` with no name always keeps the new weights for the default doc set, and saves the old file as `rank.prev.json`. With a name, the score guard stays.
 
 - New doc sets (`add-docs`, `/gabriel:update`) get `aliases: [<name>]`, so naming the set in a prompt routes to it. The map header now says "docs + code graph" instead of "technical-docs + code graph". When one alias sits inside a longer one ("gabriel" in "gabriel-dev"), only the longer one counts as named (`namedProjects()` in `src/mk.js`).

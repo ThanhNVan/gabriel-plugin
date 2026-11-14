@@ -15,7 +15,10 @@ Terms in the order a reader meets them.
 - **Map block**: the text the hook adds for the map: doc hits, code hits, and `↔` links.
 - **Neuron**: one node of the map: a doc section or a code class or file.
 - **Synapse**: a link between two neurons in the map.
-- **Code graph**: `graphify-out/graph.json`, made by `/graphify` for a code repo. gabriel reads it to build code neurons and links.
+- **Code graph**: `graphify-out/graph.json`, made by `/graphify` for a code repo. gabriel reads it to build code neurons and links. See [R33](02-business-rules.md#r33-a-code-graph-must-exist-and-match-the-docs).
+- **Graph entry**: the `graph` path of a doc set in `projects.json`, relative to its root. A missing file is `GRAPH MISSING` in status.
+- **Relink**: `add-docs <name> --code <repo> --relink`. Sets only the graph entry of a doc set, then rebuilds its map. See [W03](workflows/W03-add-docs.md).
+- **Wrong-repo warning**: the build's warning that almost no doc section links to the code graph. Fix it with a relink.
 - **Seed**: a neuron that a prompt directly hits (by words or meaning). A search spreads from its seeds.
 - **Spreading search**: the map search. It starts from seeds and passes weight to linked neurons for a few rounds.
 - **Fallback**: the general public docs doc set. It answers only when no doc set does, and is marked as background reading.
@@ -43,6 +46,6 @@ Terms in the order a reader meets them.
 - **Quiet score**: the count of unrelated questions that show no map block.
 - **Held-out cases**: eval cases kept back from training. Used to judge a tuned model.
 - **Rank weights** (`rank.json`): the ranking settings of one doc set, trained by retrain.
-- **Retrain**: train new rank weights and keep them only when the strict score does not fall. See [W06](workflows/W06-eval-and-retrain.md).
+- **Retrain**: train new rank weights and keep them only when the strict score does not fall. With no name, it always keeps them. See [W06](workflows/W06-eval-and-retrain.md).
 - **Tune**: optional fine-tune of the meaning model on the user's eval cases. Kept only when it wins.
 - **Stack docs**: public docs for the user's languages and frameworks, saved under `docs/stack/`. Background reading.
