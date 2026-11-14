@@ -133,7 +133,10 @@ const slug = (h) => h.toLowerCase().replace(/[^a-z0-9 -]/g, '').trim().replace(/
 // Split one markdown file into chunks of about 450 characters. A chunk keeps its heading path.
 function chunkDoc(rel, raw) {
   const out = [], stack = [];
-  let fence = false, buf = '', sec = '';
+  // line: the 1-based line of the section's heading in the file. Only formats whose text keeps the file's own lines get one (extract.js rewrites the rest, so 0 there).
+  const numbered = /\.(md|markdown|mdx|txt|text)$/i.test(rel), topLines = /\.(txt|text)$/i.test(rel) ? 1 : 0;   // extract.js puts a "# name" line on top of a .txt file
+  let fence = false, buf = '', sec = '', secLine = 1, lineNo = 0;
+  const lineOf = () => numbered ? Math.max(1, secLine - topLines) : 0;
   const flush = () => {
     let t = buf.trim(); buf = '';
     if (!t || /^[-=]+$/.test(t)) return;
@@ -141,14 +144,15 @@ function chunkDoc(rel, raw) {
       const space = t.lastIndexOf(' ', 450);
       let end = space > 0 ? space : 450;
       if (/[\uD800-\uDBFF]/.test(t[end - 1])) end--;
-      out.push({ section: sec, text: t.slice(0, end) }); t = t.slice(end).trimStart();
+      out.push({ section: sec, text: t.slice(0, end), line: lineOf() }); t = t.slice(end).trimStart();
     }
-    if (t) out.push({ section: sec, text: t });
+    if (t) out.push({ section: sec, text: t, line: lineOf() });
   };
   for (const line of raw.split(/\r?\n/)) {
+    lineNo++;
     if (/^\s*```/.test(line)) { flush(); fence = !fence; continue; }
     const h = !fence && line.match(/^(#{1,4})\s+(.*)$/);
-    if (h) { flush(); stack.length = h[1].length - 1; stack[h[1].length - 1] = clean(h[2]); sec = stack.filter(Boolean).join(' > '); continue; }
+    if (h) { flush(); stack.length = h[1].length - 1; stack[h[1].length - 1] = clean(h[2]); sec = stack.filter(Boolean).join(' > '); secLine = lineNo; continue; }
     if (!line.trim()) { flush(); continue; }
     if (/^\s*\|?[\s:|-]+\|?\s*$/.test(line)) continue;             // table separator row
     const text = clean(line.replace(/^\s*[-*]\s+|^\s*\d+\.\s+|^\s*>\s?/, '').replace(/^\||\|$/g, '').replace(/\|/g, ' · '));
@@ -240,7 +244,7 @@ async function build(home = homeDir(), opts = {}) {
       const sp = spansOf(c.text);
       const heading = (c.section.split(' > ').pop() || '');
       const kws = new Set([...[...words(c.section + ' ' + c.text)].filter((w) => w[0] !== '~'), ...sp.map((s) => s.toLowerCase()), ...[...c.text.matchAll(PATH_RE)].map((m) => m[0].toLowerCase()), ...[...words(heading)].map((w) => '#' + w)]); // '#word' = a word of the chunk's own heading: a question that names a heading should find its section
-      addNode.run(id, 'doc', 'doc ' + d.no, d.rel, '', c.section, c.text, -1, 0, kws.size, 'd|' + d.rel + '|' + crypto.createHash('sha1').update(c.section + '\n' + c.text).digest('hex').slice(0, 12));   // changes only when the chunk's text changes
+      addNode.run(id, 'doc', 'doc ' + d.no, d.rel, c.line ? 'L' + c.line : '', c.section, c.text, -1, 0, kws.size, 'd|' + d.rel + '|' + crypto.createHash('sha1').update(c.section + '\n' + c.text).digest('hex').slice(0, 12));   // changes only when the chunk's text changes
       for (const w of kws) addKw.run(w, id);
       docIds.push(id);
       if (prev) link(prev, id, 0.3);                      // next chunk in the same file
@@ -783,7 +787,7 @@ function search(home, text, opts = {}) {
     if (!docs.length && !code.length) return null;
     // One hop out from the top code hits: strong graph links only (calls/implements/inherits = 1, method = 0.7, defines = 0.6; see REL).
     try {
-      const nb = db.prepare("SELECT n.label, n.file, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
+      const nb = db.prepare("SELECT n.label, n.file, n.loc, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
       for (const c of code.slice(0, NB_CODE)) c.nb = nb.all(c.n.id, NB_PER);
     } catch { /* neighbors are optional */ }
     // Two hops out: code types that share the name stem of the top code hits, reached by two strong links (seeds, max and stem: see CHAIN_DEFAULT).
@@ -806,6 +810,11 @@ function search(home, text, opts = {}) {
         }
       }
     } catch { /* chain is optional */ }
+    // Exact lines: with the set's repo folder, each code name and its neighbours get the line on disk now (src/repo.js). Fails open: the graph's lines stay.
+    try {
+      const P = getProject(project) || {};
+      if (P.repo && fs.existsSync(P.repo) && !opts.noRepo) require('./repo.js').exactLines(P.repo, [...code, ...code.flatMap((c) => c.nb || [])], P.repoBase || '');
+    } catch { /* the graph's lines stay */ }
     // --why only: the candidate sections in rank order (the ranked list when no rank file is used)
     const cands = opts.why ? (why || ranked.filter(([id]) => info.get(id)?.kind === 'doc').slice(0, 40).map(([id]) => ({ file: info.get(id).file, sec: info.get(id).section || '' }))) : undefined;
     return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands };
@@ -862,6 +871,10 @@ function searchAll(home, text, opts = {}) {
   return top.r;
 }
 
+// The "(...)" part of a code line or a neighbour line. exact true: the line on disk, with a check mark (" moved" when the name was found in another file); exact false: the file or name is not in the repo; no exact mark: today's text.
+const where = (n, file, withLine) => n.exact === true ? `${file}:${n.loc.replace(/^L/, '')} ✓${n.moved ? ' moved' : ''}`
+  : n.exact === false && n.file ? `${file}, not found in repo`
+    : `${file}${withLine && n.loc ? ':' + n.loc.replace(/^L/, '') : ''}`;
 function format(res, lim = {}) {   // lim: a shorter block (max characters, number of docs and code lines) for a second project
   if (!res) return '';
   const pj = res.project || defaultProject(), P = getProject(pj) || {}, pn = P.label || pj;
@@ -871,12 +884,12 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   const add = (s) => { if (out.length - nbUsed + s.length + 1 <= (lim.max ?? MAX_CHARS)) out += s + '\n'; };
   let nbUsed = 0;   // neighbor lines have their own budget, so they never push a code hit out
   const addNb = (s) => { if (nbUsed + s.length + 1 <= NB_CHARS) { out += s + '\n'; nbUsed += s.length + 1; } };
-  for (const d of res.docs.slice(0, lim.docs ?? 99)) add(`- doc ${d.n.file.replace(/^technical-docs\//, '')} > ${d.n.section || '(top)'}: ${d.n.text.length > DOC_CHARS ? d.n.text.slice(0, DOC_CHARS) + '...' : d.n.text}`);
+  for (const d of res.docs.slice(0, lim.docs ?? 99)) add(`- doc ${d.n.file.replace(/^technical-docs\//, '')}${d.n.loc ? ':' + d.n.loc.replace(/^L/, '') : ''} > ${d.n.section || '(top)'}: ${d.n.text.length > DOC_CHARS ? d.n.text.slice(0, DOC_CHARS) + '...' : d.n.text}`);
   for (const c of res.code.slice(0, lim.code ?? 99)) {
     const before = out.length;
-    add(`- code ${c.n.label} (${c.n.file}${c.n.loc ? ':' + c.n.loc.replace(/^L/, '') : ''})${c.chain ? ' 2 links away' : ''}`);
+    add(`- code ${c.n.label} (${where(c.n, c.n.file, true)})${c.chain ? ' 2 links away' : ''}`);
     if (out.length === before) continue;   // the code line did not fit: show no orphan neighbor lines
-    if (!lim.max) for (const x of c.nb || []) addNb(`    ↔ ${x.label} (${x.file || 'external'}) ${x.w >= 1 ? 'calls/implements' : x.w >= 0.7 ? 'method' : 'defines/related'}`);
+    if (!lim.max) for (const x of c.nb || []) addNb(`    ↔ ${x.label} (${where(x, x.file || 'external', false)}) ${x.w >= 1 ? 'calls/implements' : x.w >= 0.7 ? 'method' : 'defines/related'}`);
   }
   if (!lim.max) for (const a of res.also || []) out += format(a, { max: ALSO_CHARS, docs: 2, code: 2 });   // a second project: short
   return out;

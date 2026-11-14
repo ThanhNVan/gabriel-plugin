@@ -2,7 +2,7 @@
 
 ## Trigger
 
-The user runs `/gabriel:add-docs <name> <folder> [--copy] [--code <repo>] [--yes]`, or `/gabriel:add-docs <name> --code <repo> --relink` to change only the code repo of a set that exists. The skill `skills/add-docs/SKILL.md` runs `node src/setup.js add-docs`. The skill is for the user only: the model does not start it. The skill asks for the code repo when `--code` is missing.
+The user runs `/gabriel:add-docs <name> <folder> [--copy] [--code <repo>] [--repo <folder>] [--yes]`, or `/gabriel:add-docs <name> --code <repo> --relink` (or `--repo <folder> --relink`) to change only the code repo of a set that exists. The skill `skills/add-docs/SKILL.md` runs `node src/setup.js add-docs`. The skill is for the user only: the model does not start it. The skill asks for the code repo when `--code` is missing.
 
 ## Steps
 

@@ -16,6 +16,8 @@ Cases live in `eval-cases.json`. It holds a list of cases. Each case is one obje
 - `set`: a group name, like `dev` or `held`. Training uses sets.
 - `tier`: `easy`, `middle` or `hard`. Optional.
 - `project`: the project the question is about. No value means the default project.
+- `fn`: a function name, like `parsePin`. Optional. With `file`, it makes an exact case.
+- `file`: a regular expression for the code file, with forward slashes, like `src/pin\.js$`. Optional. Used with `fn`.
 
 Matching ignores case.
 
@@ -39,11 +41,15 @@ Run `node eval/eval-map.js --project <name>`. It runs every case and prints a su
   - `not-in-pool`: the right doc is a candidate, but no candidate has the right section.
   - `wrong-doc`: the right doc is not a candidate at all.
   - `code-only-miss`: the doc and section are shown, but the expected code name is missing.
+- `--no-repo` skips the exact lines from the repo folder. The map then shows the graph's own lines. Use it for the "before" run.
+- `--fails` also prints an `exact-miss <id>` line for each failed `fn` case, with the reason.
 - `--min 0.7` exits with 1 when the strict pass rate is under 70%, or when an unrelated question shows a map.
 - The `block chars` line shows the size of the map text the hook would show: the average and the largest, over the questions that got a map. `second-set block for <k>/<m> questions` counts the questions whose result has a second project block (with `--route`; without it the line says `n/a`).
 
 **Strict** means the right doc and the right section are in the map.
 **Right doc or code** means the doc is right, but the section may not be.
+
+**Exact** is scored only for cases with `fn`. A case is exact when its code line for `fn` shows the line where `fn` is defined in the repo folder on disk now. With no repo folder, no case is exact. The summary prints it as `exact: <k>/<n>`.
 
 ## Train the doc ranking
 
@@ -67,6 +73,8 @@ Run `node src/retrain.js <name>`. It does these steps:
 3. Trains new weights into a temp file.
 4. Scores the new weights.
 5. Keeps the new weights only when the strict count is not lower. With no name (the default project), it always keeps the new weights, and saves the old file as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`. If either strict count is missing, a named run keeps the current weights.
+
+With `--force` (`node src/retrain.js <name> --force`), a named run keeps the new weights even when the strict count falls. It prints a line saying so, and saves the old file as `rank.prev.json`.
 
 It prints both scores. If there are no cases yet, it writes suggestions and stops.
 

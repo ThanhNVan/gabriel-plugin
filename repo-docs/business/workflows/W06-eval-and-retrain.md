@@ -3,7 +3,7 @@
 ## Trigger
 
 - **The user** runs `/gabriel:retrain [name]`. With no name, the default doc set is used. The skill `skills/retrain/SKILL.md` runs `node src/retrain.js`.
-- **The end of** [W07](W07-refresh-docs.md), which asks for a retrain after the docs change.
+- **The end of** [W07](W07-refresh-docs.md), which asks whether to retrain after the docs change.
 - **Optional, slow:** `/gabriel:tune-embeddings` tunes the meaning model (covered at the end).
 
 ## Steps
@@ -15,7 +15,7 @@ In `src/retrain.js`:
 3. **Score the current weights.** `eval/eval-map.js --project <name>` prints the strict count, for example `strict 12/15`. A strict pass means the expected doc section and code class are found. The quiet count means unrelated questions show no map block.
 4. **Train.** `src/train-rank.js --project <name> --out <temp file>` writes new weights to a temp file. If the meaning model is not installed, training is skipped and the current weights stay.
 5. **Score the new weights.** `eval/eval-map.js --project <name> --rank <temp file>`.
-6. **Keep new or current weights.** The new file is copied to the doc set's `rank.json` only when its strict count is not lower. With no name, it is always copied. The temp file is removed in every case. See [R26](../02-business-rules.md#r26-retrain-keeps-new-weights-only-when-the-strict-score-does-not-fall).
+6. **Keep new or current weights.** The new file is copied to the doc set's `rank.json` only when its strict count is not lower. With no name, it is always copied. With `--force`, a named run copies it too. The temp file is removed in every case. See [R26](../02-business-rules.md#r26-retrain-keeps-new-weights-only-when-the-strict-score-does-not-fall).
 
 Optional tune, in `src/tune/tune.js`: it scores the current and the tuned meaning model on a copy of the data folder, and keeps the tuned model only when `decide()` passes ([R27](../02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins)). `--rollback` removes the tuned model setting from `projects.json`.
 

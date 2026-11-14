@@ -90,11 +90,11 @@ async function fetchModel(modelsDir, modelFile) {
   return false;
 }
 
-// ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]; or add-docs <name> --code <repo> --relink ----
+// ---- add-docs: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--repo <folder>] [--yes] [--data <dir>]; or add-docs <name> --code <repo> --relink ----
 const DOC_EXT = SUPPORTED, CODE_EXT = ['.cs', '.ts', '.js', '.py', '.java', '.go'];   // DOC_EXT: the default types the map reads (extract.js); opt-in types (OPT_IN) are counted apart
 const ADD_SKIP = new Set(['graphify-out', 'node_modules', '.git']);
 const MAX_DOC_FILES = 20000, MAX_DOC_BYTES = 500 * 1024 * 1024;
-const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--yes] [--data <dir>]\n       node src/setup.js add-docs <name> --code <repo> --relink [--data <dir>]';
+const ADD_USAGE = 'usage: node src/setup.js add-docs <name> <folder> [--copy] [--code <repo>] [--repo <folder>] [--yes] [--data <dir>]\n       node src/setup.js add-docs <name> --code <repo> --relink [--data <dir>]\n       node src/setup.js add-docs <name> --repo <folder> --relink [--data <dir>]';
 
 // Doc files under a folder (paths relative to it, subfolders kept), their total size, and the opt-in files left out (count per extension).
 function listDocFiles(root) {
@@ -163,21 +163,33 @@ function codeHintName(codeDir) {
   return path.basename(codeDir).toLowerCase();
 }
 
+// ---- --repo: the code folder of a doc set, checked against the graph before it is saved (prints "repo set for" or "repo refused") ----
+// Returns { repo, repoBase } to store, or null when refused.
+function checkRepoArg(name, repoArg, graphFile) {
+  const { checkRepo } = require('./repo.js');
+  const repo = path.resolve(expandHome(repoArg));
+  if (!graphFile || !fs.existsSync(graphFile)) { console.log('repo refused: this doc set has no code graph'); return null; }
+  const r = checkRepo(repo, graphFile);
+  if (!r.ok) { console.log(`repo refused: ${r.reason}`); return null; }
+  console.log(`repo set for ${name}: ${repo} (${r.found}/${r.sampled} graph files found)`);
+  return { repo, repoBase: r.base };
+}
+
 // Adds one doc set. Prints its lines. Returns the exit code. Every check runs before any write, so an error leaves projects.json unchanged.
 async function addDocs(argv) {
   const { checkName, dataDir, docsDir, projectsFile } = require('./paths.js');
   const { loadProjects } = require('./projects.js');
   const fail = (msg) => { console.error(msg); return 1; };
-  const opt = { copy: false, code: null, yes: false, relink: false }, pos = [];
+  const opt = { copy: false, code: null, repo: null, yes: false, relink: false }, pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--copy') opt.copy = true;
     else if (a === '--yes') opt.yes = true;
     else if (a === '--relink') opt.relink = true;
-    else if (a === '--code' || a === '--data') {
+    else if (a === '--code' || a === '--repo' || a === '--data') {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
-      if (a === '--code') opt.code = v; else process.env.GABRIEL_DATA = path.resolve(expandHome(v));
+      if (a === '--code') opt.code = v; else if (a === '--repo') opt.repo = v; else process.env.GABRIEL_DATA = path.resolve(expandHome(v));
     } else if (a.startsWith('--')) throw new Error('unknown option: ' + a);
     else pos.push(a);
   }
@@ -217,6 +229,8 @@ async function addDocs(argv) {
   } else if (hasCodeFiles(codeDir)) {
     console.log(`For better results with code, run /graphify ${opt.code || folderArg}; gabriel reads its graphify-out/graph.json.`);
   }
+  const repoSet = opt.repo ? checkRepoArg(name, opt.repo, graphFile) : null;
+  if (opt.repo && !repoSet) return 1;
 
   if (opt.copy) {
     try {
@@ -242,7 +256,8 @@ async function addDocs(argv) {
     }
   }
   const hints = opt.code ? { cwdHints: [codeHintName(codeDir)] } : {};
-  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph, aliases: [name], ...hints });
+  const repoFields = repoSet ? { repo: repoSet.repo, repoBase: repoSet.repoBase } : {};
+  j.projects.push({ name, label: name, root: opt.copy ? 'docs/' + name : folder, layout: 'auto', graph, aliases: [name], ...hints, ...repoFields });
   try { writeJsonAtomic(file, j); }
   catch (e) { if (opt.copy) fs.rmSync(dest, { recursive: true, force: true }); return fail(`cannot write projects.json: ${e.message}`); }
 
@@ -261,7 +276,17 @@ function relinkDocs(name, opt) {
   const file = projectsFile();
   const P = fs.existsSync(file) ? loadProjects().find((p) => p.name === name) : null;
   if (!P) return fail(`unknown doc set: ${name}`);
-  if (!opt.code) return fail('--relink needs --code <repo>');
+  if (!opt.code && !opt.repo) return fail('--relink needs --code <repo> or --repo <folder>');
+  if (opt.repo) {   // checked against the set's current graph; --repo alone needs no --code
+    const { graphPathOf } = require('./mk.js');
+    const repoSet = checkRepoArg(name, opt.repo, graphPathOf(name));
+    if (!repoSet) return 1;
+    const j0 = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const e0 = (j0.projects || []).find((p) => p.name === name);
+    e0.repo = repoSet.repo; e0.repoBase = repoSet.repoBase;
+    try { writeJsonAtomic(file, j0); } catch (e) { return fail(`cannot write projects.json: ${e.message}`); }
+    if (!opt.code) return 0;
+  }
   const codeDir = path.resolve(expandHome(opt.code));
   if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
   const graphFile = path.join(codeDir, 'graphify-out', 'graph.json');

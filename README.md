@@ -24,7 +24,7 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 **Cons: the cost is up front**
 
 - **Big setup.** The best results need a code graph (`/graphify`) and good docs: architecture, workflows, business rules. Writing them takes hours. `/gabriel:setup` helps, but you still review what is written.
-- **Docs go stale.** The map is only as current as your docs and graph. After code changes, run `/gabriel:refresh-docs <code folder>`: it updates the graph, fixes the docs the change touches, then rebuilds the map and retrains. After you edit docs by hand, `/gabriel:update` is enough.
+- **Docs go stale.** The map is only as current as your docs and graph. After code changes, run `/gabriel:refresh-docs <name>`: it updates the graph, fixes the docs the change touches, rebuilds the map, then asks whether to retrain. After you edit docs by hand, `/gabriel:update` is enough.
 - **A lead, not proof.** The map can point at the wrong doc. Claude must still confirm in the code.
 - **More text per prompt.** A matched prompt costs extra tokens for the added block.
 - **Disk space.** The meaning model is 22.6 MB. PDF support adds about 36 MB. The optional fine-tune adds about 1.3 GB of Python packages.
@@ -49,20 +49,52 @@ Installed from a local folder? Claude Code runs a copy in `~/.claude/plugins/cac
 
 To check how well it finds your docs, and to train it on your own questions, see [docs/EVAL.md](docs/EVAL.md) and `/gabriel:retrain`.
 
-## Commands
+## Skills: what each one is for
+
+A skill is a command you type in Claude Code, starting with `/gabriel:`. You only need a few of them. Most days gabriel works on its own: you just ask Claude questions.
+
+**Which one do I need?**
+
+| I want to... | Type |
+|---|---|
+| Install gabriel, or fix it after an update | `/gabriel:setup` |
+| Give gabriel a folder of docs to use | `/gabriel:add-docs <name> <folder>` |
+| Tell gabriel that I added or changed doc files | `/gabriel:update` |
+| Bring the docs up to date after the code changed | `/gabriel:refresh-docs <name>` |
+| See if everything is up to date | `/gabriel:status` |
+| Make gabriel pick better results, using my test questions | `/gabriel:retrain <name>` |
+| Work on one project only in this chat | type `gabriel use <name>` (no slash) |
+
+**`/gabriel:setup`.** Run it once after you install gabriel, and again after you update it. It installs what gabriel needs, creates its data folder (`~/.gabriel/`), and builds the maps. The first time, it also offers some optional steps, and asks before each one. To see those steps again later: `/gabriel:setup --onboard`.
+
+**`/gabriel:add-docs <name> <folder>`.** Gives gabriel a new set of docs, called a doc set. Pick a short name, like `notes` or `shop`. gabriel reads the folder where it is, and builds a map of it. From then on, when you ask a question about these docs, gabriel adds the parts that fit.
+- Your docs are about a code project? Add `--code <code folder>`. That folder needs a code graph (`graphify-out/graph.json`, made by `/graphify`). Then the map also names the code.
+- Add `--repo <code folder>` too, and each code name shows the line where it is in your code today, marked ✓.
+- Example: `/gabriel:add-docs shop ~/shop/docs --code ~/shop --repo ~/shop`
+
+**`/gabriel:update`.** Run it after you add, change or delete doc files. It finds new doc folders, rebuilds only the maps that changed, and suggests test questions for new sections. Not sure what it will do? Add `--dry-run` to see first. You often don't need it: gabriel also does this in the background.
+
+**`/gabriel:refresh-docs <name>`.** Run it after the code changed. It updates the code graph, finds the docs the change touched, and fixes them with you: it shows a list and asks which docs to change. It uses the set's code folder and docs folder, and asks for them if they are missing. Then it rebuilds the map and asks whether to retrain (skip, keep only if better, or replace anyway). You can also give the folders: `/gabriel:refresh-docs <code folder> [docs folder]`.
+
+**`/gabriel:status`.** Shows each doc set and when its map was built. `ok` means it is up to date. `GRAPH MISSING` means the code graph file is gone. `REPO MISSING` means the code folder set with `--repo` is gone.
+
+**`/gabriel:retrain <name>`.** gabriel ranks the parts it finds. Retrain teaches it, using test questions you write (see [docs/EVAL.md](docs/EVAL.md)). With a name, it keeps the new ranking only if it scores at least as well. With no name, it retrains the default doc set and always keeps the new ranking (the old one is saved as `rank.prev.json`). With a name and `--force` (`/gabriel:retrain <name> --force`), it keeps the new ranking even when the score falls, and still saves the old one as `rank.prev.json`.
+
+**`/gabriel:tune-embeddings`.** Optional, and slow. It trains gabriel's small meaning model on your questions, and keeps the new model only if it scores better. Most people never need it. See [docs/TUNING.md](docs/TUNING.md).
+
+**The `map` skill** is not a command. It tells Claude how to read the map block, and that the map is a hint to check, not proof.
+
+### All commands and options
 
 | Command | What it does |
 |---|---|
 | `/gabriel:setup` | Installs and checks gabriel. First run: the onboarding steps. |
-| `/gabriel:add-docs <name> <folder> [--code <repo>]` | Adds a doc set and builds its map. With `--code`, the repo needs `graphify-out/graph.json`. `--relink` (`/gabriel:add-docs <name> --code <repo> --relink`) changes only the code repo of a set. |
+| `/gabriel:add-docs <name> <folder> [--code <repo>] [--repo <folder>]` | Adds a doc set and builds its map. With `--code`, the repo needs `graphify-out/graph.json`. `--repo <folder>` sets the code folder, checked against the graph, so the map can show exact lines. `--relink` (`/gabriel:add-docs <name> --code <repo> --relink`, or with `--repo`) changes only the code repo of a set. |
 | `/gabriel:update [--dry-run] [--stack]` | Adds new doc folders, rebuilds changed maps, suggests test questions. `--stack` fetches stack docs again. |
-| `/gabriel:refresh-docs <code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, retrains. |
+| `/gabriel:refresh-docs <name>` or `<code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, then asks whether to retrain. Uses the set's code and docs folders. |
 | `/gabriel:status` | Shows each doc set, its code graph, and when its map was built. `GRAPH MISSING` means the graph file is gone. |
-| `/gabriel:retrain [name]` | Retrains the ranking on your test questions. With a name, keeps the new weights only if they score no worse. With no name, retrains the default doc set and always keeps the new weights (old ones saved as `rank.prev.json`). |
+| `/gabriel:retrain [name]` | Retrains the ranking on your test questions. With a name, keeps the new weights only if they score no worse. With no name, retrains the default doc set and always keeps the new weights (old ones saved as `rank.prev.json`). `--force` with a name keeps the new weights even when the score falls. |
 | `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
-
-The `map` skill is not a command. It tells Claude how to read the map block.
-
 ## What you see
 
 This is a made-up example from a doc set named `notes`:
@@ -118,12 +150,14 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 
 > **Read this first if you use gabriel on a code base.** gabriel can only find what is written down. Good docs about your code help it more than anything else.
 
-1. **Graph the code.** Install the graphify skill and run `/graphify <repo>` in the repo. It writes `graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
-2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
+The docs and the graph live in their own folder, `<name>-code-docs`, next to the code. The code repo stays clean. `/gabriel:setup` makes this folder for you.
+
+1. **Graph the code.** Install the graphify skill and run `/graphify <repo>`. Setup moves the graph to `<name>-code-docs/graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
+2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. They go in `<name>-code-docs/docs/`. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
    - **Business** (`docs/business/`): what the system is for, its rules, its states, a glossary, and one page per main workflow, from trigger to result.
    - **Technical** (`docs/technical/`): architecture, modules, how to build, test and add a feature, known bugs.
-3. **Add them:** `/gabriel:add-docs <name> <docs folder> --code <repo>`. The repo must have `graphify-out/graph.json` (step 1). If the docs name almost no code, the command warns. Then use `--relink`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
-4. **Keep them current:** after code changes, run `/gabriel:refresh-docs <repo>`.
+3. **Add them:** `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <repo>`. `--code` is the folder that holds `graphify-out/graph.json`. `--repo` is the real code, checked against the graph. If the docs name almost no code, the command warns. Then use `--relink`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+4. **Keep them current:** after code changes, run `/gabriel:refresh-docs <name>`.
 
 Docs that name real files, classes and steps give gabriel the most to link. Keep them lean: one fact in one place, no copied code. Check them against the code: a wrong doc misleads gabriel too.
 

@@ -15,8 +15,11 @@
 //   node eval/eval-map.js --why                 for each DOC or FAIL: its miss class (section-rank, not-in-pool, wrong-doc, code-only-miss), then the counts
 //   node eval/eval-map.js --chain 4,5,3         try the "two links away" step as seeds,max,stem (e.g. 4,5,3); default: the project's chain setting in projects.js
 //   --cases <file> overrides the cases file (one project only). No cases file: prints a note and exits 0. See docs/EVAL.md.
+//   --no-repo                   no exact lines from the repo folder: the graph's own lines (the "before" score for fn cases)
 // A case: q (the question), doc / sec (regular expressions for a doc file and its section), code (regex for a code name),
 // any (pass when the doc OR the code matches), none (nothing may be returned). Matching ignores case.
+// fn + file (fn: a function name; file: regex on the code file, forward slashes): exact when the printed line of fn in that file is where fn is defined on disk
+// in the set's repo folder (projects.json repo). No repo folder: not exact. Prints "exact: k/n" when a case has fn.
 // Results: OK = right doc and section (or right code); DOC = right doc, wrong section; FAIL = nothing right; LEAK = an unrelated question got a map.
 // Learned links are ignored here, so the numbers do not depend on how you worked.
 const fs = require('fs');
@@ -25,6 +28,7 @@ const { homeDir } = require('../src/rules.js');
 const paths = require('../src/paths.js');
 const mk = require('../src/mk.js');
 const { getEmbedder } = require('../src/embed.js');
+const { defLine } = require('../src/repo.js');
 
 const argv = process.argv.slice(2), flag = (n) => argv.includes(n), opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : null; };
 const chainOpt = opt('--chain') ? (([seeds, max, stem]) => ({ seeds, max, stem }))(opt('--chain').split(',').map((s) => (s.trim() === '' ? undefined : Number(s)))) : undefined;   // --chain 4,5,3 -> opts.chain; undefined = the project's own setting
@@ -57,6 +61,27 @@ function whyOf(c, res) {
   return 'wrong-doc';
 }
 
+// fn cases: exact when a code line for fn (in the file regex) prints the line where fn is defined on disk now in the set's repo folder. Returns { ok, why } or null.
+function exactOf(c, res, project) {
+  if (!c.fn) return null;
+  const P = require('../src/projects.js').getProject(project) || {};
+  if (!P.repo) return { ok: false, why: 'no repo folder for this set (add-docs --repo)' };
+  if (!res) return { ok: false, why: 'no map' };
+  const nm = new RegExp(`^\\.?${c.fn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\(\\))?$`);
+  const fileRe = c.file ? rx(c.file) : null, norm = (f) => String(f || '').replace(/\\/g, '/');
+  const hits = res.code.filter((x) => nm.test(x.n.label) && (!fileRe || fileRe.test(norm(x.n.file))));
+  if (!hits.length) return { ok: false, why: `no code line for ${c.fn}${c.file ? ' in ' + c.file : ''}` };
+  const why = [];
+  for (const x of hits) {
+    const abs = path.join(P.repo, P.repoBase || '', norm(x.n.file));
+    if (!fs.existsSync(abs)) { why.push(`${norm(x.n.file)} not in repo`); continue; }
+    const want = defLine(fs.readFileSync(abs, 'utf8'), c.fn), got = Number(String(x.n.loc || '').replace(/^L/, ''));
+    if (want && got === want) return { ok: true, why: '' };
+    why.push(`printed L${got || '?'}, repo has L${want}`);
+  }
+  return { ok: false, why: why.join('; ') };
+}
+
 function judgeRendered(c, res, root = res) {
   if (!res) return judge(c, res);
   const project = res.project || mk.defaultProject(), P = require('../src/projects.js').getProject(project) || {};
@@ -67,7 +92,7 @@ function judgeRendered(c, res, root = res) {
     if (line && !line.startsWith('- ')) own = line.startsWith(heading);
     else if (own) lines.push(line);
   }
-  const docs = res.docs.filter((d) => lines.some((s) => s.startsWith(`- doc ${d.n.file.replace(/^technical-docs\//, '')} > ${d.n.section || '(top)'}: `)));
+  const docs = res.docs.filter((d) => lines.some((s) => s.startsWith(`- doc ${d.n.file.replace(/^technical-docs\//, '')}${d.n.loc ? ':' + d.n.loc.replace(/^L/, '') : ''} > ${d.n.section || '(top)'}: `)));
   const code = res.code.filter((d) => lines.some((s) => s.startsWith(`- code ${d.n.label} (${d.n.file}`)));
   return judge(c, { ...res, docs, code });
 }
@@ -82,9 +107,9 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
     const start = Date.now();
     const pv = embed ? (await embed([c.q]))[0] : null;
     // --route: the real router picks the project; an answer from the wrong project counts as no answer (a miss), and any answer to an unrelated question is a leak
-    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), chain: chainOpt, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), chain: chainOpt, ...rankOpt });
+    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...rankOpt });
     const own = c.project || DEFAULT, res = flag('--route') && res0 && !c.none ? (res0.project === own ? res0 : (res0.also || []).find((a) => a.project === own) || null) : res0;   // the right project's block may be the main one or a second, shorter one
-    rows.push({ c, status: judge(c, res), renderedStatus: judgeRendered(c, res, res0), why: flag('--why') ? whyOf(c, res) : null, alsoN: res0 && res0.also ? res0.also.length : 0, blockN: res0 ? mk.format(res0).length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
+    rows.push({ c, status: judge(c, res), exact: exactOf(c, res, c.project || DEFAULT), renderedStatus: judgeRendered(c, res, res0), why: flag('--why') ? whyOf(c, res) : null, alsoN: res0 && res0.also ? res0.also.length : 0, blockN: res0 ? mk.format(res0).length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
     if (rows.length % 25 === 0) console.log(`progress ${rows.length}/${cases.length}`);
   }
   if (opt('--json')) fs.writeFileSync(opt('--json'), JSON.stringify(rows, null, 2) + '\n');
@@ -99,6 +124,8 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const L = (require('../src/projects.js').getProject(DEFAULT) || {}).label || DEFAULT;   // the project's own label, e.g. "Notes"
   out(`${L} map eval: ${rows.length} questions (${pos.length} ${L}, ${neg.length} unrelated), ${embed ? 'with' : 'without'} meaning, learned links ignored`);
   out(`  ${(L + ' questions').padEnd(20)} strict ${rate(pos, strict)}   right doc or code ${rate(pos, lenient)}`);
+  const exRows = rows.filter((r) => r.exact);   // fn cases: the printed line is the definition on disk
+  if (exRows.length) out(`  exact: ${rate(exRows, (r) => r.exact.ok)}   (a fn case: the printed line is where the function is defined on disk now)`);
   out(`  unrelated questions  quiet ${rate(neg, strict)}   (a LEAK is a map shown for an unrelated question)`);
   for (const s of ['dev', 'held', 'fresh', 'train2', 'blind', 'blind2', 'blind3', 'blind4', 'blind5', 'blind6']) { const p = pos.filter((r) => r.c.set === s); if (p.length) out(`  set ${s.padEnd(6)}           strict ${rate(p, strict)}   right doc or code ${rate(p, lenient)}`); }
   for (const pj of [...new Set(others.map((r) => r.c.project))]) { const p = others.filter((r) => r.c.project === pj); if (p.length) out(`  project ${pj.padEnd(5)}         strict ${rate(p, strict)}   right doc or code ${rate(p, lenient)}`); }
@@ -113,6 +140,7 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const bad = rows.filter((r) => !strict(r)), shown = flag('--fails') ? bad : bad.slice(0, 40);
   if (bad.length) out(`\nnot strict-OK (${bad.length})${shown.length < bad.length ? `, first ${shown.length} (use --fails for all)` : ''}:`);
   for (const r of shown) out(`  ${r.status.padEnd(4)} ${r.c.id.padEnd(8)} [${r.c.set},${r.c.tier}] "${r.c.q}"\n         want: ${[r.c.doc && 'doc~' + r.c.doc, r.c.sec && 'sec~' + r.c.sec, r.c.code && 'code~' + r.c.code, r.c.none && 'nothing'].filter(Boolean).join('  ')}${r.c.any ? '  (doc OR code)' : ''}\n         got:  ${r.docs.slice(0, 3).join(' | ') || '-'}  //  ${r.code.slice(0, 3).join(', ') || '-'}`);
+  if (flag('--fails')) for (const r of rows.filter((x) => x.exact && !x.exact.ok)) out(`exact-miss ${r.c.id} [${r.c.set}]: ${r.exact.why}`);
   if (flag('--why')) {
     const misses = pos.filter((r) => r.status === 'DOC' || r.status === 'FAIL'), n = (k) => misses.filter((r) => r.why === k).length;
     for (const r of misses) out(`why ${r.c.id} ${r.why}`);

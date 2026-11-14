@@ -2,6 +2,8 @@
 
 The layout `/gabriel:setup` writes and `/gabriel:refresh-docs` keeps. It is for developers. Docs are a lead: the code is the proof.
 
+The docs folder is not in the code repo. Setup makes `<name>-code-docs/` next to the code. It holds `docs/` (this layout) and `graphify-out/` (the graph). The code repo stays clean.
+
 ## Folders
 
 ```text

@@ -418,8 +418,8 @@ if (require.main === module) {
         return null;
       };
       for (const p of mk.projectNames()) {
-        const s = mk.status(home, p), gp = mk.graphPathOf(p);
-        console.log(`${getProject(p).label.padEnd(9)} ${s.nDoc ? `${s.nCode} code + ${s.nDoc} doc neurons, built ${new Date(s.built).toISOString().slice(0, 16).replace('T', ' ')}${s.mapCommit ? ', @' + s.mapCommit.slice(0, 8) : ''}${s.stale ? '   STALE' : '   ok'}` : 'no map (run: node brain.js build-mk ' + p + ')'}${gp ? `   graph ${gp}${fs.existsSync(gp) ? '' : '   GRAPH MISSING'}` : ''}`);
+        const s = mk.status(home, p), gp = mk.graphPathOf(p), rp = getProject(p).repo;
+        console.log(`${getProject(p).label.padEnd(9)} ${s.nDoc ? `${s.nCode} code + ${s.nDoc} doc neurons, built ${new Date(s.built).toISOString().slice(0, 16).replace('T', ' ')}${s.mapCommit ? ', @' + s.mapCommit.slice(0, 8) : ''}${s.stale ? '   STALE' : '   ok'}` : 'no map (run: node brain.js build-mk ' + p + ')'}${gp ? `   graph ${gp}${fs.existsSync(gp) ? '' : '   GRAPH MISSING'}` : ''}${rp ? `   repo ${rp}${fs.existsSync(rp) ? '' : '   REPO MISSING'}` : gp ? `   no repo (add-docs ${p} --repo <folder> --relink)` : ''}`);
         const fix = fixFor(p, s, gp);
         if (fix) console.log('  fix: ' + fix);
       }

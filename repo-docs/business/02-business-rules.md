@@ -128,8 +128,8 @@ A file opened or edited counts only if a map was shown in the same session no mo
 ## Eval and tuning
 
 ### R26 Retrain keeps new weights only when the strict score does not fall
-With a doc set name, the new strict count must be at least the old count. With no name, the new weights always replace the old ones, and the old file is saved as `rank.prev.json`. If either strict count is missing, a named run keeps the current weights. With no eval case file, retrain only writes suggested cases.
-- Where: `src/retrain.js` `keepNew()`, the `eval-cases.json` check.
+With a doc set name, the new strict count must be at least the old count. With no name, the new weights always replace the old ones, and the old file is saved as `rank.prev.json`. With `--force`, a named run keeps the new weights even when the strict count falls (the user chose it); the old file is still saved as `rank.prev.json`. If either strict count is missing, a named run keeps the current weights. With no eval case file, retrain only writes suggested cases.
+- Where: `src/retrain.js` `keepNew()` (the `force` flag), the `eval-cases.json` check.
 
 ### R27 Model tune keeps the tuned model only when it wins
 The tuned model is kept only when the held-out total rises, no doc set's held-out count falls by more than 1, and the full strict and quiet counts do not fall.
@@ -188,3 +188,15 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - No session id: nothing is pinned, and the reply says so.
 - Gaps: [findings](../technical/findings.md).
 - Where: `src/pin.js` `parsePin()`, `getPin()`, `setPin()`; `src/brain.js` `pinNote()`, `hook()`, `mapFor()`; `src/mk.js` `searchAll()` (`opts.pin`). Tests: `test/test-pin.js`, `test/test-workflow.js`.
+
+## Exact lines
+
+### R36 Exact code lines
+- Each code name in the map, and each `↔` neighbour, shows the line where the name is defined in the set's repo folder. The file is read on each prompt, so the line is the one on disk now. It prints `(<file>:<line> ✓)`.
+- If the file is gone, or the name is not in it, it prints `(<file>, not found in repo)`.
+- If the file is gone but the name is found in another file of the repo, it prints `(<file>:<line> ✓ moved)` with the new file.
+- A set with no repo folder keeps the graph's line, with no mark. `mk-status all` then shows `no repo (add-docs <name> --repo <folder> --relink)`. A label that is not a plain name (such as `R33 a code graph must exist`) also keeps the graph's line.
+- Limits: at most 30 files, 2 MB each, 450 ms per prompt. A file past a limit keeps the graph's line. Any error keeps it too.
+- The repo folder comes from `add-docs --repo`, which checks it first: a git repo, the graph's commit in its history, and at least 80% of 200 sampled graph files in it.
+- Gaps: [findings](../technical/findings.md).
+- Where: `src/repo.js` `checkRepo()`, `exactLines()`, `defLine()`; `src/setup.js` `checkRepoArg()`; `src/mk.js` `search()` and `format()` (`where()`). Tests: `test/test-repo.js`, `test/test-map.js`, `test/test-workflow.js`.

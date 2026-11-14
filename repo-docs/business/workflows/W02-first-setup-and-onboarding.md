@@ -22,8 +22,8 @@ Setup, in `src/setup.js` `run()`:
 Onboarding, in `skills/setup/SKILL.md` (Claude asks each question with AskUserQuestion, and does nothing the user did not pick):
 
 1. **Helper tools.** Optional installs: graphify, superpowers, ponytail.
-2. **Graph a project.** Optional `/graphify <folder>`, which writes `graphify-out/graph.json`.
-3. **Docs from the graph.** Optional technical, business, architecture and workflow docs, written in the layout of `docs/DOC-LAYOUT.md`. Then `/gabriel:add-docs` (see [W03](W03-add-docs.md)).
+2. **Graph a project.** Optional. Asks for the code folder and a name. Makes `<name>-code-docs/` next to the code, runs `/graphify <code folder>`, moves `graphify-out/` into that folder and checks its commit against the code's `HEAD`.
+3. **Docs from the graph.** Optional technical, business, architecture and workflow docs in `<name>-code-docs/docs/`, in the layout of `docs/DOC-LAYOUT.md`. Then `/gabriel:add-docs` with `--code` and `--repo` (see [W03](W03-add-docs.md)).
 4. **Stack docs.** Optional public docs for the user's languages and frameworks, fetched after the user approves the list. Saved under `docs/stack/`.
 
 ```mermaid
@@ -41,8 +41,8 @@ flowchart TD
   S7 --> S8["brain.js build-mk: mk.js build per doc set"]
   S8 --> S9["npm test"]
   S9 --> S10["Summary"]
-  O1 --> O2["Onboarding: graph a project with graphify"]
-  O2 --> O3["Onboarding: docs from the graph"]
+  O1 --> O2["Onboarding: graph a project, move graph to name-code-docs"]
+  O2 --> O3["Onboarding: docs in name-code-docs/docs, then add-docs --code --repo"]
   O3 --> O4["Onboarding: stack docs, after approval"]
 ```
 

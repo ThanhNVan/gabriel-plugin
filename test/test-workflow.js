@@ -3,7 +3,7 @@
 // the generic `context` command, updating the maps, the eval loop, and the Codex hook file.
 // Every child process runs in a temp HOME with its own data folder. The real ~/.claude and ~/.codex are never touched.
 const assert = require('node:assert'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SETUP = path.join(ROOT, 'src', 'setup.js'), BRAIN = path.join(ROOT, 'src', 'brain.js');
@@ -15,6 +15,7 @@ const DATA = path.join(TMP, 'gdata');
 const NOTES = path.join(TMP, 'notes');
 const CLAUDE_HOME = path.join(HOME, '.claude'), CODEX_HOME = path.join(HOME, '.codex');
 const PROMPT = 'how do I fix a flat tire on my bike';
+const readProjectEntry = (name) => (JSON.parse(fs.readFileSync(path.join(DATA, 'projects.json'), 'utf8')).projects || []).find((p) => p.name === name) || {};
 
 // A clean environment: no GABRIEL_* or BRAIN_* variable from the user's shell leaks in.
 const BASE_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GABRIEL|BRAIN)_/.test(k) && k !== 'CODEX_HOME'));
@@ -235,6 +236,55 @@ try {
     assert.ok(!npMsg.includes(SUGGEST), 'one doc set only: no pin suggestion (it shows only with 2 or more sets): ' + npMsg);
     assert.ok(!ctxOf(neverPinned.o).includes('gabriel use <set>'), 'pin suggestion must not go into additionalContext');
     assert.ok(!qMap.systemMessage.includes(SUGGEST), 'pinned map note has no pin suggestion');
+  });
+
+  // 13
+  // --repo needs the set's graph first, so the code repo (with its graph) is linked with --code, then --repo is tried.
+  step('add-docs --repo: a folder without git is refused; the repo with its graph is saved', () => {
+    const REPO = path.join(TMP, 'code-repo'), PLAIN = path.join(TMP, 'plain-folder');
+    fs.mkdirSync(path.join(REPO, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(REPO, 'src', 'tire.js'), 'function repairTire() {}\n');
+    const git = (args) => execFileSync('git', ['-C', REPO, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', ...args], { stdio: 'pipe' });
+    git(['init', '-q']);
+    git(['add', '.']);
+    git(['commit', '-q', '-m', 'init']);
+    const commit = execFileSync('git', ['-C', REPO, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    fs.mkdirSync(path.join(REPO, 'graphify-out'), { recursive: true });
+    fs.writeFileSync(path.join(REPO, 'graphify-out', 'graph.json'), JSON.stringify({ built_at_commit: commit, links: [],
+      nodes: [{ id: 'tire', label: 'repairTire()', source_file: 'src/tire.js', source_location: 'L1' }] }));
+    fs.mkdirSync(PLAIN, { recursive: true });
+
+    const link = node(SETUP, ['add-docs', 'notes', '--code', REPO, '--relink']);
+    assert.strictEqual(link.status, 0, show(link));
+    const bad = node(SETUP, ['add-docs', 'notes', '--repo', PLAIN, '--relink']);
+    assert.strictEqual(bad.status, 1, show(bad));
+    assert.match(bad.stdout, /repo refused: not a git repo/, show(bad));
+    assert.strictEqual(readProjectEntry('notes').repo, undefined, 'a refused folder must not be saved');
+    const good = node(SETUP, ['add-docs', 'notes', '--repo', REPO, '--relink']);
+    assert.strictEqual(good.status, 0, show(good));
+    assert.match(good.stdout, /repo set for notes/, show(good));
+    assert.strictEqual(readProjectEntry('notes').repo, REPO, 'projects.json must hold the repo folder');
+  });
+
+  step('mk-status all: the notes line shows its repo, and REPO MISSING when the folder is gone', () => {
+    const repo = readProjectEntry('notes').repo;
+    assert.ok(repo, 'notes has a repo from the step before');
+    const line = () => (node(BRAIN, ['mk-status', 'all']).stdout || '').split('\n').find((l) => l.startsWith('notes')) || '';
+    assert.ok(line().includes(`repo ${repo}`) && !/REPO MISSING/.test(line()), 'repo shown: ' + line());
+    fs.renameSync(repo, repo + '.away');
+    try { assert.match(line(), /REPO MISSING/, 'a gone repo folder is flagged'); }
+    finally { fs.renameSync(repo + '.away', repo); }
+  });
+
+  step('mk-status all: a set with a graph but no repo shows the add-docs --repo hint', () => {
+    const pf = path.join(DATA, 'projects.json'), before = fs.readFileSync(pf, 'utf8');
+    const j = JSON.parse(before);
+    delete j.projects.find((p) => p.name === 'notes').repo;
+    fs.writeFileSync(pf, JSON.stringify(j));
+    try {
+      const l = (node(BRAIN, ['mk-status', 'all']).stdout || '').split('\n').find((x) => x.startsWith('notes')) || '';
+      assert.ok(l.includes('no repo (add-docs notes --repo <folder> --relink)'), 'no repo hint: ' + l);
+    } finally { fs.writeFileSync(pf, before); }
   });
 
   console.log('ALL PASSED');

@@ -48,6 +48,6 @@ Terms in the order a reader meets them.
 - **Quiet score**: the count of unrelated questions that show no map block.
 - **Held-out cases**: eval cases kept back from training. Used to judge a tuned model.
 - **Rank weights** (`rank.json`): the ranking settings of one doc set, trained by retrain.
-- **Retrain**: trains new rank weights and keeps them only when the strict score does not fall. See [W06](workflows/W06-eval-and-retrain.md).
+- **Retrain**: trains new rank weights and keeps them only when the strict score does not fall (`--force` keeps them anyway). See [W06](workflows/W06-eval-and-retrain.md).
 - **Tune**: optional fine-tune of the meaning model on the user's eval cases. Kept only when it wins.
 - **Stack docs**: public docs for the user's languages and frameworks, saved under `docs/stack/`. Background reading.

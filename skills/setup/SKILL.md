@@ -60,20 +60,37 @@ Run only the picked commands. Skip a tool that is already there (`graphify --hel
 
 ### 2. Graph a project
 
-Skip this step if graphify is not installed. Ask: "Run graphify on a project now? Which folder?" Offer up to three code folders the user names or that you see in the working directory, plus "Not now".
+Skip this step if graphify is not installed. Ask: "Run graphify on a project now? Which folder?" Offer up to three code folders the user names or that you see in the working directory, plus "Not now". Call the pick `<code folder>`.
 
-On a pick, run `/graphify <folder>` and wait for it to finish. It writes `<folder>/graphify-out/`.
+Then ask for a project name `<name>`. Default: the folder's name in lower case. The name uses only lower-case letters, digits, `_` and `-`, starts with a letter or digit, and has 40 characters or less (the rule add-docs uses).
+
+Make the docs folder next to the code: `<parent>/<name>-code-docs/`, where `<parent>` is the parent folder of `<code folder>`. Ask before you create it. If it already exists, ask whether to reuse it. Run `git init` in it (ask first). Never write into the code repo.
+
+On a pick, run `/graphify <code folder>` and wait for it to finish. It writes `<code folder>/graphify-out/`. Then:
+
+1. Move that folder to `<name>-code-docs/graphify-out/`.
+2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone.
+3. Check the graph matches the code. Run these two one-line commands. Never read `graph.json` into the chat:
+
+   ```
+   node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).built_at_commit)" "<name>-code-docs/graphify-out/graph.json"
+   git -C "<code folder>" rev-parse HEAD
+   ```
+
+   The two values must be equal. If not, show both and ask before you go on.
+
+Save `graph` as `<code folder>`.
 
 ### 3. Write docs from the graph
 
-Only after a graph was made in step 2. Ask (multi-select): "Write docs for <folder> from the graph?"
+Only after a graph was made in step 2. Ask (multi-select): "Write docs for <code folder> from the graph?"
 
 - Technical docs (modules, data, APIs, how to build and test)
 - Business docs (what the product does, rules, terms)
 - Architecture (parts, layers, how they connect)
 - Workflows with Mermaid diagrams
 
-For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<folder>/docs/` in the layout and lean rules of `${CLAUDE_PLUGIN_ROOT}/docs/DOC-LAYOUT.md`: read it first. Business and workflow picks go in `docs/business/`, technical and architecture picks in `docs/technical/`, plus the index `docs/README.md`. Make only the files that have real content, in short plain words. Do not over-detail: no per-method docs, no copied code, no line numbers, no empty or "planned" sections.
+For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `<name>-code-docs/graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<name>-code-docs/docs/` in the layout and lean rules of `${CLAUDE_PLUGIN_ROOT}/docs/DOC-LAYOUT.md`: read it first. Business and workflow picks go in `docs/business/`, technical and architecture picks in `docs/technical/`, plus the index `docs/README.md`. Make only the files that have real content, in short plain words. Do not over-detail: no per-method docs, no copied code, no line numbers, no empty or "planned" sections.
 
 Add Mermaid diagrams to every doc, not only the workflow one: a picture is read faster than words. Build each diagram from the graph and the code, never from memory. Fit the kind to the doc:
 
@@ -84,9 +101,15 @@ Add Mermaid diagrams to every doc, not only the workflow one: a picture is read 
 
 Keep each diagram to one screen (about 15 nodes). Split a bigger one. Put a one-line caption above it, and real file or class names on its nodes so gabriel can map them. Check each block renders (balanced brackets, no unquoted special characters in labels).
 
-Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <folder>/docs --code <folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`.
+Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <name>-code-docs/docs --code <code folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`.
 
-Then add the project so gabriel maps it: `/gabriel:add-docs <name> <folder>/docs --code <folder>`. If the user picked no docs, use `<folder>` as the docs folder.
+Register the project now, without asking (write every folder as a full path, so it works from any working folder): `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <code folder>`. `--code` is the folder that holds `graphify-out`. `--repo` is the real code, which add-docs checks against the graph. Then run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all`. The `<name>` line must say `ok` and show `repo <path>`. If add-docs prints `repo refused: ...`, show that line and stop.
+
+Save `docs` as `<name>-code-docs/docs`.
+
+Tell the user: after code changes, run `/gabriel:refresh-docs <name>`. Graph updates keep the graph out of the code repo: `graphify update <code folder> --graph <name>-code-docs/graphify-out/graph.json`.
+
+If the user picked no docs: still do the graph steps above. Save `docs` as `skipped`. Register with the docs folder `<name>-code-docs` itself: `/gabriel:add-docs <name> <name>-code-docs --code <name>-code-docs --repo <code folder>`. Then the mk-status check and the note above.
 
 ### 4. Docs for your stack
 

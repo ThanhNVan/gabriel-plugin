@@ -112,7 +112,9 @@ try {
   assert.strictEqual(keepNew(true, { n: 5 }, { n: 4 }), false, 'named: a lower strict count keeps the old weights');
   assert.strictEqual(keepNew(true, { n: 5 }, { n: 5 }), true, 'named: an equal count keeps the new weights');
   assert.strictEqual(keepNew(false, { n: 5 }, { n: 4 }), true, 'no name: always keeps the new weights');
-  step('retrain keep rule: guarded with a name, always with no name');
+  assert.strictEqual(keepNew(true, { n: 5 }, { n: 4 }, true), true, 'named with --force: keeps the new weights even when strict falls');
+  assert.strictEqual(keepNew(true, { n: 5 }, { n: 4 }, false), false, 'named, force off: a lower strict count keeps the old weights');
+  step('retrain keep rule: guarded with a name, always with no name, --force replaces anyway');
 
   const { reason } = require('../src/retrain.js');
   assert.strictEqual(reason(null, { n: 3 }), 'no strict count for the current weights', 'a missing current count is named');

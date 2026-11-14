@@ -158,6 +158,23 @@ Fix: check the repo. If it is wrong, run `/gabriel:add-docs <name> --code <right
 
 Fix: the same as `graph not found` above. `mk-status all` prints the fix line `fix: /gabriel:add-docs <name> --code <repo> --relink` under the set.
 
+## `repo refused` when adding a repo folder
+
+Message: `repo refused: <reason>`. Nothing is saved. The reasons:
+
+- `not a folder`: the path is wrong, or it is a file.
+- `not a git repo`: the folder has no git history. Use the git clone of the code.
+- `graph commit <sha> not in this repo`: the graph was built from a commit this folder does not have. Use the repo the graph came from, or run `/graphify <repo>` again there.
+- `only <k> of <n> graph files are here`: fewer than 80% of the sampled graph files are in this folder (the check also tries its `src` subfolder). The folder is probably the wrong code.
+- `graph has no source files`: the graph lists no file paths. Run `/graphify <repo>` again.
+- `this doc set has no code graph`: make a code graph first. See [ADDING-DOCS](ADDING-DOCS.md), section 5.
+
+## `REPO MISSING` in status
+
+`mk-status all` (or `/gabriel:status`) shows `repo <path>   REPO MISSING` when the folder is gone. The map still works. It shows the graph's lines, with no check mark. Fix: put the folder back, or set a new one with `/gabriel:add-docs <name> --repo <folder> --relink`.
+
+`(<file>:<line> ✓ moved)` means the file moved inside the repo. The name was found in the new file, so use that line. `mk-status all` shows `no repo (add-docs <name> --repo <folder> --relink)` for a set with a graph but no repo folder: its code lines have no check mark and the line may be old.
+
 ## `/gabriel:retrain` asks you to review cases
 
 With no `eval-cases.json`, retrain writes suggested cases and stops. Review them, rewrite the questions in your own words, and save the file as `eval-cases.json`. Then run retrain again. See [EVAL](EVAL.md).

@@ -4,7 +4,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles } = require('./paths');
 const DEFAULTS = { layout: 'auto', graph: null, skipDirs: ['graphify-out', 'node_modules', '.git', 'atlas', '_tools'],
   aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, sessionGate: false, coreDocs: null, extensions: null,
-  chain: { seeds: 4, max: 3, stem: 3 } };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in). chain = the "two links away" step: seeds = top code hits it starts from, max = extra lines, stem = name parts that must match (a higher stem is stricter)
+  chain: { seeds: 4, max: 3, stem: 3 }, repo: null, repoBase: '' };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in). chain = the "two links away" step: seeds = top code hits it starts from, max = extra lines, stem = name parts that must match (a higher stem is stricter). repo = the checked code folder (add-docs --repo); repoBase = '' or 'src' (graph paths relative to <repo>/src)
 const resolveRoot = (r) => { const s = String(r || '');
   if (s.startsWith('~')) return path.join(os.homedir(), s.slice(1).replace(/^[\\/]/, ''));
   return path.isAbsolute(s) ? path.resolve(s) : path.join(dataDir(), s); };

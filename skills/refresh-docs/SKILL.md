@@ -1,12 +1,18 @@
 ---
 name: refresh-docs
-description: After code changes, refresh a project's code graph (graphify update), update the docs the change touches, then shrink those docs without losing a key idea, rebuild gabriel's map and retrain its ranking. Usage: /gabriel:refresh-docs <code folder> [docs folder]
+description: After code changes, refresh a doc set: rebuild its code graph (graphify update), update the docs the change touches, shrink those docs without losing a key idea, rebuild gabriel's map, then ask whether to retrain its ranking. Usage: /gabriel:refresh-docs <doc set name>, or /gabriel:refresh-docs <code folder> [docs folder]
 disable-model-invocation: true
-argument-hint: <doc set name, or code folder: repo with graphify-out> [docs folder: default = the set linked to that graph]
+argument-hint: "<doc set name> | <code folder> [docs folder]"
 ---
 
 Arguments, either:
-- `<doc set name>` alone (for example `makillez`): run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all` and read that set's line. Its `graph <path>` gives the **graph folder** (the folder holding `graphify-out`), its `@<commit>` gives the old commit, and its `root` in `projects.json` is the docs folder. The **code folder** is the path in `graphify-out/.graphify_root` when that file exists (graphify writes the folder it read; the graph may live in a separate docs repo). Without it, use the git root above the graph folder (the folder holding `.git`). Show both folders and ask the user to confirm before step 1.
+- `<doc set name>` alone (for example `makillez`): run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all` and read that set's line. Its `graph <path>` is the path to `graph.json`, and its `@<commit>` gives the old commit. Read the set's entry in `projects.json` (find the file with `node -e "console.log(require('${CLAUDE_PLUGIN_ROOT}/src/paths.js').projectsFile())"`):
+  - `repo` is the **code folder**. If `repoBase` is `src`, the graph paths are relative to `<repo>/src`, so graphify runs on `<repo>/src`.
+  - The **graph folder** is the folder above `graphify-out` (the `graph` path without `graphify-out/graph.json`).
+  - `root` is the **docs folder**.
+  - If `repo` is missing or its folder is gone: use the code folder in `graphify-out/.graphify_root` when that file exists (graphify writes the folder it read). Else use the git root above the graph folder (the folder holding `.git`). If that also fails, ASK the user for the code folder, then offer to save it with `/gabriel:add-docs <set> --repo <folder> --relink`.
+  - If `root` is gone, ask the user for the docs folder.
+  - Show both folders and ask the user to confirm before step 1.
 - `<code folder> [docs folder]`: the graph folder is the code folder. With no docs folder, use the `root` of the doc set whose graph is in that folder (`projects.json`), else ask.
 
 Work in four steps. Show % progress after each. Never commit or push: the user does that.
@@ -15,7 +21,9 @@ Work in four steps. Show % progress after each. Never commit or push: the user d
 
 1. Check `graphify --help` works. If not, stop and suggest `/gabriel:setup --onboard` (it installs graphify).
 2. Note the old commit and node count. Use the `@<commit>` from `mk-status all` when you have it. Else read `"built_at_commit"` from the last 400 bytes of `graph.json` with a one-line script; the node count is `JSON.parse(...).nodes.length`. Never read the file into the chat: it can be 90 MB.
-3. Run `graphify update "<code folder>"`. It re-extracts code only and needs no model. It can take minutes: run it in the background and wait. When the graph folder is not the code folder, copy the new `graphify-out` files into the graph folder's `graphify-out`. Then check `built_at_commit` equals `git -C "<code folder>" rev-parse HEAD` (the code repo's commit, not the docs repo's); fix it if not.
+3. Run `graphify update "<code folder>"`. When the graph folder is not the code folder, add `--graph "<graph folder>/graphify-out/graph.json"` so nothing is written into the code repo. It re-extracts code only and needs no model. It can take minutes: run it in the background and wait. Then:
+   - When the graph folder is not the code folder, check that no `graphify-out` folder appeared in the code folder. If one did, move its files into the graph folder's `graphify-out` and remove the copy.
+   - Check `built_at_commit` equals `git -C "<code folder>" rev-parse HEAD` (the code repo's commit, not the docs repo's); fix it if not.
 4. If it refuses because the new graph has fewer nodes, show the counts and ask the user before you add `--force`.
 5. Report: old and new node counts, and the GRAPH_REPORT.md lines that changed.
 
@@ -49,9 +57,15 @@ For each updated doc:
 
 ## Finish
 
-1. Rebuild only this doc set's map: `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" build-mk <name>`. Then `mk-status all`: the set must say `ok`, with the new `@<commit>`. To get suggested eval cases for the new sections, also run `/gabriel:update`.
-2. Retrain the doc set's ranking with its name (the score guard applies only to a named run): `/gabriel:retrain <name>`. It scores the current weights, trains new ones, and keeps them only when the strict score does not fall.
+1. Rebuild only this doc set's map: `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" build-mk <name>`. Then `mk-status all`: the set must say `ok`, with the new `@<commit>`.
+2. Run `/gabriel:update` (new doc folders, suggested eval cases).
+3. Ask the user one question with three choices:
+   - a. Skip retrain.
+   - b. Retrain and keep the new weights only if the strict score does not fall: `/gabriel:retrain <name>`.
+   - c. Retrain and replace the weights anyway, even if the strict score falls: `node "${CLAUDE_PLUGIN_ROOT}/src/retrain.js" <name> --force`.
+
+   Do what they pick. Before you ask, say:
    - If the update suggested new cases (`eval-cases.suggested.json`), say so first: retrain uses only the saved `eval-cases.json`, so new sections count once the user reviews and saves the cases.
-   - If the doc set has no `eval-cases.json` yet, retrain writes suggested cases and stops. Tell the user to review them, then run `/gabriel:retrain <name>`.
+   - If the doc set has no `eval-cases.json` yet, retrain writes suggested cases and stops. Tell the user to review them, then retrain again.
    - Do not run the optional meaning-model fine-tune (`/gabriel:tune-embeddings`) here: it is slow and only on request.
-3. Report as one table, one row per item: graph nodes (before, after, commit), each doc changed (lines before and after, key ideas kept N/N), doc checker result, retrain (current and new strict, kept or not). Then what was not checked.
+4. Report as one table, one row per item: graph nodes (before, after, commit), each doc changed (lines before and after, key ideas kept N/N), doc checker result, retrain (skipped by choice, or current and new strict, kept or not, and which option ran). Then what was not checked.

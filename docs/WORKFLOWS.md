@@ -141,7 +141,7 @@ flowchart TD
 
 ## 5. Add docs later
 
-You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions. You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and retrains. Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
+You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions. You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and asks whether to retrain. Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD
@@ -164,7 +164,7 @@ flowchart TD
 
 ## 6. Measure and retrain
 
-Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
+Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall, unless you add `--force`. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD

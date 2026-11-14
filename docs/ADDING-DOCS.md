@@ -66,7 +66,7 @@ For a code repo, first make a graph. Run this in Claude in the repo:
 /graphify <repo>
 ```
 
-This makes `graphify-out/graph.json` in the repo. Gabriel reads that file to link docs to code.
+This makes `graphify-out/graph.json` in the repo. Move it out: `<name>-code-docs/graphify-out/` next to the repo. `/gabriel:setup` does this for you, so the code repo stays clean. Gabriel reads that file to link docs to code.
 
 **No docs for the code yet? Write them first.** They help gabriel the most. Ask Claude to read `graphify-out/` and the code, and write (for example with `/engineering:documentation`):
 
@@ -77,15 +77,15 @@ This makes `graphify-out/graph.json` in the repo. Gabriel reads that file to lin
 
 Check each doc against the code. A wrong doc misleads gabriel. See the README section "Best results".
 
-Then add the set with the repo:
+Then add the set. The docs go in `<name>-code-docs/docs/`, and the graph folder is `<name>-code-docs`:
 
 ```
-/gabriel:add-docs <name> <folder> --code <repo>
+/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <repo>
 ```
 
 Expected line: `code graph found: linking docs to code`
 
-With `--code`, the repo must hold `graphify-out/graph.json`. If it does not, add-docs stops before it writes anything. There is no fallback to a graph in the docs folder. Without `--code`, a graph in the docs folder is still used when present.
+With `--code`, that folder must hold `graphify-out/graph.json`. If it does not, add-docs stops before it writes anything. There is no fallback to a graph in the docs folder. Without `--code`, a graph in the docs folder is still used when present.
 
 The build warns when almost no doc section links to the code. It prints `warning: the docs name almost none of this graph's code (<k> of <n> sections link to it); is the code graph the right repo?` The build summary ends with `, <k> doc sections linked to code`. If the repo is wrong, fix it with `--relink`. It changes only the code graph of an existing set, then rebuilds its map:
 
@@ -94,6 +94,14 @@ The build warns when almost no doc section links to the code. It prints `warning
 ```
 
 With `--code`, the set also gets `cwdHints`: the lower-case name of the code repo. If the repo sits inside a git repo, the git repo's name is used. A prompt run from that folder then leans toward this set. `--relink` does not change `cwdHints`.
+
+For exact lines, give the code folder with `--repo`:
+
+```
+/gabriel:add-docs <name> --repo <folder> --relink
+```
+
+Expected line: `repo set for <name>: <folder> (<k>/<n> graph files found)`. The folder must be a git repo. If the graph records its commit, that commit must be in the repo's history. If it fails the check, the command prints `repo refused: <reason>` and changes nothing. The reasons are in [TROUBLESHOOTING](TROUBLESHOOTING.md). `--repo` also works when you add a set: `/gabriel:add-docs <name> <folder> --repo <folder>`. No rebuild is needed. The map reads the line from the folder on each prompt.
 
 Business docs with no code names can get the same warning. That is expected. See [TROUBLESHOOTING](TROUBLESHOOTING.md).
 
@@ -178,5 +186,6 @@ Expected lines: `added doc set <name>` for each new folder, `<name>: map built` 
 
 - `"aliases": ["name"]`: a prompt that names the set routes to it, and so does `gabriel use <alias>` (see README, "Pin one doc set per session"). `add-docs` and `--update` set it. `--update` adds `[name]` to an older set that has none, and prints `set alias for <name>`.
 - `"cwdHints": ["repo-name"]`: set by `add-docs --code`. A prompt run from a folder with this name adds a small score to the set.
+- `"repo"` and `"repoBase"`: set by `add-docs --repo` (see section 5). `repo` is the code folder. `repoBase` is `""`, or `"src"` when the graph's paths start under `src/`. With no `repo`, the map shows the graph's lines, with no check mark.
 - `"sessionGate": true`: on the first prompt of a session, a weak match that names no doc set and comes from outside its folder shows nothing. Default: `false`. Use it when several doc sets overlap.
 - `"chain": { "seeds": 4, "max": 3, "stem": 3 }`: the "2 links away" step (see [ARCHITECTURE](ARCHITECTURE.md), Firing). `seeds` is how many top code hits it starts from, `max` how many extra code names it may add, and `stem` how many name parts must match (higher is stricter). Partial values merge with these defaults. Numbers outside the range are limited to it (seeds and max 0 to 10, stem 1 to 6). A value that is not a number uses the default. `seeds` or `max` of 0 turns the step off. Try values with `eval/eval-map.js --chain` (see [EVAL](EVAL.md)).

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `/gabriel:refresh-docs <doc set name>` uses the set's code folder and docs folder (from `projects.json`), asks for them if missing, and asks before retrain: skip, keep only if better, or replace anyway. `retrain --force` (`node src/retrain.js <name> --force`) keeps the new weights even when the strict score falls.
+- Setup keeps the code repo clean: onboarding makes `<name>-code-docs/` next to the code, moves the graph into `graphify-out/` there, writes the docs in `docs/` and registers the set with `--code` and `--repo` by itself.
+- A code name whose file moved inside the repo is found again and shows `(<file>:<line> ✓ moved)`; a set with a graph but no repo folder gets a `mk-status all` hint (`no repo (add-docs ...)`) and a tip.
+- Exact code lines and doc lines. A doc line shows its section's heading line: `doc <file>:<line>` (Markdown, MDX and text files; other formats keep the old text). `add-docs <name> --repo <folder>` checks the code folder against the graph and saves it. Then each code name and `↔` neighbour shows its line in that folder on each prompt: `(<file>:<line> ✓)`, or `(<file>, not found in repo)`. Measured 2026-11-14: 6 of 6 doc lines match their headings. Graph line drift: 3.5% at the graph's own commit, 10.6% at 20 commits, 26.5% at 100 commits. Exact eval on `fn` cases: gabriel-dev 2/15 to 3/15, Makillez 3/20 to 3/20. Makillez gate 523/569 and quiet 30/31 unchanged; average block 2230 characters; average search 338 ms. Layer p95 was 62 ms in the timing run (one cold run hit the 450 ms cap). Kept on: no gain on a fresh graph, but it fixes lines as the graph ages, at no gate cost.
+
 - Code graph path: a missing `graph` file now fails the build with `graph not found: <path>` and keeps the old map. `mk-status all` shows each graph path and `GRAPH MISSING`. `add-docs` asks for the code repo when `--code` is missing. The background check now rebuilds any stale doc set, not only the default one (skipping a set whose graph is missing).
 - Skills show a short hint for each argument.
 - Plainer words for the tips, the setup hint and the `gabriel use` replies. The 📌 pinned line now has a blank line before it. Not pinned, with 2 or more doc sets, each map note ends with a 💡 line that suggests `gabriel use <set>`.

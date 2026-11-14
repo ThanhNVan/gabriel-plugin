@@ -74,6 +74,24 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     // unrelated text stays quiet
     assert.strictEqual(mk.search(home, 'recommend a good pasta recipe for tonight'), null, 'unrelated text must give null');
 
+    // doc line numbers: the line of the section's heading in the file; formats with no lines (here .rst) keep the text with no number
+    {
+      const root5 = path.join(tmp, 'docs5'), home5 = path.join(tmp, 'home5');
+      write(path.join(root5, 'technical-docs', 'a.md'), 'intro\n\n# One\ntext one\n\n## Two\ntext two rivers\n');   // "two" is a stop word, so the chunk needs a second real word ("rivers")
+      write(path.join(root5, 'technical-docs', 'b.txt'), 'plain lake note\n');
+      write(path.join(root5, 'technical-docs', 'c.rst'), 'Canals\n======\n\nCanal water moves slowly.\n');
+      write(path.join(root5, 'technical-docs', '04-filler.md'), ['# 04 — Filler', '', ...Array.from({ length: 120 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+      write(path.join(root5, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [{ id: 'w', label: 'Widget', source_file: 'src/Widget.cs', source_location: 'L1', community: 1, community_name: 'W' }], links: [], built_at_commit: 'eee555' }));
+      await mk.build(home5, { root: root5, project: 'beta', noEmbed: true });
+      const r5 = mk.search(home5, 'what does the text about rivers say', { project: 'beta' });
+      assert.ok(r5 && r5.docs.some((d) => d.n.file.endsWith('a.md')), 'the a.md doc must fire');
+      assert.match(mk.format(r5), /- doc a\.md:6 > One > Two: text two rivers/, 'the "## Two" heading is on line 6');
+      const r6 = mk.search(home5, 'canal water moves slowly', { project: 'beta' });
+      assert.ok(r6 && r6.docs.some((d) => d.n.file.endsWith('c.rst')), 'the .rst doc must fire');
+      assert.match(mk.format(r6), /- doc c\.rst > Canals: /, 'an .rst doc has no line number');
+      assert.doesNotMatch(mk.format(r6), /c\.rst:\d/, 'an .rst doc has no line number');
+    }
+
     // code links: a backticked name links to the code node with that exact label (graphify writes functions as name()); short or plain lowercase words do not
     {
       const root3 = path.join(tmp, 'docs3'), home3 = path.join(tmp, 'home3');
@@ -247,6 +265,66 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     fs.appendFileSync(path.join(root, 'technical-docs', 'for-dev', '02-billing.md'), '\nMore text about refunds.\n');
     assert.strictEqual(mk.stale(home), true, 'a changed doc must make the map stale');
     assert.strictEqual(fixOf('Alpha'), '  fix: /gabriel:update', 'a stale set gets the update fix');
+
+    // exact lines (src/repo.js wired into search and format): a set with a repo folder shows the line on disk; no repo, or a folder that is gone, shows the old text
+    {
+      const projFile = path.join(process.env.GABRIEL_DATA, 'projects.json'), projJson = fs.readFileSync(projFile, 'utf8');
+      const repo = path.join(tmp, 'alpha-repo');
+      const setRepo = (dir) => { const j = JSON.parse(projJson); j.projects.find((p) => p.name === 'alpha').repo = dir; fs.writeFileSync(projFile, JSON.stringify(j)); };
+      const showQ = () => mk.format(mk.search(home, 'how does the order handler save an order', { project: 'alpha' }));
+      try {
+        // no repo: the old text, exactly (the graph line, the neighbour with its file only)
+        setRepo(null);
+        const plain = showQ();
+        assert.ok(plain.includes('- code OrderHandler (Services/Shop/OrderHandler.cs:7)\n'), 'no repo: the old code line ' + plain);
+        assert.ok(plain.includes('    ↔ OrderRepository (Services/Shop/OrderRepository.cs) calls/implements\n'), 'no repo: the old neighbour line ' + plain);
+        assert.ok(!/✓|not found in repo/.test(plain), 'no repo: no exact marks');
+
+        // a repo folder with the real definitions on other lines than the graph says (graph L7, real line 3)
+        write(path.join(repo, 'Services', 'Shop', 'OrderHandler.cs'), ['using System;', '', 'public class OrderHandler', '{', '    public void Save() { }', '}', ''].join('\n'));
+        write(path.join(repo, 'Services', 'Shop', 'OrderRepository.cs'), ['// repo', 'public class OrderRepository', '{', '}', ''].join('\n'));
+        setRepo(repo);
+        const ok = showQ();
+        assert.ok(ok.includes('- code OrderHandler (Services/Shop/OrderHandler.cs:3 ✓)\n'), 'repo: the code line shows the real line ' + ok);
+        assert.ok(ok.includes('    ↔ OrderRepository (Services/Shop/OrderRepository.cs:2 ✓) calls/implements\n'), 'repo: the neighbour line shows its real line ' + ok);
+        // eval-map: a case with fn is exact when the printed line is the definition on disk; --no-repo keeps the stale graph line (L7, real line 3)
+        {
+          const casesFile = path.join(tmp, 'eval-exact.json');
+          fs.writeFileSync(casesFile, JSON.stringify([{ id: 'T-1', q: 'how does the order handler save an order', set: 'dev', tier: 'easy', project: 'alpha', code: 'OrderHandler', fn: 'OrderHandler', file: 'Services/Shop/OrderHandler\\.cs$' }]));
+          const runEval = (...extra) => require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'eval', 'eval-map.js'), '--project', 'alpha', '--cases', casesFile, '--no-meaning', ...extra], { encoding: 'utf8' }).stdout;
+          const withRepo = runEval();
+          assert.ok(withRepo.includes('exact: 1/1 (100%)'), 'eval: the fn case is exact with the repo ' + withRepo);
+          const noRepo = runEval('--no-repo');
+          assert.ok(noRepo.includes('exact: 0/1 (0%)'), 'eval --no-repo: the stale graph line is not exact ' + noRepo);
+        }
+        // the neighbour's file is gone from the repo: marked as not found, the code line stays exact
+        fs.rmSync(path.join(repo, 'Services', 'Shop', 'OrderRepository.cs'));
+        const nbGone = showQ();
+        assert.ok(nbGone.includes('    ↔ OrderRepository (Services/Shop/OrderRepository.cs, not found in repo) calls/implements\n'), 'repo: a neighbour with a missing file is marked, not dropped ' + nbGone);
+        assert.ok(nbGone.includes('- code OrderHandler (Services/Shop/OrderHandler.cs:3 ✓)\n'), 'repo: the other code line stays exact ' + nbGone);
+
+        // the code line's file is gone from the repo: marked as not found
+        fs.rmSync(path.join(repo, 'Services', 'Shop', 'OrderHandler.cs'));
+        const gone = showQ();
+        assert.ok(gone.includes('- code OrderHandler (Services/Shop/OrderHandler.cs, not found in repo)\n'), 'repo: a missing file is marked ' + gone);
+
+        // a moved file: the class now lives in Moved/OrderHandler.cs (git repo, committed): the line shows the new path, the real line and "moved"
+        const moved = path.join(tmp, 'moved-repo');
+        write(path.join(moved, 'Moved', 'OrderHandler.cs'), ['using System;', '', 'public class OrderHandler', '{', '}', ''].join('\n'));
+        const gitM = (args) => require('child_process').execFileSync('git', ['-C', moved, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', ...args], { stdio: 'pipe' });
+        gitM(['init', '-q']);
+        gitM(['add', '.']);
+        gitM(['commit', '-q', '-m', 'init']);
+        setRepo(moved);
+        const mvd = showQ();
+        assert.ok(mvd.includes('- code OrderHandler (Moved/OrderHandler.cs:3 ✓ moved)\n'), 'moved: the code line shows the new file, line and moved ' + mvd);
+
+        // the repo folder itself is gone: the old text, no marks
+        setRepo(path.join(tmp, 'no-such-folder'));
+        const nofolder = showQ();
+        assert.ok(nofolder.includes('- code OrderHandler (Services/Shop/OrderHandler.cs:7)\n') && !/✓|not found in repo/.test(nofolder), 'a missing repo folder: the old text ' + nofolder);
+      } finally { fs.writeFileSync(projFile, projJson); }
+    }
 
     // a broken map file never throws
     fs.writeFileSync(mk.dbFile(home), 'not a database');

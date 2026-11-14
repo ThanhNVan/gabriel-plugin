@@ -35,7 +35,7 @@ flowchart TD
 | Prompt history | Saves each prompt (redacted). Finds earlier prompts that look alike. Keeps a keyword graph of prompts. | `src/history.js` (`append`, `redact`, `searchHistory`, `formatHistory`, `forget`), `src/graphdb.js` |
 | Hosts | Adapts input and output for each tool: Claude Code, Codex, Gemini CLI, Copilot, generic. | `src/hosts/index.js` (`get`), `src/hosts/claude.js`, `codex.js`, `gemini.js`, `copilot.js`, `generic.js` |
 | Setup and onboarding | Installs packages, makes the data folder, fetches the meaning model, builds graphs and maps, adds doc sets, writes host hooks. | `src/setup.js` (`run`, `update`, `addDocs`, `hostSetup`), `src/migrate-data.js`, `skills/setup/SKILL.md` |
-| Eval and retrain | Scores the map with test questions. Trains new ranking weights and keeps them only when they do not score lower. Optional model tune. | `eval/eval-map.js`, `eval/suggest-cases.js`, `src/retrain.js`, `src/train-rank.js`, `src/tune/tune.js` |
+| Eval and retrain | Scores the map with test questions. Trains new ranking weights and keeps them only when they do not score lower (`--force` keeps them anyway). Optional model tune. | `eval/eval-map.js`, `eval/suggest-cases.js`, `src/retrain.js`, `src/train-rank.js`, `src/tune/tune.js` |
 | Tips | One short tip per session, in the user's view only. | `src/tips.js` (`tipFor`) |
 | Meaning model | A small local model that turns text into numbers, so similar text can match. Loaded without network at prompt time. | `src/embed.js` (`getEmbedder`, `embedNodes`, `readVectors`) |
 
