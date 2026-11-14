@@ -4,6 +4,7 @@
 
 - Code graph path: a missing `graph` file now fails the build with `graph not found: <path>` and keeps the old map. `mk-status all` shows each graph path and `GRAPH MISSING`. `add-docs` asks for the code repo when `--code` is missing. The background check now rebuilds any stale doc set, not only the default one (skipping a set whose graph is missing).
 - Skills show a short hint for each argument.
+- Plainer words for the tips, the setup hint and the `gabriel use` replies. The 📌 pinned line now has a blank line before it. Not pinned, with 2 or more doc sets, each map note ends with a 💡 line that suggests `gabriel use <set>`.
 
 - Pin one doc set per session: the prompt `gabriel use <set>` (a name or alias) makes this session's map search only that set; `gabriel use auto` undoes it; an unknown name lists the sets. While pinned, every gabriel note starts with `📌 pinned: <set>`. Three new tips explain it (`src/pin.js`, `searchAll` `opts.pin`).
 

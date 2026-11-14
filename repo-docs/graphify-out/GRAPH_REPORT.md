@@ -1,178 +1,170 @@
 # Graph Report - gabriel-plugin  (2026-11-14)
 
 ## Corpus Check
-- 118 files · ~104,091 words
+- 118 files · ~104,917 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1238 nodes · 2021 edges · 82 communities (80 shown, 2 thin omitted)
-- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 157 edges (avg confidence: 0.85)
+- 1203 nodes · 1968 edges · 74 communities (71 shown, 3 thin omitted)
+- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 156 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
-- Prompt Hook Tuning Model
-- PDF and Document Extraction
-- Eval Map Runner
-- Node Runtime Utilities
-- Retrain Pipeline
-- ESLint and ML Dependencies
-- Graph DB Storage
-- Setup Options and Skips
+- Architecture and Hook Rules
+- Doc Name Checks
+- Other Hosts Setup
+- Setup Onboarding and Tune
+- Map Build Helpers
+- Module and Dev Docs
+- Document Text Extraction
+- Lint and Model Deps
+- Graph Database Access
 - Update Tests
-- Hook Rules and Brain
 - Workflow Tests
-- Add-Docs Tests
+- Add Docs Tests
 - Setup Tests
 - Data Migration
-- Project Map Core
-- Context Rules Loader
-- Case Suggestions
+- Eval Map Runner
+- Eval Case Suggestions
 - Host Setup Tests
-- Host Index
+- Doc Folder Registration
+- Extract Tests
 - Rank Training Script
-- Background Refresh
+- Doc Set Guides
 - Graph Tests
 - Tune Tests
-- Wide Brain Test
-- Search and Embeddings
+- Wide Test Fixtures
+- Train Tests
 - Brain Tests
-- Public Privacy Check
-- Docs Checker
-- Pin Notes
+- Host Tests
+- Retrain Script
+- Doc Link Checker
+- Pin File
 - History Tests
-- Setup Steps and Doc Guides
-- Tips
-- Eval Model
+- Eval Model Grid
+- Background Map Rebuild
 - Hook Freshness Tests
-- Hook Measurement
+- Hook Timing Measure
+- Chain and Graph Helpers
+- Eval Pair Export
 - Public Check Tests
 - Map Tests
-- Tune Pairs Tests
-- Business Rules and Map Docs
-- Setup and Build Map
-- Eval and Retrain Docs
-- Dq Cache
-- Map Database Helpers
-- Projects Tests
-- Paths and Hosts
-- Doc Set Guides
-- Ranking and Eval Docs
-- Embedding Model
-- Host Hook Adapters
-- Architecture Docs
-- Doc Path Helpers
-- Map Builder
+- Tune Pair Tests
+- Routing and Architecture Docs
+- Tips Feature
+- Project Tests
+- Host and Privacy Guides
+- Host Paths
+- Recall and Dedupe Rules
+- Eval Rerank
 - ONNX Export
-- Test Runner
 - Embed Model Tests
-- Dedupe and Hook Rules
-- Eval Rules
-- Corpus Maker
-- Doc Family Builder
-- Check-Docs Tests
+- Rule Eval
+- Add and Update Workflows
+- Eval and Refresh Workflows
+- Corpus Builder
+- Doc Check Tests
 - Test Utilities
-- Paths Tests
+- Path Tests
 - Plain Docs Tests
+- Keep Tune Tests
 - Version Tests
-- Prompt History Docs
-- Domain Map Docs
-- Workflow Guide
-- Build Lock and Refresh
-- Atomic Writes and Rules
-- Eval and Doc Readers
+- Business Docs Index
+- Learning From Use
 - Lint Tests
 - Mermaid Tests
-- Changelog and Pinning
-- Transformer Export Script
-- Learned Link Weights
+- Retrieval Tests
+- Changelog and Session Pin
+- Default Preferences
+- ONNX Export Script
 - Training Script
-- Default Rules and Preferences
-- Doc File Discovery
+- Learned Links
 - ESLint Config
-- Map Skill Docs
+- Map Rules
+- Map Skill
 
 ## God Nodes (most connected - your core abstractions)
-1. `build()` - 29 edges
-2. `addDocs()` - 23 edges
-3. `getProject()` - 22 edges
-4. `update()` - 21 edges
+1. `getProject()` - 23 edges
+2. `build()` - 22 edges
+3. `search()` - 22 edges
+4. `addDocs()` - 22 edges
 5. `main()` - 21 edges
 6. `extractText()` - 20 edges
-7. `search()` - 20 edges
-8. `dataDir()` - 20 edges
-9. `loadProjects()` - 19 edges
-10. `run()` - 19 edges
+7. `dataDir()` - 20 edges
+8. `loadProjects()` - 19 edges
+9. `dataDir()` - 17 edges
+10. `update()` - 17 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Setup steps (10 steps)` --references--> `hostSetup()`  [INFERRED]
-  docs/ARCHITECTURE.md → src/setup.js
-- `R17 the old map serves until the new one is ready` --semantically_similar_to--> `Hook never blocks a prompt (fail open)`  [INFERRED] [semantically similar]
-  repo-docs/business/02-business-rules.md → docs/ARCHITECTURE.md
-- `Workflows guide (step by step flows)` --references--> `searchFull()`  [EXTRACTED]
-  docs/WORKFLOWS.md → src/brain.js
-- `W01 one prompt` --references--> `searchFull()`  [EXTRACTED]
-  repo-docs/business/workflows/W01-one-prompt.md → src/brain.js
-- `Workflows guide (step by step flows)` --references--> `registerNewDocFolders()`  [EXTRACTED]
-  docs/WORKFLOWS.md → src/brain.js
+- `add-docs --relink mode` --references--> `addDocs()`  [EXTRACTED]
+  repo-docs/business/workflows/W03-add-docs.md → src/setup.js
+- `Workflows guide` --semantically_similar_to--> `W01 one prompt`  [INFERRED] [semantically similar]
+  docs/WORKFLOWS.md → repo-docs/business/workflows/W01-one-prompt.md
+- `Workflows guide` --semantically_similar_to--> `W02 first setup and onboarding`  [INFERRED] [semantically similar]
+  docs/WORKFLOWS.md → repo-docs/business/workflows/W02-first-setup-and-onboarding.md
+- `touched()` --references--> `45-minute learning window`  [EXTRACTED]
+  src/mk.js → repo-docs/business/workflows/W05-learning-from-use.md
+- `W03 Add docs` --references--> `checkName()`  [EXTRACTED]
+  repo-docs/business/workflows/W03-add-docs.md → src/paths.js
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
-- **One prompt flow through the hook and the map** — src_brain_hook, src_brain_gather, src_brain_searchfull, src_mk_searchall, src_mk_format, src_brain_dedupe, src_history_append, src_hosts_claude_writeoutput [EXTRACTED 1.00]
-- **Keep new weights only when they score no worse** — repo_docs_business_02_business_rules_r26_retrain_keep, repo_docs_business_02_business_rules_r27_tune_keep, docs_tuning_keep_rule, docs_eval_retrain_keep_rule, src_retrain_keepnew, src_tune_tune_decide [INFERRED 0.75]
-- **A failed step keeps the old working state** — docs_architecture_fail_open, repo_docs_business_02_business_rules_r01_hook_never_blocks, repo_docs_business_02_business_rules_r17_old_map_serves, src_brain_hook, src_mk_build [INFERRED 0.75]
-- **Map rebuild flow** — repo_docs_business_workflows_w04_update_and_auto_add_update, repo_docs_business_workflows_w04_update_and_auto_add_refreshmapinbackground, repo_docs_business_workflows_w04_update_and_auto_add_registernewdocfolders, repo_docs_business_workflows_w04_update_and_auto_add_mkstale, repo_docs_business_workflows_w03_add_docs_buildmk [EXTRACTED 1.00]
-- **Retrain keep loop** — repo_docs_business_workflows_w06_eval_and_retrain_retrainjs, repo_docs_business_workflows_w06_eval_and_retrain_trainrank, repo_docs_business_workflows_w06_eval_and_retrain_evalmap, repo_docs_business_workflows_w06_eval_and_retrain_keeprule [INFERRED 0.85]
-- **Host adapters** — repo_docs_business_workflows_w08_other_hosts_hostsindex, repo_docs_business_workflows_w08_other_hosts_codexadapter, repo_docs_business_workflows_w08_other_hosts_geminiadapter, repo_docs_business_workflows_w08_other_hosts_copilotadapter, repo_docs_business_workflows_w08_other_hosts_genericadapter [EXTRACTED 1.00]
+- **One prompt flow** — repo_docs_business_workflows_w01_one_prompt, repo_docs_business_workflows_w01_one_prompt_hook, repo_docs_business_02_business_rules_r03_rules_block_limits, repo_docs_business_02_business_rules_r07_item_not_sent_twice, repo_docs_business_02_business_rules_r08_map_block_limits, docs_architecture_spreading_search [INFERRED 0.75]
+- **Learning loop** — docs_architecture_learning, repo_docs_business_03_state_machines_learned_link, repo_docs_business_02_business_rules_r23_learned_link_confirmations, repo_docs_business_02_business_rules_r24_learned_never_start_search, docs_architecture_map [INFERRED 0.75]
+- **Keep new weights or model only if better** — repo_docs_business_02_business_rules_r26_retrain_keeps_weights, repo_docs_business_02_business_rules_r27_tune_keeps_model, docs_eval_retrain, docs_tuning_keep_rule, docs_eval_strict_score [INFERRED 0.75]
+- **Learning from use** — repo_docs_business_workflows_w05_learning_from_use_learn_window, src_mk_remember, src_mk_touched, repo_docs_business_workflows_w05_learning_from_use_learned_link [EXTRACTED 1.00]
+- **Background map rebuild** — repo_docs_business_workflows_w04_update_and_auto_add_background_run, src_mk_stale, repo_docs_technical_01_architecture_background_rebuild, src_setup_update [INFERRED 0.85]
+- **Host hook writes need --apply** — repo_docs_business_workflows_w08_other_hosts_apply_rule, src_hosts_codex, src_hosts_gemini, src_setup [INFERRED 0.75]
 
-## Communities (82 total, 2 thin omitted)
+## Communities (74 total, 3 thin omitted)
 
-### Community 0 - "Prompt Hook Tuning Model"
+### Community 0 - "Architecture and Hook Rules"
 Cohesion: 0.05
-Nodes (57): R27 tuned model is kept only when it wins, casesFile(), { embedText }, exportPairs(), fs, { loadProjects, getProject }, mk, mulberry32() (+49 more)
+Nodes (79): Architecture doc, Local only: the hook never downloads, Never block a prompt, Session dedupe, status skill, capText(), contextArgs(), contextText() (+71 more)
 
-### Community 1 - "PDF and Document Extraction"
+### Community 1 - "Doc Name Checks"
 Cohesion: 0.08
-Nodes (47): adocText(), delimited(), docxText(), elems(), ENT, extractText(), fs, htmlText() (+39 more)
+Nodes (50): Code graph must exist before any write, extSet(), isDocName(), skipName(), ADD_SKIP, addDocs(), addGabriel(), buildMap() (+42 more)
 
-### Community 2 - "Eval Map Runner"
-Cohesion: 0.09
-Nodes (38): argv, evalProject(), flag(), fs, { getEmbedder }, { homeDir }, judge(), judgeRendered() (+30 more)
-
-### Community 3 - "Node Runtime Utilities"
+### Community 2 - "Other Hosts Setup"
 Cohesion: 0.07
-Nodes (23): os, path, { readCommon }, os, path, { readCommon, toolInput, pathsFrom }, readTouched(), path (+15 more)
+Nodes (26): W08 Other hosts, Hook files change only with --apply after a backup, os, path, { readCommon }, os, path, { readCommon, toolInput, pathsFrom } (+18 more)
 
-### Community 4 - "Retrain Pipeline"
-Cohesion: 0.06
-Nodes (26): casesFile, { execFileSync }, fs, { getProject }, mk, os, P, path (+18 more)
+### Community 3 - "Setup Onboarding and Tune"
+Cohesion: 0.08
+Nodes (41): setup skill, First-run onboarding (four steps), modelsDir(), Python tune packages (requirements.txt), ask(), bar(), BRAIN, capture() (+33 more)
 
-### Community 5 - "ESLint and ML Dependencies"
+### Community 4 - "Map Build Helpers"
+Cohesion: 0.08
+Nodes (35): pinNote(), AUTO_SKIP, build(), camel(), canon(), CHAIN_DEFAULT, CHAIN_VERBS, chunkDoc() (+27 more)
+
+### Community 5 - "Module and Dev Docs"
+Cohesion: 0.08
+Nodes (30): Modules doc, Dev workflow doc, Findings doc, Chain setting rests on 12 questions, Pin file expires after 7 days, Skipped checks count as passed, Technical docs index, files (+22 more)
+
+### Community 6 - "Document Text Extraction"
+Cohesion: 0.16
+Nodes (29): adocText(), delimited(), docxText(), elems(), ENT, extractText(), fs, htmlText() (+21 more)
+
+### Community 7 - "Lint and Model Deps"
 Cohesion: 0.07
 Nodes (29): eslint, @eslint/js, globals, @huggingface/transformers, jsdom, dependencies, @huggingface/transformers, description (+21 more)
 
-### Community 6 - "Graph DB Storage"
-Cohesion: 0.11
-Nodes (25): R06 prompt history hides secrets, dbFile(), fs, history, lexical(), open(), path, sync() (+17 more)
-
-### Community 7 - "Setup Options and Skips"
+### Community 8 - "Graph Database Access"
 Cohesion: 0.10
-Nodes (29): OPT_IN, SUPPORTED, ADD_SKIP, addGabriel(), CODE_EXT, dirBytes(), fetchModel(), findPython() (+21 more)
+Nodes (25): dbFile(), fs, history, lexical(), open(), path, sync(), append() (+17 more)
 
-### Community 8 - "Update Tests"
+### Community 9 - "Update Tests"
 Cohesion: 0.07
 Nodes (21): assert, casesFile, casesHash, crypto, data, docs, env, filler (+13 more)
-
-### Community 9 - "Hook Rules and Brain"
-Cohesion: 0.13
-Nodes (26): R01 hook never blocks a prompt, R07 an item is not sent twice in one session, W01 one prompt, capText(), contextArgs(), contextText(), dedupe(), emit() (+18 more)
 
 ### Community 10 - "Workflow Tests"
 Cohesion: 0.08
 Nodes (21): assert, BASE_ENV, BRAIN, CLAUDE_HOME, CODEX_HOME, DATA, ENV, fs (+13 more)
 
-### Community 11 - "Add-Docs Tests"
+### Community 11 - "Add Docs Tests"
 Cohesion: 0.08
 Nodes (20): assert, BRAIN, crypto, data, entry(), env, filler, fixture (+12 more)
 
@@ -184,33 +176,33 @@ Nodes (22): assert, before, crypto, d2, d3, docs2, env, filler (+14 more)
 Cohesion: 0.11
 Nodes (21): crypto, { dataDir, checkName }, expand(), fs, hashFile(), migrate(), MOVES, path (+13 more)
 
-### Community 14 - "Project Map Core"
-Cohesion: 0.10
-Nodes (23): AUTO_SKIP, canon(), CHAIN_VERBS, chunkDoc(), clean(), CODE_FILLER, CODE_SYN, coreRe (+15 more)
+### Community 14 - "Eval Map Runner"
+Cohesion: 0.18
+Nodes (21): argv, evalProject(), flag(), fs, { getEmbedder }, { homeDir }, judge(), judgeRendered() (+13 more)
 
-### Community 15 - "Context Rules Loader"
-Cohesion: 0.17
-Nodes (22): contextFile(), addPrivateThesaurus(), blocks(), build(), expand(), fresh(), fs, graphFile() (+14 more)
-
-### Community 16 - "Case Suggestions"
+### Community 15 - "Eval Case Suggestions"
 Cohesion: 0.13
 Nodes (20): covered(), esc(), fs, { getProject }, headingKeys(), mk, newSuggestions(), norm() (+12 more)
 
-### Community 17 - "Host Setup Tests"
+### Community 16 - "Host Setup Tests"
 Cohesion: 0.09
 Nodes (15): assert, codexFile, crypto, env, fs, geminiFile, home, originalHash (+7 more)
 
-### Community 18 - "Host Index"
+### Community 17 - "Doc Folder Registration"
+Cohesion: 0.20
+Nodes (20): registerNewDocFolders(), touchedHook(), checkName(), dataDir(), docsDir(), privateDir(), projectsFile(), { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles } (+12 more)
+
+### Community 18 - "Extract Tests"
 Cohesion: 0.11
-Nodes (16): HOSTS, assert, baseEnv(), BRAIN, codexHome, data, fakeHome, fs (+8 more)
+Nodes (19): assert, check(), data, DOCX, ex, fs, home, main() (+11 more)
 
 ### Community 19 - "Rank Training Script"
 Cohesion: 0.10
 Nodes (15): argv, casesFile, EXCLUDE, fs, { getEmbedder }, { getProject }, { homeDir }, LAMBDA (+7 more)
 
-### Community 20 - "Background Refresh"
-Cohesion: 0.19
-Nodes (18): pinNote(), refreshMapInBackground(), registerNewDocFolders(), touchedHook(), dataDir(), projectsFile(), { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles }, DEFAULTS (+10 more)
+### Community 20 - "Doc Set Guides"
+Cohesion: 0.16
+Nodes (19): Adding doc sets guide, Code graph link in add-docs (--code), Doc layout guide, Lean doc rules, Eval and training guide, Leave-one-area-out score, Retrain (keep better weights), Strict score (+11 more)
 
 ### Community 21 - "Graph Tests"
 Cohesion: 0.11
@@ -220,245 +212,209 @@ Nodes (18): assert, cli, { DatabaseSync }, filler, fs, gdb, history, home (+10 m
 Cohesion: 0.11
 Nodes (15): assert, base, BASE_SRC, BRAIN, CFG, DOCS, fs, GDATA (+7 more)
 
-### Community 23 - "Wide Brain Test"
+### Community 23 - "Wide Test Fixtures"
 Cohesion: 0.11
 Nodes (15): brain, BRAINDIR, FILL, FILL_S, FILL_T, fs, history, MAY_HIT (+7 more)
 
-### Community 24 - "Search and Embeddings"
-Cohesion: 0.18
-Nodes (17): refreshInBackground(), search(), searchFull(), crypto, { dataDir, writeAtomic }, ehash(), embedders, { embedModel, DEFAULT_EMBED_MODEL } (+9 more)
+### Community 24 - "Train Tests"
+Cohesion: 0.12
+Nodes (15): reason(), assert, base, cli(), CORPUS, DATA, EMPTY, env (+7 more)
 
 ### Community 25 - "Brain Tests"
 Cohesion: 0.12
 Nodes (15): assert, brain, { brainPath, tempHome, runBrain }, dims(), fake(), fs, g, h1 (+7 more)
 
-### Community 26 - "Public Privacy Check"
-Cohesion: 0.19
-Nodes (16): DEFAULT_ROOT, escapeRe(), findWordsFile(), fs, gitLines(), isSkipped(), kindsForLine(), listFiles() (+8 more)
+### Community 26 - "Host Tests"
+Cohesion: 0.12
+Nodes (15): assert, baseEnv(), BRAIN, codexHome, data, fakeHome, fs, hosts (+7 more)
 
-### Community 27 - "Docs Checker"
+### Community 27 - "Retrain Script"
+Cohesion: 0.12
+Nodes (12): casesFile, { execFileSync }, fs, { getProject }, keepNew(), mk, os, P (+4 more)
+
+### Community 28 - "Doc Link Checker"
 Cohesion: 0.23
 Nodes (13): checkFile(), codeBlockHits(), codeMask(), fenceBlocks(), fs, lineNumberHits(), linkHits(), path (+5 more)
 
-### Community 28 - "Pin Notes"
+### Community 29 - "Pin File"
 Cohesion: 0.18
 Nodes (13): { dataDir }, fs, getPin(), parsePin(), path, seenFile(), setPin(), assert (+5 more)
 
-### Community 29 - "History Tests"
+### Community 30 - "History Tests"
 Cohesion: 0.16
 Nodes (13): hook(), assert, fs, histDir(), history, historyPath, path, runForget() (+5 more)
 
-### Community 30 - "Setup Steps and Doc Guides"
-Cohesion: 0.19
-Nodes (14): Setup steps (10 steps), business and technical doc folders, Lean rules for code docs, Doc layout for a code base, Workflow page parts (trigger, steps, diagram, rules, result), expandHome(), main(), parseArgs() (+6 more)
-
-### Community 31 - "Tips"
-Cohesion: 0.16
-Nodes (12): Tips: one per session, user view only, fs, path, paths, tipFor(), TIPS, assert, DATA (+4 more)
-
-### Community 32 - "Eval Model"
+### Community 31 - "Eval Model Grid"
 Cohesion: 0.15
 Nodes (12): { dataDir }, fs, gi, grid, home, judge(), mk, MODELS (+4 more)
+
+### Community 32 - "Background Map Rebuild"
+Cohesion: 0.24
+Nodes (14): Background run from the prompt hook, Rebuild maps in the background with locks, dbFile(), effective(), hadMap(), hasMap(), integrate(), learnShow() (+6 more)
 
 ### Community 33 - "Hook Freshness Tests"
 Cohesion: 0.14
 Nodes (11): assert, brain, cwd, dataDir, env, fs, home, os (+3 more)
 
-### Community 34 - "Hook Measurement"
+### Community 34 - "Hook Timing Measure"
 Cohesion: 0.15
 Nodes (12): assert, fs, GENERIC, mk, owner, ownFile, path, paths (+4 more)
 
-### Community 35 - "Public Check Tests"
+### Community 35 - "Chain and Graph Helpers"
+Cohesion: 0.23
+Nodes (13): chainNum(), coreDoc(), docsRoot(), expand(), f32(), graphOnDisk(), graphPathOf(), isFallback() (+5 more)
+
+### Community 36 - "Eval Pair Export"
+Cohesion: 0.22
+Nodes (11): casesFile(), { embedText }, exportPairs(), fs, { loadProjects, getProject }, mk, mulberry32(), path (+3 more)
+
+### Community 37 - "Public Check Tests"
 Cohesion: 0.22
 Nodes (12): assert, fs, J(), made, main(), makeTree(), mkTmp(), os (+4 more)
 
-### Community 36 - "Map Tests"
+### Community 38 - "Map Tests"
 Cohesion: 0.15
 Nodes (11): assert, fs, home, links, mk, nodes, os, path (+3 more)
 
-### Community 37 - "Tune Pairs Tests"
+### Community 39 - "Tune Pair Tests"
 Cohesion: 0.15
 Nodes (10): assert, base, DATA, DOCS, fs, HOME, os, path (+2 more)
 
-### Community 38 - "Business Rules and Map Docs"
-Cohesion: 0.20
-Nodes (12): A map is a lead, not proof, Pros and cons: the setup pays off later, Business rules (R01 to R33), R13 a map is a lead, not proof, R16 a map is rebuilt when its sources change, R17 the old map serves until the new one is ready, R23 a learned link needs two confirmations and fades, R30 nothing leaves the machine after setup (+4 more)
+### Community 40 - "Routing and Architecture Docs"
+Cohesion: 0.23
+Nodes (12): Architecture guide, Doc-set map, Question index, Routing and fallback, R09 One doc set leads, a close second gets a short block, R10 General docs answer only when no doc set does, R11 Session gate (opt-in), R12 A named doc set gets the prompt first (+4 more)
 
-### Community 39 - "Setup and Build Map"
-Cohesion: 0.20
-Nodes (10): setup.js addDocs(), brain.js build-mk step, Code graph must exist before any write, W03 Add docs, add-docs --relink mode, add-docs skill, Helper tools (graphify, superpowers, ponytail), First-run onboarding (+2 more)
-
-### Community 40 - "Eval and Retrain Docs"
+### Community 41 - "Tips Feature"
 Cohesion: 0.18
-Nodes (12): eval/eval-map.js, W06 Eval and retrain, retrain.js, train-rank.js, Find the docs a code change touches, graphify update step, W07 Refresh docs, Shrink docs while keeping every key idea (+4 more)
+Nodes (10): fs, path, paths, TIPS, assert, DATA, fs, os (+2 more)
 
-### Community 41 - "Dq Cache"
-Cohesion: 0.27
-Nodes (11): cache, { dataDir }, embedAll(), { embedModel, DEFAULT_EMBED_MODEL }, files(), fs, load(), path (+3 more)
-
-### Community 42 - "Map Database Helpers"
-Cohesion: 0.30
-Nodes (12): dbFile(), hadMap(), hasMap(), learnReset(), learnShow(), legacyProject(), openMain(), openRw() (+4 more)
-
-### Community 43 - "Projects Tests"
+### Community 42 - "Project Tests"
 Cohesion: 0.17
 Nodes (9): assert, dir, fs, later, m, os, path, ps (+1 more)
 
-### Community 44 - "Paths and Hosts"
+### Community 43 - "Host and Privacy Guides"
+Cohesion: 0.18
+Nodes (11): Hosts guide, Copilot cannot get the map on each prompt, Host adapter (src/hosts), Privacy guide, Nothing leaves the machine after setup, Prompt history redaction, R02 Short and slash prompts get no context, R06 Prompt history hides secrets (+3 more)
+
+### Community 44 - "Host Paths"
 Cohesion: 0.24
 Nodes (9): activeHost(), defaultRuleFiles(), fs, hostAdapter(), hosts, os, path, pluginRoot() (+1 more)
 
-### Community 45 - "Doc Set Guides"
-Cohesion: 0.24
-Nodes (10): --code needs graphify-out/graph.json, no fallback to docs folder, Doc set: one folder of docs, Adding doc sets guide, projects.json fields (aliases, cwdHints, sessionGate), Map build (doc sets and code links), Routing and fallback doc set, graph not found error when a map is built, Troubleshooting guide (+2 more)
-
-### Community 46 - "Ranking and Eval Docs"
+### Community 45 - "Recall and Dedupe Rules"
 Cohesion: 0.22
-Nodes (10): Question index (optional), Ranking and trained rank weights, Eval case format, Leave-one-area-out honest score, Eval and training guide, Retrain keeps new weights only when strict count is not lower, Tuned model keep rule, Tuning the meaning model guide (+2 more)
+Nodes (10): projects.json fields, Two links away step, Dedupe per session, Spreading search (firing), R01 Hook never blocks a prompt, R07 An item is not sent twice in one session, R08 Map block: 6 doc hits, 6 code hits, 2200 characters, R34 Two links away: code names (+2 more)
 
-### Community 47 - "Embedding Model"
+### Community 46 - "Eval Rerank"
 Cohesion: 0.20
-Nodes (10): Keep new weights only if strict score does not fall, src/embed.js meaning model, Local only, no download in the hook, src/setup.js, Tuning scripts (src/tune, retrain, train-rank), A tuned model wins only on scores, eval/suggest-cases.js, setup skill (+2 more)
+Nodes (9): argv, fs, { getEmbedder }, { homeDir }, { judge, judgeRendered }, mk, opt(), path (+1 more)
 
-### Community 48 - "Host Hook Adapters"
-Cohesion: 0.20
-Nodes (10): Host hook files change only with --apply after a backup, hosts/codex.js adapter, hosts/copilot.js adapter, hosts/gemini.js adapter, hosts/generic.js adapter, setup.js hostSetup(), hosts/index.js get(), W08 Other hosts (+2 more)
-
-### Community 49 - "Architecture Docs"
-Cohesion: 0.31
-Nodes (10): Architecture page, tools/check-public.js privacy scan, Modules page, Dev workflow page, Release steps, test/run-all.js, Undeclared dompurify dependency, Findings page (+2 more)
-
-### Community 50 - "Doc Path Helpers"
-Cohesion: 0.27
-Nodes (10): coreDoc(), docsRoot(), expand(), f32(), graphOnDisk(), graphPathOf(), loadRank(), mkSynonyms() (+2 more)
-
-### Community 51 - "Map Builder"
-Cohesion: 0.31
-Nodes (10): checkName(), docsDir(), addDocs(), buildMap(), codeHintName(), countLine(), graphRel(), hasCodeFiles() (+2 more)
-
-### Community 52 - "ONNX Export"
+### Community 47 - "ONNX Export"
 Cohesion: 0.22
 Nodes (8): exportOnnx(), fs, os, path, SCRIPT, { spawnSync }, TOKEN_FILES, venvPython()
 
-### Community 53 - "Test Runner"
-Cohesion: 0.20
-Nodes (7): files, fs, LOCK, path, ROOT, scan, { spawnSync }
-
-### Community 54 - "Embed Model Tests"
+### Community 48 - "Embed Model Tests"
 Cohesion: 0.20
 Nodes (8): assert, base, embed, { embedModel, DEFAULT_EMBED_MODEL }, fs, os, path, ROOT
 
-### Community 55 - "Dedupe and Hook Rules"
-Cohesion: 0.31
-Nodes (9): Dedupe: an item is not sent twice per session, Hook never blocks a prompt (fail open), Learning from use, gabriel architecture, Quiet gate: best score must reach 0.65, Spreading search (map firing), Neuron (one doc section or code name in the map), Glossary (+1 more)
-
-### Community 56 - "Eval Rules"
+### Community 49 - "Rule Eval"
 Cohesion: 0.22
 Nodes (7): brain, CASES, fs, home, mk, path, PRIVATE_CASES
 
-### Community 57 - "Corpus Maker"
+### Community 50 - "Add and Update Workflows"
+Cohesion: 0.22
+Nodes (9): W03 Add docs, New projects.json entry for a doc set, add-docs --relink mode, Size limit: over 20000 files or 500 MB needs --yes, W04 Update and auto-add, --dry-run mode, Register new doc folders, add-docs skill (+1 more)
+
+### Community 51 - "Eval and Refresh Workflows"
+Cohesion: 0.25
+Nodes (9): W06 Eval and retrain, Keep new weights only when strict score does not fall, W07 Refresh docs, graphify update step, Ask before --force when node count falls, Shrink docs and keep every key idea, refresh-docs skill, retrain skill (+1 more)
+
+### Community 52 - "Corpus Builder"
 Cohesion: 0.25
 Nodes (8): clean(), fs, LICENSE, out, path, paths, SKIP_DIR, walk()
 
-### Community 58 - "Doc Family Builder"
-Cohesion: 0.31
-Nodes (9): build(), camel(), families(), listDocs(), roleWords(), slug(), sources(), spansOf() (+1 more)
-
-### Community 59 - "Check-Docs Tests"
+### Community 53 - "Doc Check Tests"
 Cohesion: 0.22
 Nodes (7): assert, CHECK, fs, os, path, ROOT, { spawnSync }
 
-### Community 60 - "Test Utilities"
+### Community 54 - "Test Utilities"
 Cohesion: 0.22
 Nodes (8): home(), brainPath, fs, homes, os, path, { spawnSync }, tempHome()
 
-### Community 61 - "Paths Tests"
+### Community 55 - "Path Tests"
 Cohesion: 0.22
 Nodes (7): assert, fs, old, os, p, path, tmpHome
 
-### Community 62 - "Plain Docs Tests"
+### Community 56 - "Plain Docs Tests"
 Cohesion: 0.22
 Nodes (8): assert, data, fs, home, mk, os, path, tmp
 
-### Community 63 - "Version Tests"
+### Community 57 - "Keep Tune Tests"
+Cohesion: 0.22
+Nodes (8): assert, BASE, DATA, fs, os, path, ROOT, T
+
+### Community 58 - "Version Tests"
 Cohesion: 0.22
 Nodes (7): assert, fs, market, path, pkg, plugin, ROOT
 
-### Community 64 - "Prompt History Docs"
-Cohesion: 0.29
-Nodes (8): Prompt history and similar earlier prompts, Host adapter (reads input, writes output per tool), Copilot ignores hook output, so it must call gabriel itself, Hosts guide, Shared data folder across hosts, Nothing leaves the machine after setup, Privacy guide, Prompt history redaction patterns
+### Community 59 - "Business Docs Index"
+Cohesion: 0.50
+Nodes (8): Domain map, Setup and onboarding part, Business rules, State machines, Glossary, Business docs index, W02 first setup and onboarding, Repo docs index
 
-### Community 65 - "Domain Map Docs"
-Cohesion: 0.25
-Nodes (8): Domain map, Ten parts, each with one owner file, R26 retrain keeps new weights only when strict score is not lower, Business docs index, W02 first setup and onboarding, gabriel repo docs index, writeOutput(), keepNew()
+### Community 60 - "Learning From Use"
+Cohesion: 0.32
+Nodes (8): W05 Learning from use, 45-minute learning window, Learned link weight and two confirmations, learnReset(), mapFile(), openRw(), remember(), touched()
 
-### Community 66 - "Workflow Guide"
-Cohesion: 0.38
-Nodes (7): Workflows guide (step by step flows), effective(), integrate(), isFallback(), mapFile(), remember(), touched()
-
-### Community 67 - "Build Lock and Refresh"
-Cohesion: 0.38
-Nodes (7): Background build lock (one build at a time), mk.js stale(), W04 Update and auto-add, refreshMapInBackground(), registerNewDocFolders(), setup.js update(), Rebuild in the background with locks
-
-### Community 68 - "Atomic Writes and Rules"
-Cohesion: 0.29
-Nodes (7): Atomic writes (temp file then rename), src/brain.js entry, Never block a prompt, src/rules.js rules graph, Session dedupe, hooks/hooks.json, status skill
-
-### Community 69 - "Eval and Doc Readers"
-Cohesion: 0.29
-Nodes (7): eval/ scoring scripts, src/extract.js doc readers, src/mk.js project map, node:sqlite, not a native package, src/projects.js, src/dq.js question index, Q_GATE dead option in mk.js
-
-### Community 70 - "Lint Tests"
+### Community 61 - "Lint Tests"
 Cohesion: 0.29
 Nodes (6): bin, fs, path, r, ROOT, { spawnSync }
 
-### Community 71 - "Mermaid Tests"
+### Community 62 - "Mermaid Tests"
 Cohesion: 0.29
 Nodes (5): dom, fs, path, ROOT, SKIP
 
-### Community 72 - "Changelog and Pinning"
-Cohesion: 0.60
-Nodes (5): gabriel changelog, Pin one doc set per session (gabriel use), R12 a named doc set gets the prompt first, namedProjects(), searchAll()
+### Community 63 - "Retrieval Tests"
+Cohesion: 0.33
+Nodes (5): assert, fs, mk, os, path
 
-### Community 73 - "Transformer Export Script"
+### Community 64 - "Changelog and Session Pin"
+Cohesion: 0.40
+Nodes (5): CHANGELOG, Code docs folder layout, Session pin (gabriel use), R35 Session pin, Onboarding steps (helper tools, graph, docs, stack docs)
+
+### Community 65 - "Default Preferences"
+Cohesion: 0.40
+Nodes (5): Default preferences file, Default working rules (preferences), Rules graph, R03 Rules block: 6 rules, 2400 characters, R15 Default preferences only without preferences.md
+
+### Community 66 - "ONNX Export Script"
 Cohesion: 0.60
 Nodes (4): Path, find_transformer_dir(), main(), Export a trained sentence-transformers model to ONNX and quantize it to 8 bit.…
 
-### Community 74 - "Learned Link Weights"
-Cohesion: 0.40
-Nodes (5): Learned link weight update, mk.js remember() and last table, mk.js touched(), W05 Learning from use, brain.js touchedHook()
-
-### Community 75 - "Training Script"
+### Community 67 - "Training Script"
 Cohesion: 0.60
 Nodes (3): main(), parse_args(), read_pairs()
 
-### Community 76 - "Default Rules and Preferences"
-Cohesion: 0.50
-Nodes (4): Default working rules used when no preferences.md exists, Default preferences file, Rules graph, R03 rules block caps (6 rules, 2400 characters)
-
-### Community 77 - "Doc File Discovery"
-Cohesion: 0.67
-Nodes (4): extSet(), isDocName(), countDocs(), listDocFiles()
+### Community 68 - "Learned Links"
+Cohesion: 1.00
+Nodes (4): Learning from use, R23 A learned link needs two confirmations and fades, R24 Learned links never start a search, Learned link states
 
 ## Knowledge Gaps
-- **622 isolated node(s):** `globals`, `fs`, `path`, `{ homeDir }`, `paths` (+617 more)
+- **607 isolated node(s):** `globals`, `fs`, `path`, `{ homeDir }`, `paths` (+602 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `writeOutput()` connect `Domain Map Docs` to `Hook Rules and Brain`, `Node Runtime Utilities`?**
-  _High betweenness centrality (0.033) - this node is a cross-community bridge._
-- **Why does `Workflows guide (step by step flows)` connect `Workflow Guide` to `Eval Map Runner`, `Graph DB Storage`, `Setup Options and Skips`, `Changelog and Pinning`, `Hook Rules and Brain`, `Data Migration`, `Ranking and Eval Docs`, `Background Refresh`, `Dedupe and Hook Rules`, `Search and Embeddings`, `Doc Family Builder`, `Setup Steps and Doc Guides`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `addDocs()` connect `Map Builder` to `PDF and Document Extraction`, `Business Rules and Map Docs`, `Setup Options and Skips`, `Paths and Hosts`, `Doc Set Guides`, `Doc File Discovery`, `Background Refresh`, `Doc Family Builder`, `Setup Steps and Doc Guides`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
-- **Are the 3 inferred relationships involving `build()` (e.g. with `refreshMapInBackground()` and `mk.js`) actually correct?**
-  _`build()` has 3 INFERRED edges - model-reasoned connections that need verification._
+- **Why does `Modules doc` connect `Module and Dev Docs` to `Architecture and Hook Rules`, `Doc Name Checks`, `Setup Onboarding and Tune`, `Map Build Helpers`, `Eval Map Runner`, `Eval Case Suggestions`, `Rank Training Script`, `Retrain Script`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `Technical docs index` connect `Module and Dev Docs` to `Architecture and Hook Rules`?**
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
 - **What connects `globals`, `fs`, `path` to the rest of the system?**
-  _622 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Prompt Hook Tuning Model` be split into smaller, more focused modules?**
-  _Cohesion score 0.053005464480874315 - nodes in this community are weakly interconnected._
-- **Should `PDF and Document Extraction` be split into smaller, more focused modules?**
-  _Cohesion score 0.07686274509803921 - nodes in this community are weakly interconnected._
+  _607 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Architecture and Hook Rules` be split into smaller, more focused modules?**
+  _Cohesion score 0.05289450484866295 - nodes in this community are weakly interconnected._
+- **Should `Doc Name Checks` be split into smaller, more focused modules?**
+  _Cohesion score 0.0815686274509804 - nodes in this community are weakly interconnected._
+- **Should `Other Hosts Setup` be split into smaller, more focused modules?**
+  _Cohesion score 0.06553911205073996 - nodes in this community are weakly interconnected._
+- **Should `Setup Onboarding and Tune` be split into smaller, more focused modules?**
+  _Cohesion score 0.08246225319396051 - nodes in this community are weakly interconnected._

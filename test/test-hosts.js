@@ -127,7 +127,7 @@ const run = (args, input, extra = {}) => spawnSync(process.execPath, [BRAIN, ...
   const input = JSON.stringify({ session_id: 'golden-1', cwd: 'C:\\work\\demo', prompt: PROMPT });
   const r = run(['hook'], input, { BRAIN_HOME: claudeHome, GABRIEL_DATA: claudeData });
   assert.strictEqual(r.status, 0, r.stderr);
-  const golden = '{"systemMessage":"📏 Rules that apply\\n   • Run the unit tests before saying the work is done and report the result.  (test-rules)\\ngabriel: run /gabriel:setup to finish install","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Relevant rules from the brain graph (matched to this prompt):\\n- [memory/feedback-tests.md > test-rules] Run the unit tests before saying the work is done and report the result."}}';
+  const golden = '{"systemMessage":"📏 Rules that apply\\n   • Run the unit tests before saying the work is done and report the result.  (test-rules)\\ngabriel is not set up yet. Run /gabriel:setup to finish the install.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Relevant rules from the brain graph (matched to this prompt):\\n- [memory/feedback-tests.md > test-rules] Run the unit tests before saying the work is done and report the result."}}';
   assert.strictEqual(r.stdout, golden);
   assert.ok(fs.existsSync(path.join(claudeData, 'graph.json')), 'claude keeps graph.json');
   console.log('claude hook: output bytes match the golden string');

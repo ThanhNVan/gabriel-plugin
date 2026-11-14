@@ -183,7 +183,8 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - `gabriel use <set>` (a set name or an alias, any case) pins this session to that set. The pin is one line in `<data>/seen/<session>.pin`. The reply is a note only. The pin check runs before the [R02](#r02-short-and-slash-prompts-get-no-context) gate.
 - `gabriel use auto` clears the pin. An unknown name, such as `gabriel use ?`, lists the set names.
 - While pinned, `src/mk.js` `searchAll()` searches only that set. The fallback rule ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) is unchanged.
-- Every user note starts with `📌 pinned: <set>  ("gabriel use auto" to undo)`. The model text never gets it.
+- Every user note starts with a blank line, then `📌 pinned: <set>  ("gabriel use auto" to undo)`. The model text never gets it.
+- Not pinned, with 2 or more doc sets: each map note ends with a 💡 line that suggests `gabriel use <set>`. The model text never gets it.
 - No session id: nothing is pinned, and the reply says so.
 - Gaps: [findings](../technical/findings.md).
 - Where: `src/pin.js` `parsePin()`, `getPin()`, `setPin()`; `src/brain.js` `pinNote()`, `hook()`, `mapFor()`; `src/mk.js` `searchAll()` (`opts.pin`). Tests: `test/test-pin.js`, `test/test-workflow.js`.

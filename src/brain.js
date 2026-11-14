@@ -232,7 +232,7 @@ function dedupe(home, text, sessionId, transcriptPath) {
 
 // First-run hint: until setup has run (no mk.db, no projects.json, no docs folder), the hook adds this line to systemMessage once per session.
 // Returns the line, or '' when it was already shown or setup is done. Never throws.
-const SETUP_HINT = 'gabriel: run /gabriel:setup to finish install';
+const SETUP_HINT = 'gabriel is not set up yet. Run /gabriel:setup to finish the install.';
 function setupHint(sessionId) {
   try {
     const dir = paths.dataDir();
@@ -276,13 +276,13 @@ const emit = (s) => (s ? new Promise((resolve) => process.stdout.write(s, resolv
 function pinNote(cmd, sid) {
   try {
     const pin = require('./pin.js'), mk = require('./mk.js'), { loadProjects } = require('./projects.js');
-    if (cmd.auto) { pin.setPin(homeDir(), sid, null); return 'gabriel: this session searches all doc sets again.'; }
+    if (cmd.auto) { pin.setPin(homeDir(), sid, null); return 'gabriel: pin removed. The map searches all doc sets again.'; }
     const sets = loadProjects().filter((p) => !p.fallback), names = sets.map((p) => p.name);
     const lc = cmd.name.toLowerCase();
     const name = names.find((n) => n.toLowerCase() === lc) || mk.namedProjects(sets, lc)[0];   // exact name, else an alias
-    if (!name) return `gabriel: no doc set "${cmd.name}". Sets: ${names.join(', ')}.`;
-    if (!pin.setPin(homeDir(), sid, name)) return 'gabriel: no session id, so nothing was pinned.';
-    return `gabriel: this session uses ${name} only. "gabriel use auto" to undo.`;
+    if (!name) return `gabriel: no doc set "${cmd.name}". Your doc sets: ${names.join(', ')}. Type "gabriel use <name>" with one of them.`;
+    if (!pin.setPin(homeDir(), sid, name)) return 'gabriel: could not pin. This tool sends no session id, so there is no session to pin.';
+    return `gabriel: pinned to ${name}. The map now searches only ${name} in this session. Type "gabriel use auto" to undo.`;
   } catch { return ''; }
 }
 
@@ -290,7 +290,7 @@ async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
     const pinned = require('./pin.js').getPin(homeDir(), sid);
-    const withPin = (note) => pinned ? `📌 pinned: ${pinned}  ("gabriel use auto" to undo)` + (note ? '\n' + note : '') : note;
+    const withPin = (note) => pinned ? `\n📌 pinned: ${pinned}  ("gabriel use auto" to undo)` + (note ? '\n' + note : '') : note;
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
       await emit(host.writeOutput({ text: '', note: withPin(setupHint(sid) || require('./tips.js').tipFor(sid)) }));
     };
@@ -309,7 +309,9 @@ async function hook(host) {
       return;
     }
     // additionalContext (full text) goes to the model; note is a short, readable view of the same items for the user.
-    await emit(host.writeOutput({ text: additionalContext, note: withPin(humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '')) }));
+    const manySets = () => { try { return require('./projects.js').loadProjects().filter((p) => !p.fallback).length > 1; } catch { return false; } };
+    const noPin = pinned || !manySets() ? '' : '\n💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';   // a map note while unpinned suggests the pin
+    await emit(host.writeOutput({ text: additionalContext, note: withPin(humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '') + noPin) }));
     save();
   } catch { /* fail open: never block a prompt */ }
 }

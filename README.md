@@ -87,6 +87,7 @@ gabriel use makillez
 From then on, this session's map searches only that doc set. Naming another set in a prompt does not switch it. The fallback general docs can still show. Every gabriel note starts with `📌 pinned: makillez  ("gabriel use auto" to undo)`.
 
 - `gabriel use auto`: search all doc sets again.
+- Not pinned and you have 2 or more doc sets? Each map note ends with a 💡 line that reminds you of `gabriel use <set>`.
 - `gabriel use ?` (or any unknown name): list your doc sets.
 - A name or an alias works. A new session starts unpinned. A pin is dropped about 7 days after it was set.
 
