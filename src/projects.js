@@ -3,7 +3,8 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles } = require('./paths');
 const DEFAULTS = { layout: 'auto', graph: null, skipDirs: ['graphify-out', 'node_modules', '.git', 'atlas', '_tools'],
-  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, sessionGate: false, coreDocs: null, extensions: null };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in)
+  aliases: [], cwdHints: [], prior: 0, learn: true, fallback: false, sessionGate: false, coreDocs: null, extensions: null,
+  chain: { seeds: 4, max: 3, stem: 3 } };   // extensions: null = every default type; e.g. ["md","json"] (json/yaml are opt-in). chain = the "two links away" step: seeds = top code hits it starts from, max = extra lines, stem = name parts that must match (a higher stem is stricter)
 const resolveRoot = (r) => { const s = String(r || '');
   if (s.startsWith('~')) return path.join(os.homedir(), s.slice(1).replace(/^[\\/]/, ''));
   return path.isAbsolute(s) ? path.resolve(s) : path.join(dataDir(), s); };
@@ -28,7 +29,7 @@ function loadConfig() {
     checkName(p.name); if (seen.has(p.name)) throw new Error('duplicate project: ' + p.name); seen.add(p.name);
     const root = (p.rootEnv && process.env[p.rootEnv]) || resolveRoot(p.root);   // rootEnv is used raw, like MK_DOCS today
     const rank = p.rank ? resolveRoot(p.rank) : path.join(privateDir(p.name), 'rank.json');
-    return { ...DEFAULTS, label: p.name, ...p, root, rank };
+    return { ...DEFAULTS, label: p.name, ...p, root, rank, chain: { ...DEFAULTS.chain, ...(p.chain || {}) } };
   });
   const legacyProject = j.legacyProject || null;   // tag for map rows written before projects existed (owner only)
   if (legacyProject && !seen.has(legacyProject)) throw new Error(`legacyProject ${legacyProject} is not a project`);

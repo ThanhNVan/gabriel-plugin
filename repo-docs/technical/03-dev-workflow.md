@@ -4,18 +4,16 @@ How to install, test, and change gabriel. Commands run from the repo root in Pow
 
 ## Install
 
-Run `npm ci` once. It uses `package-lock.json`.
+Run `npm ci` once. Then run `node src/setup.js` to fetch the meaning model, build the maps and run the tests. `--skip-model` skips the model download. `--only build` or `--only test` runs one step. `setup.js` writes only inside the data folder and `node_modules`.
 
-Then run `node src/setup.js` to fetch the meaning model, build the maps, and run the tests. Use `--skip-model` to skip the model download. Use `--only build` or `--only test` to run one step. `setup.js` writes only inside the data folder and `node_modules`.
-
-Optional Python packages for tuning: `node src/setup.js --tune` (see [01-architecture.md](01-architecture.md) for the tune parts).
+Optional tuning packages: `node src/setup.js --tune` (tune parts in [01-architecture.md](01-architecture.md)).
 
 ## Run the tests
 
-- `npm test` runs `node test/run-all.js`. It runs every `test/test-*.js` file in name order (29 files), then the privacy scan. It prints one line per file. A failed file prints its last 20 output lines. Exit code 1 on any failure.
+- `npm test` runs `node test/run-all.js`: every `test/test-*.js` file in name order, then the privacy scan. One line per file. A failed file prints its last 20 output lines. Exit code 1 on any failure.
 - One file: `node test/test-hosts.js`.
-- Only one run at a time. `run-all.js` takes a lock file in the system temp folder (`gabriel-test.lock`). A second run stops with the pid of the first. If the first run crashed, the lock is taken over. Delete the file only when it is stuck.
-- Tests use temp folders. `BRAIN_HOME` and the data folder are set per test, so the real `~/.claude` is not read.
+- One run at a time. `run-all.js` takes the lock `gabriel-test.lock` in the system temp folder. A second run stops with the first run's pid. A stuck lock is deleted by hand.
+- Tests use temp folders, so the real `~/.claude` is not read.
 
 ## Lint, Mermaid and privacy checks
 

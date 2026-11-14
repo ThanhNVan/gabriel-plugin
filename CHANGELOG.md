@@ -5,6 +5,10 @@
 - Code graph path: a missing `graph` file now fails the build with `graph not found: <path>` and keeps the old map. `mk-status all` shows each graph path and `GRAPH MISSING`. `add-docs` asks for the code repo when `--code` is missing. The background check now rebuilds any stale doc set, not only the default one (skipping a set whose graph is missing).
 - Skills show a short hint for each argument.
 
+- Pin one doc set per session: the prompt `gabriel use <set>` (a name or alias) makes this session's map search only that set; `gabriel use auto` undoes it; an unknown name lists the sets. While pinned, every gabriel note starts with `📌 pinned: <set>`. Three new tips explain it (`src/pin.js`, `searchAll` `opts.pin`).
+
+- The map adds up to 3 code names two strong graph links from the top 4 code hits, marked `2 links away`, when they share the hit's name stem (a leading verb dropped). Per set, the `chain` setting in `projects.json` sets the counts (default seeds 4, max 3, stem 3). It finds the rest of a flow through a shared type (an event base class, say). On 12 Makillez questions: chain off 9/12, seeds 3 max 3 stem 3 10/12, seeds 4 max 3 stem 3 (the default) 11/12. Makillez main gate unchanged (strict 523/569, quiet 30/31); the block grows about 54 characters on average.
+
 - `/gabriel:retrain` with no name always keeps the new weights for the default doc set, and saves the old file as `rank.prev.json`. With a name, the score guard stays.
 
 - New doc sets (`add-docs`, `/gabriel:update`) get `aliases: [<name>]`, so naming the set in a prompt routes to it. The map header now says "docs + code graph" instead of "technical-docs + code graph". When one alias sits inside a longer one ("gabriel" in "gabriel-dev"), only the longer one counts as named (`namedProjects()` in `src/mk.js`).

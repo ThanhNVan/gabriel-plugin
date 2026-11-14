@@ -1,26 +1,16 @@
 # Workflows
 
-This page shows what gabriel does, step by step. Each section has a short summary, the code to check, and one diagram. The diagrams follow the code, not the plans.
+What gabriel does, step by step. Each section has a summary, the code to check, and one diagram that follows the code, not the plans.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) first for the parts.
 
-How to read the diagrams:
-
-- A diamond is a decision.
-- A box with a file name is a file that gabriel writes or reads.
-- "Fail open" means: on an error, gabriel prints nothing and the prompt goes on.
-
-Terms used here:
-
-- **Rules graph**: notes from your rule files and memory notes, kept in `graph.json`.
-- **Map**: the doc sets and code names, kept in `mk.db`.
-- **Meaning numbers**: lists of numbers from a small local model. They let gabriel match by meaning, not only by words.
+Diamonds are decisions. Boxes with a file name are files gabriel reads or writes. "Fail open" means an error prints nothing and the prompt goes on. Terms (rules graph, map, meaning numbers): see [ARCHITECTURE](ARCHITECTURE.md).
 
 ## 1. Install and first setup
 
 You add the plugin, install it, and run `/gabriel:setup`. Setup runs 10 steps. Then `add-docs` adds a doc set and builds its first map.
 
-Code: `skills/setup/SKILL.md` runs `src/setup.js`. The 10 steps are in `run()` in `src/setup.js`. `skills/add-docs/SKILL.md` runs `add-docs()` in `src/setup.js`.
+Code: `skills/setup/SKILL.md` runs `src/setup.js`. The 10 steps are in `run()` in `src/setup.js`. `skills/add-docs/SKILL.md` runs `addDocs()` in `src/setup.js`.
 
 On a first install (or with `--onboard`), the setup skill then offers four optional steps, each asked first: install helper skills, graph a project, write its docs in the [DOC-LAYOUT](DOC-LAYOUT.md) layout, and download stack docs into `docs/stack/`. These run in Claude, not in `setup.js`.
 
@@ -38,7 +28,7 @@ flowchart TD
   S5 --> D5{"Model on disk?"}
   D5 -- "no" --> W["Words-only mode. Retry: setup --only model"]
   D5 -- "yes" --> S6
-  W --> S6["Step 6: old brain data found and new mk.db missing?"]
+  W --> S6["Step 6: old data/mk.db found and new mk.db missing?"]
   S6 -- "yes, with --yes: copy old data, see workflow 10" --> S7
   S6 -- "no" --> S7
   S7["Step 7: brain.js build writes graph.json"] --> S8["Step 8: brain.js build-mk writes mk.db for each doc set"]
@@ -51,8 +41,6 @@ flowchart TD
   D3 -- "no" --> P["Write projects.json, atomic write"]
   P --> F["build-mk writes the first map rows for this doc set"]
 ```
-
-Note: step 6 is planned only when `data/mk.db` exists in the old folder and the new `mk.db` does not.
 
 ## 2. One prompt
 
@@ -71,14 +59,17 @@ sequenceDiagram
   H->>B: Prompt as JSON on stdin
   B->>A: readInput
   A-->>B: prompt, session, folder, transcript path
-  alt Slash command, under 4 words, or automated message
+  alt "gabriel use <set>" or "gabriel use auto"
+    B->>B: Save or clear the pin in data/seen/<session>.pin
+    B-->>H: One-line note only
+  else Slash command, under 4 words, or automated message
     B-->>H: Setup hint only, or empty output
   else Normal prompt
     B->>R: searchFull: words, synonyms, meaning if the model is on disk
     R-->>B: Best rule notes, at most 6, and up to 2 similar earlier prompts
     B->>B: Save prompt to history
     B->>B: Start background refresh if due, detached
-    B->>M: searchAll over every doc set
+    B->>M: searchAll over every doc set, or only the pinned one
     M->>M: Score = best match + prior + alias bonus + folder bonus
     M->>M: Quiet gate: best match under 0.65 gives no map
     M->>M: Session gate: weak unnamed match outside the project folder needs an earlier map this session
@@ -89,14 +80,12 @@ sequenceDiagram
     B->>A: writeOutput with text and note
     A-->>H: JSON with additionalContext
   end
-  Note over B,H: Any error: nothing printed, prompt goes on. Fail open.
+  Note over B,H: While pinned, every note starts with the 📌 pinned line. Any error: nothing printed, prompt goes on. Fail open.
 ```
 
 ## 3. Learning from use
 
-When a map is shown, gabriel saves the prompt's strongest seeds for the session. If a file is read or edited soon after, gabriel links those seeds to the file's main types. Links fade and never start a search.
-
-Code: `remember()`, `touched()`, `learnShow()` and `learnReset()` in `src/mk.js`. `touchedHook()` in `src/brain.js`. `readTouched` in `src/hosts/*.js`. The hook matchers are in `hooks/hooks.json`.
+When a map is shown, gabriel saves the prompt's strongest seeds for the session. If a file is read or edited soon after, gabriel links those seeds to the file's main types. Links fade and never start a search. Code: `remember()`, `touched()`, `learnShow()` and `learnReset()` in `src/mk.js`. `touchedHook()` in `src/brain.js`. `readTouched` in `src/hosts/*.js`. The hook matchers are in `hooks/hooks.json`.
 
 ```mermaid
 flowchart TD
@@ -114,16 +103,14 @@ flowchart TD
   SD --> L["learn row in mk.db: weight grows by 0.2 times the seed strength, capped at 1"]
   L --> C["Count the file in the done list, so it counts once per map"]
   L --> U["Use at search time only when seen 2 or more times and weight is 0.02 or more"]
-  U --> CAP["Learned light is capped at 45 percent of the strongest other light"]
+  U --> CAP["Learned light is capped at 45 percent of the strongest unlearned activation"]
   L --> F["Fade: half-life 45 days"]
   F --> P["Rebuild: integrate() drops links whose nodes are gone or too faded"]
 ```
 
 ## 4. Building a map
 
-A build reads one doc set and its optional `graph.json`. It splits the docs into chunks and reads the code names. It writes a temp file, then copies only that doc set's rows into `mk.db`, in one transaction. The old map serves until then.
-
-Code: `build()`, `chunkDoc()` and `integrate()` in `src/mk.js`. `extractText()` in `src/extract.js`. `build-mk` mode in `src/brain.js`. The question index is built by `embedAll()` in `src/dq.js`.
+A build reads one doc set and its optional `graph.json`. It splits the docs into chunks and reads the code names. It writes a temp file, then copies only that doc set's rows into `mk.db`, in one transaction. The old map serves until then. Code: `build()`, `chunkDoc()` and `integrate()` in `src/mk.js`. `extractText()` in `src/extract.js`. `build-mk` mode in `src/brain.js`. The question index is built by `embedAll()` in `src/dq.js`.
 
 ```mermaid
 flowchart TD
@@ -154,11 +141,7 @@ flowchart TD
 
 ## 5. Add docs later
 
-You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions.
-
-You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and retrains.
-
-Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
+You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions. You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and retrains. Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD
@@ -181,9 +164,7 @@ flowchart TD
 
 ## 6. Measure and retrain
 
-Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`.
-
-Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
+Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD
@@ -281,19 +262,15 @@ flowchart LR
   N1["Setup step 2: npm registry, once"] --> P2
   N2["Setup step 5: model host, once"] --> D6
   N3["Only with --tune: pip and torch CPU index"] --> D7
-  R1 --> D3
-  R2 --> D3
-  H1["Prompt hook: no network calls"] --> D1
-  H1 --> D4
+  R1 & R2 --> D3
+  H1["Prompt hook: no network calls"] --> D1 & D4
   H2["Redaction: keys, tokens and bearer values replaced"] --> D4
   X1["tools check-public skips the private folder"] --> D5
 ```
 
 ## 10. Owner migration from the old brain folder
 
-`migrate-data.js` copies data from the old brain folder into the data folder. It never deletes or changes the source. It hashes every file. A second run finishes what is left.
-
-Code: `migrate()` and `MOVES` in `src/migrate-data.js`. Step 6 in `run()` in `src/setup.js` plans the copy. It copies only with `--yes`.
+`migrate-data.js` copies data from the old brain folder into the data folder. It never deletes or changes the source. It hashes every file. A second run finishes what is left. Code: `migrate()` and `MOVES` in `src/migrate-data.js`. Step 6 in `run()` in `src/setup.js` plans the copy. It copies only with `--yes`.
 
 ```mermaid
 flowchart TD

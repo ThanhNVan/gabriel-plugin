@@ -188,6 +188,50 @@ try {
     assert.ok(!fs.readFileSync(file, 'utf8').includes('brain.js'), 'gabriel entries still in hooks.json');
   });
 
+  // 12
+  // "gabriel use <set>" pins the session to one doc set, "gabriel use auto" clears it. This test has one doc set (notes), so there is
+  // no second set to exclude: the pin is checked by its note, its file, and by the set still answering.
+  step('gabriel use <set> / use auto / unknown name / no session id: notes, pin file, answers', () => {
+    const ctxOf = (o) => String((o.hookSpecificOutput && o.hookSpecificOutput.additionalContext) || '');
+    const pinFile = path.join(DATA, 'seen', 'p1.pin');
+    const use = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use notes', 'p1')));
+    assert.match(String(use.systemMessage || ''), /uses notes only/, JSON.stringify(use));
+    assert.ok(!(use.hookSpecificOutput && use.hookSpecificOutput.additionalContext), JSON.stringify(use));
+    assert.ok(fs.existsSync(pinFile), 'pin file not written');
+    const pinned = parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'p1')));
+    assert.ok(ctxOf(pinned).includes('notes map ('), JSON.stringify(pinned));
+    const bad = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use nope', 'p1b')));
+    assert.match(String(bad.systemMessage || ''), /no doc set "nope"/, JSON.stringify(bad));
+    assert.ok(!fs.existsSync(path.join(DATA, 'seen', 'p1b.pin')), 'unknown name must not write a pin');
+    const noSid = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use notes', '')));
+    assert.match(String(noSid.systemMessage || ''), /no session id, so nothing was pinned/, JSON.stringify(noSid));
+    const auto = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use auto', 'p1')));
+    assert.match(String(auto.systemMessage || ''), /all doc sets again/, JSON.stringify(auto));
+    assert.ok(!fs.existsSync(pinFile), 'use auto must clear the pin file');
+    // a session that was never pinned still gets the notes map (the same as p1 would without a pin)
+    assert.ok(ctxOf(parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'p3')))).includes('notes map ('), 'p3 (no pin) has no notes map');
+    assert.ok(ctxOf(parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'p2')))).includes('notes map ('), 'p2 (no pin) has no notes map');
+    // while a session is pinned, every user note starts with the pin line. Empty stdout is allowed (no JSON to parse).
+    const PIN_LINE = '📌 pinned: notes  ("gabriel use auto" to undo)';
+    const firstLine = (o) => String(o.systemMessage || '').split('\n')[0];
+    const run = (prompt, sid) => {
+      const r = node(BRAIN, ['hook'], hookStdin(prompt, sid));
+      assert.strictEqual(r.status, 0, show(r));
+      return { r, o: r.stdout.trim() ? JSON.parse(r.stdout) : {} };
+    };
+    parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use notes', 'q1')));
+    const qMap = parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'q1')));
+    assert.strictEqual(firstLine(qMap), PIN_LINE, JSON.stringify(qMap));
+    assert.ok(!ctxOf(qMap).includes('📌'), 'pin line must not go into additionalContext');
+    assert.strictEqual(firstLine(run('ok thanks', 'q1').o), PIN_LINE, 'short prompt in a pinned session');
+    assert.strictEqual(firstLine(run('/gabriel:status', 'q1').o), PIN_LINE, 'slash command in a pinned session');
+    parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use auto', 'q1')));
+    const unpinned = run('ok thanks', 'q1');
+    assert.ok(!unpinned.r.stdout.includes('📌'), 'after use auto, no pin line: ' + unpinned.r.stdout);
+    const neverPinned = run(PROMPT, 'q2');
+    assert.ok(!neverPinned.r.stdout.includes('📌'), 'never-pinned session has a pin line: ' + neverPinned.r.stdout);
+  });
+
   console.log('ALL PASSED');
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true });

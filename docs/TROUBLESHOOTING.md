@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `/gabriel:status`. It shows one line for each doc set: the map is built, stale, or missing. Under a set with a problem, a `fix:` line gives the one command that fixes it. Run that command yourself.
+Start with `/gabriel:status`. It shows each doc set as built, stale or missing. A set with a problem gets a `fix:` line with the one command that fixes it. Run that command yourself.
 
 **The plugin folder** is where gabriel's code lives. From a marketplace install, it is `~/.claude/plugins/cache/<marketplace>/gabriel/<version>/`. From a local folder, it is that folder: local-path marketplaces load in place.
 
@@ -23,8 +23,14 @@ A map appears only when a prompt matches your docs well enough. Check these in o
    ```
 
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
-4. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt. Its `aliases` in `projects.json` count as a match.
+4. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt (its `aliases` in `projects.json` count). A pinned session ignores other set names: see the next section.
 5. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
+
+## The map shows only one project
+
+Cause: the session is pinned with `gabriel use <set>`. Every gabriel note then starts with `📌 pinned: <set>`, and the map searches only that set. Naming another set in a prompt does not help.
+
+Fix: type `gabriel use auto`. The 📌 line goes away. See the README section "Pin one doc set per session".
 
 ## A PDF shows no text
 
@@ -72,13 +78,7 @@ Some packages need an install script. npm can block it. Setup then fails at step
 
 ## Windows paths with spaces
 
-Put quotes around every path that has a space. This applies to the plugin folder and to the `--data` folder.
-
-```
-node "D:\My Tools\gabriel\src\setup.js" --data "D:\My Notes\gabriel-data"
-```
-
-The `setup.ps1` file in the plugin folder passes its arguments to `src/setup.js`. Use it from PowerShell:
+Put quotes around every path that has a space, including the `--data` folder. The `setup.ps1` file in the plugin folder passes its arguments to `src/setup.js`. From PowerShell:
 
 ```
 pwsh -File "D:\My Tools\gabriel\setup.ps1" --dry-run
@@ -96,9 +96,7 @@ Fix: open your Claude Code settings file and remove the old hook entry that runs
 
 Fix: search the hooks file for `brain.js`. The file is `~/.codex/hooks.json`, or `hooks.json` in `CODEX_HOME`. Keep one `hook --host codex` entry and one `touched --host codex` entry. Or remove gabriel's entries with `node "<plugin folder>/src/setup.js" --remove-host codex --apply`, then add them again with `--host codex --apply`. See [HOSTS](HOSTS.md).
 
-**Gemini CLI.** Cause: the same as Codex, in `~/.gemini/settings.json`.
-
-Fix: the same steps, with `--host gemini`.
+**Gemini CLI.** Same cause and fix as Codex, in `~/.gemini/settings.json`, with `--host gemini`.
 
 ## Plugin update removed packages
 
@@ -170,9 +168,7 @@ Claude Code runs a copy of the plugin from `~/.claude/plugins/cache/`, even when
 
 ## Step 9 says "tests failed"
 
-Setup step 9 runs `npm test` in the plugin folder. A failure there does not stop setup. Run `npm test` in the plugin folder to see which test failed.
-
-To skip the step, run setup with `--skip-test`.
+Setup step 9 runs `npm test` in the plugin folder. A failure there does not stop setup. Run `npm test` there to see which test failed, or skip the step with `--skip-test`.
 
 ## Some items are missing from the block
 

@@ -22,6 +22,9 @@ const TIPS = [
   "Want gabriel in Codex or Gemini too? node src/setup.js --host codex shows the hook config. Nothing is written until --apply.",
   "Use your own rules: a preferences.md in your rules folder replaces gabriel's default preferences.",
   'Tired of tips? Set "tips": false in projects.json.',
+  'Working in one project all session? Type "gabriel use <name>": the map then shows only that doc set. "gabriel use auto" undoes it.',
+  'Pinned and the map looks empty? The question may belong to another doc set. Naming that set in the prompt does not help while pinned: type "gabriel use auto" first.',
+  'Not sure which doc sets you have? Type "gabriel use ?": gabriel lists their names.',
 ];
 
 // The tip for this session, or '' (tips off, no session id, or already shown this session). Never throws.

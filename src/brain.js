@@ -59,7 +59,7 @@ function mapFor(home, text, pv, started, session, cwd = '') {
   try {
     if (Date.now() - started > MK_BUDGET_MS) return '';
     const mk = require('./mk.js');
-    const res = mk.searchAll(home, text, { pv, cwd, session });   // one of the projects in projects.json, or (as a fallback) the general docs
+    const res = mk.searchAll(home, text, { pv, cwd, session, pin: require('./pin.js').getPin(home, session) || undefined });   // one of the projects in projects.json, or (as a fallback) the general docs
     if (res && session) mk.remember(home, session, res);   // so a file opened soon after can teach the network (see `touched`)
     return mk.format(res);
   } catch { return ''; }
@@ -272,12 +272,30 @@ function capText(text, max) {
 // Writes host output to stdout and waits for the write to finish. Empty output writes nothing.
 const emit = (s) => (s ? new Promise((resolve) => process.stdout.write(s, resolve)) : undefined);
 
+// "gabriel use <set>" pins this session to one doc set; "gabriel use auto" clears it (src/pin.js). Returns the note to show. Fails open.
+function pinNote(cmd, sid) {
+  try {
+    const pin = require('./pin.js'), mk = require('./mk.js'), { loadProjects } = require('./projects.js');
+    if (cmd.auto) { pin.setPin(homeDir(), sid, null); return 'gabriel: this session searches all doc sets again.'; }
+    const sets = loadProjects().filter((p) => !p.fallback), names = sets.map((p) => p.name);
+    const lc = cmd.name.toLowerCase();
+    const name = names.find((n) => n.toLowerCase() === lc) || mk.namedProjects(sets, lc)[0];   // exact name, else an alias
+    if (!name) return `gabriel: no doc set "${cmd.name}". Sets: ${names.join(', ')}.`;
+    if (!pin.setPin(homeDir(), sid, name)) return 'gabriel: no session id, so nothing was pinned.';
+    return `gabriel: this session uses ${name} only. "gabriel use auto" to undo.`;
+  } catch { return ''; }
+}
+
 async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
+    const pinned = require('./pin.js').getPin(homeDir(), sid);
+    const withPin = (note) => pinned ? `📌 pinned: ${pinned}  ("gabriel use auto" to undo)` + (note ? '\n' + note : '') : note;
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
-      await emit(host.writeOutput({ text: '', note: setupHint(sid) || require('./tips.js').tipFor(sid) }));
+      await emit(host.writeOutput({ text: '', note: withPin(setupHint(sid) || require('./tips.js').tipFor(sid)) }));
     };
+    const cmd = require('./pin.js').parsePin(prompt);
+    if (cmd) return await emit(host.writeOutput({ text: '', note: pinNote(cmd, sid) }));
     if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return await hintOnly();
     const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
@@ -286,12 +304,12 @@ async function hook(host) {
     const hint = setupHint(sid) || require('./tips.js').tipFor(sid);   // the setup hint first; after setup, one tip per session
     if (!additionalContext) {
       const msg = [note ? '🧭 Brain: ' + note : '', hint].filter(Boolean).join('\n');
-      await emit(host.writeOutput({ text: '', note: msg }));
+      await emit(host.writeOutput({ text: '', note: withPin(msg) }));
       save();
       return;
     }
     // additionalContext (full text) goes to the model; note is a short, readable view of the same items for the user.
-    await emit(host.writeOutput({ text: additionalContext, note: humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '') }));
+    await emit(host.writeOutput({ text: additionalContext, note: withPin(humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '')) }));
     save();
   } catch { /* fail open: never block a prompt */ }
 }

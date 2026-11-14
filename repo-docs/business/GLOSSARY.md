@@ -12,10 +12,12 @@ Terms in the order a reader meets them.
 - **Alias**: a name in `projects.json` that routes a prompt to a doc set when the prompt uses it.
 - **cwdHints**: folder-name hints in `projects.json`. When the working folder path contains one, the doc set gets a small boost.
 - **Map**: the searchable form of a doc set, in `mk.db`. Built from its docs and its code graph.
-- **Map block**: the text the hook adds for the map: doc hits, code hits, and `↔` links.
+- **Map block**: the text the hook adds for the map: doc hits, code hits, `↔` links and "2 links away" lines.
+- **Two links away**: a code name reached by two strong links from a top code hit. Set per doc set by `chain` in `projects.json`. See [R34](02-business-rules.md#r34-two-links-away-code-names).
+- **Session pin**: `gabriel use <set>`. The session then searches only that doc set, until `gabriel use auto`. See [R35](02-business-rules.md#r35-session-pin).
 - **Neuron**: one node of the map: a doc section or a code class or file.
 - **Synapse**: a link between two neurons in the map.
-- **Code graph**: `graphify-out/graph.json`, made by `/graphify` for a code repo. gabriel reads it to build code neurons and links. See [R33](02-business-rules.md#r33-a-code-graph-must-exist-and-match-the-docs).
+- **Code graph**: `graphify-out/graph.json`, made by `/graphify`. gabriel reads it for code neurons and links. See [R33](02-business-rules.md#r33-a-code-graph-must-exist-and-match-the-docs).
 - **Graph entry**: the `graph` path of a doc set in `projects.json`, relative to its root. A missing file is `GRAPH MISSING` in status.
 - **Relink**: `add-docs <name> --code <repo> --relink`. Sets only the graph entry of a doc set, then rebuilds its map. See [W03](workflows/W03-add-docs.md).
 - **Wrong-repo warning**: the build's warning that almost no doc section links to the code graph. Fix it with a relink.
@@ -24,7 +26,7 @@ Terms in the order a reader meets them.
 - **Fallback**: the general public docs doc set. It answers only when no doc set does, and is marked as background reading.
 - **Sources**: the files a map was built from: the graph and every doc file. A change in them makes the map stale.
 - **Stale**: a map whose sources, format or model changed since the build.
-- **Learned link**: a link the map gets from use: a file opened after a map was shown. See [03-state-machines.md](03-state-machines.md#learned-link).
+- **Learned link**: a link the map gets when a file is opened after a map was shown. See [03-state-machines.md](03-state-machines.md#learned-link).
 - **Session**: one Claude Code conversation, with its own seen list and its own last map.
 - **Seen list**: the items already sent in a session. Used to avoid sending the same item twice.
 - **Compaction**: when the host shortens the conversation. The seen list resets then.
@@ -46,6 +48,6 @@ Terms in the order a reader meets them.
 - **Quiet score**: the count of unrelated questions that show no map block.
 - **Held-out cases**: eval cases kept back from training. Used to judge a tuned model.
 - **Rank weights** (`rank.json`): the ranking settings of one doc set, trained by retrain.
-- **Retrain**: train new rank weights and keep them only when the strict score does not fall. With no name, it always keeps them. See [W06](workflows/W06-eval-and-retrain.md).
+- **Retrain**: trains new rank weights and keeps them only when the strict score does not fall. See [W06](workflows/W06-eval-and-retrain.md).
 - **Tune**: optional fine-tune of the meaning model on the user's eval cases. Kept only when it wins.
 - **Stack docs**: public docs for the user's languages and frameworks, saved under `docs/stack/`. Background reading.

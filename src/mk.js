@@ -29,6 +29,10 @@ const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65
 const LEARN_RATE = 0.2, LEARN_MAX = 1, LEARN_GAIN = 1, LEARN_PRUNE = 0.02, LEARN_MIN_N = 2, LEARN_CAP = 0.45, HALF_LIFE_DAYS = 45, LEARN_WINDOW_MS = 45 * 60000, LEARN_SEEDS = 8, LEARN_TARGETS = 3;
 const GENERIC = new Set('Empty Task CancellationToken IEnumerable DateTime Guid List Dictionary String Int32 Result IRequest IRequestHandler Unit Component Object Json Action Func Exception Boolean Nullable Type Tuple'.split(' '));
 const NB_CODE = 3, NB_PER = 4, NB_CHARS = 900;   // map output: neighbors shown for the top 3 code hits, 4 each
+const CHAIN_VERBS = new Set(['Set', 'Get', 'Create', 'Update', 'Delete', 'Add', 'Remove', 'On']);
+const CHAIN_DEFAULT = { seeds: 4, max: 3, stem: 3 };   // seeds 4: 11/12 on eval-cases-chain.json vs 10/12 with 3; main gate unchanged (523/569, quiet 30/31), 2026-11-14   // fallback for the "two links away" step (seeds, max, stem); the real values come from the project's chain setting in projects.js, or opts.chain. Clamped in search().
+// a setting that is not a finite number falls back to its default; the rest is clamped into its range
+const chainNum = (v, d, lo, hi) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d;
 const REL = { calls: 1, implements: 1, inherits: 1, extends: 1, dispatches_to: 1, rationale_for: 0.8, conceptually_related_to: 0.6, semantically_similar_to: 0.6, method: 0.7, defines: 0.6, contains: 0.5, references: 0.3, imports: 0.2, imports_from: 0.2, re_exports: 0.2 };
 
 // Projects come from projects.js (file order = routing order). A search looks at one project only, so a new project cannot disturb the answers of the others.
@@ -782,6 +786,26 @@ function search(home, text, opts = {}) {
       const nb = db.prepare("SELECT n.label, n.file, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
       for (const c of code.slice(0, NB_CODE)) c.nb = nb.all(c.n.id, NB_PER);
     } catch { /* neighbors are optional */ }
+    // Two hops out: code types that share the name stem of the top code hits, reached by two strong links (seeds, max and stem: see CHAIN_DEFAULT).
+    try {
+      const pc = (getProject(project) || {}).chain || {}, oc = opts.chain || {};   // a bad value falls back one level: opts -> the project's setting -> CHAIN_DEFAULT
+      const pick = (k, lo, hi) => chainNum(oc[k], chainNum(pc[k], CHAIN_DEFAULT[k], lo, hi), lo, hi);
+      const seeds = pick('seeds', 0, 10), max = pick('max', 0, 10), stemN = pick('stem', 1, 6);
+      const stemOf = (label) => { let p = label.match(/[A-Z][a-z0-9]*/g) || []; if (CHAIN_VERBS.has(p[0])) p = p.slice(1); return p.length >= stemN ? p.slice(0, stemN).join('') : null; };   // a leading verb is not the stem (SetIhmEventTask... -> IhmEventTask); fewer name parts = too generic, no chain
+      const twoHop = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND e1.w >= 0.6 AND e2.w >= 0.6 AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.id != ? AND n.label LIKE ? GROUP BY n.id ORDER BY MAX(e1.w + e2.w) DESC, n.deg DESC LIMIT 10");
+      const have = new Set(code.map((c) => c.n.id)), listed = new Set(code.flatMap((c) => (c.nb || []).map((x) => x.label + '|' + x.file)));
+      let added = 0;
+      for (const c of code.slice(0, seeds)) {
+        const stem = stemOf(c.n.label);
+        if (!stem) continue;
+        for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) {
+          if (added >= max) break;
+          const n = info.get(r.id);
+          if (!n || have.has(n.id) || listed.has(n.label + '|' + n.file) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) continue;
+          have.add(n.id); code.push({ a: 0, n, chain: true }); added++;
+        }
+      }
+    } catch { /* chain is optional */ }
     // --why only: the candidate sections in rank order (the ranked list when no rank file is used)
     const cands = opts.why ? (why || ranked.filter(([id]) => info.get(id)?.kind === 'doc').slice(0, 40).map(([id]) => ({ file: info.get(id).file, sec: info.get(id).section || '' }))) : undefined;
     return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands };
@@ -806,7 +830,9 @@ function namedProjects(projects, lc) {
 }
 function searchAll(home, text, opts = {}) {
   const lc = String(text || '').toLowerCase(), cwd = String(opts.cwd || '').toLowerCase();
-  const ps = loadProjects(), main = ps.filter((p) => !p.fallback), fb = ps.find((p) => p.fallback);
+  const ps = loadProjects(), fb = ps.find((p) => p.fallback);
+  let main = ps.filter((p) => !p.fallback);
+  if (opts.pin && main.some((p) => p.name === opts.pin)) main = main.filter((p) => p.name === opts.pin);   // a session pinned with "gabriel use <name>" (src/pin.js): only that set
   const named = namedProjects(main, lc);
   const hits = [];
   for (const p of main) {   // file order; a tie keeps the earlier project
@@ -848,7 +874,7 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   for (const d of res.docs.slice(0, lim.docs ?? 99)) add(`- doc ${d.n.file.replace(/^technical-docs\//, '')} > ${d.n.section || '(top)'}: ${d.n.text.length > DOC_CHARS ? d.n.text.slice(0, DOC_CHARS) + '...' : d.n.text}`);
   for (const c of res.code.slice(0, lim.code ?? 99)) {
     const before = out.length;
-    add(`- code ${c.n.label} (${c.n.file}${c.n.loc ? ':' + c.n.loc.replace(/^L/, '') : ''})`);
+    add(`- code ${c.n.label} (${c.n.file}${c.n.loc ? ':' + c.n.loc.replace(/^L/, '') : ''})${c.chain ? ' 2 links away' : ''}`);
     if (out.length === before) continue;   // the code line did not fit: show no orphan neighbor lines
     if (!lim.max) for (const x of c.nb || []) addNb(`    ↔ ${x.label} (${x.file || 'external'}) ${x.w >= 1 ? 'calls/implements' : x.w >= 0.7 ? 'method' : 'defines/related'}`);
   }

@@ -86,6 +86,30 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       assert.strictEqual(r3.docLinked, 2, 'the two sections that name a code label link to it; the short names do not');
     }
 
+    // two links away: a code type that shares the top hit's name stem (a leading verb dropped) is added once, marked "2 links away"; other types are not
+    {
+      const root4 = path.join(tmp, 'docs4'), home4 = path.join(tmp, 'home4');
+      write(path.join(root4, 'technical-docs', '01-status.md'), '# 01 — Status\n\n## Change status\n\nThe `SetOrderTaskStatusHandler` changes the status of an order task.\n');
+      write(path.join(root4, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+      const n4 = (id, label) => ({ id, label, source_file: 'src/' + label + '.cs', source_location: 'L3', community: 1, community_name: 'Tasks' });
+      // Mediator is a shared hub (over 600 links, like a base event class): the spreading search does not pass through it, the two-link step does
+      const fill = Array.from({ length: 650 }, (_, i) => n4('f' + i, 'Filler' + i));
+      write(path.join(root4, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [n4('s', 'SetOrderTaskStatusHandler'), n4('m', 'Mediator'), n4('q', 'OrderTaskStatusQuery'), n4('u', 'UnrelatedWidget'), ...fill],
+        links: [{ source: 's', target: 'm', relation: 'calls', confidence_score: 1 }, { source: 'm', target: 'q', relation: 'calls', confidence_score: 1 }, { source: 'm', target: 'u', relation: 'calls', confidence_score: 1 },
+          ...fill.map((f) => ({ source: f.id, target: 'm', relation: 'references', confidence_score: 1 }))], built_at_commit: 'ddd444' }));
+      await mk.build(home4, { root: root4, project: 'beta', noEmbed: true });
+      const r4 = mk.search(home4, 'how does the set order task status handler change the status', { project: 'beta' });
+      assert.ok(r4 && r4.code.some((c) => c.n.label === 'SetOrderTaskStatusHandler'), 'the handler is a code hit');
+      const chain = r4.code.filter((c) => c.chain).map((c) => c.n.label);
+      assert.deepStrictEqual(chain, ['OrderTaskStatusQuery'], 'only the type with the same stem is added, two links away: ' + chain);
+      assert.match(mk.format(r4), /- code OrderTaskStatusQuery \(src\/OrderTaskStatusQuery\.cs:3\) 2 links away/);
+      // the chain step can be set per call: max 0 turns it off; a stem of 5 parts matches nothing here; a bad stem falls back to the default 3
+      const chainOf = (opts) => mk.search(home4, 'how does the set order task status handler change the status', { project: 'beta', ...opts }).code.filter((c) => c.chain).map((c) => c.n.label);
+      assert.deepStrictEqual(chainOf({ chain: { max: 0 } }), [], 'max 0: no two-link lines');
+      assert.deepStrictEqual(chainOf({ chain: { stem: 5 } }), [], 'stem 5: OrderTaskStatusQuery does not share 5 name parts');
+      assert.deepStrictEqual(chainOf({ chain: { stem: 'x' } }), ['OrderTaskStatusQuery'], 'bad stem: the default 3 is used');
+    }
+
     // the printed block names the commit and stays short
     const text = mk.format(res);
     assert.ok(text.includes('abc12345') && text.length <= 2300, 'format shows the commit and respects the size cap');
@@ -106,6 +130,16 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.strictEqual(mk.searchAll(home, order, { strong: 0 }).project, 'alpha', 'and the Alpha prompt stays with Alpha');
     assert.strictEqual(mk.searchAll(home, 'beta ' + order, { strong: 0 }).project, 'alpha', 'naming a project that does not know the prompt does not block the others');
     assert.strictEqual(mk.searchAll(home, 'in beta ' + parcel, { strong: 0 }).project, 'beta', 'a named project that knows the prompt wins');
+    // a pinned session (opts.pin, from "gabriel use <name>") searches only that set; an unknown pin is ignored
+    const pa = mk.searchAll(home, parcel, { pin: 'alpha' });
+    assert.ok(!pa || pa.project !== 'beta', 'pinned to alpha: beta is never chosen');
+    assert.ok(!pa || !(pa.also || []).some((a) => a.project === 'beta'), 'pinned: no beta block');
+    const pn = mk.searchAll(home, 'in beta, ' + parcel, { pin: 'alpha' });
+    assert.ok(!pn || pn.project !== 'beta', 'naming beta does not beat the pin');
+    const pg = mk.searchAll(home, parcel, { pin: 'gone' }), p0 = mk.searchAll(home, parcel, {});
+    assert.strictEqual(pg && pg.project, p0 && p0.project, 'unknown pin = no pin');
+    const pb = mk.searchAll(home, parcel, { pin: 'beta' });
+    assert.ok(pb && pb.project === 'beta', 'pinned to beta finds beta');
     await mk.build(home, { root: root2, project: 'beta', noEmbed: true });   // a rebuild replaces the project rows and leaves the others
     assert.ok(mk.search(home, order, {}) && mk.search(home, parcel, { project: 'beta' }), 'both projects still answer after a rebuild');
     assert.strictEqual(mk.stale(home, 'beta'), false, 'the rebuilt project is not stale');

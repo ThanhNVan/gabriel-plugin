@@ -13,6 +13,7 @@
 //   node eval/eval-map.js --route --cwd <dir>   route as if the prompt came from that working folder (cwdHints); a case can set its own "cwd"
 //   node eval/eval-map.js --rank <rank.json>    test these doc ranking weights (from train-rank.js) instead of the project's rank file
 //   node eval/eval-map.js --why                 for each DOC or FAIL: its miss class (section-rank, not-in-pool, wrong-doc, code-only-miss), then the counts
+//   node eval/eval-map.js --chain 4,5,3         try the "two links away" step as seeds,max,stem (e.g. 4,5,3); default: the project's chain setting in projects.js
 //   --cases <file> overrides the cases file (one project only). No cases file: prints a note and exits 0. See docs/EVAL.md.
 // A case: q (the question), doc / sec (regular expressions for a doc file and its section), code (regex for a code name),
 // any (pass when the doc OR the code matches), none (nothing may be returned). Matching ignores case.
@@ -26,6 +27,7 @@ const mk = require('../src/mk.js');
 const { getEmbedder } = require('../src/embed.js');
 
 const argv = process.argv.slice(2), flag = (n) => argv.includes(n), opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : null; };
+const chainOpt = opt('--chain') ? (([seeds, max, stem]) => ({ seeds, max, stem }))(opt('--chain').split(',').map((s) => (s.trim() === '' ? undefined : Number(s)))) : undefined;   // --chain 4,5,3 -> opts.chain; undefined = the project's own setting
 const rx = (s) => new RegExp(s, 'i');
 const short = (f) => f.replace(/^technical-docs\/(for-dev\/)?/, '').replace(/\.md$/, '');
 
@@ -80,7 +82,7 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
     const start = Date.now();
     const pv = embed ? (await embed([c.q]))[0] : null;
     // --route: the real router picks the project; an answer from the wrong project counts as no answer (a miss), and any answer to an unrelated question is a leak
-    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), ...rankOpt });
+    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), chain: chainOpt, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), chain: chainOpt, ...rankOpt });
     const own = c.project || DEFAULT, res = flag('--route') && res0 && !c.none ? (res0.project === own ? res0 : (res0.also || []).find((a) => a.project === own) || null) : res0;   // the right project's block may be the main one or a second, shorter one
     rows.push({ c, status: judge(c, res), renderedStatus: judgeRendered(c, res, res0), why: flag('--why') ? whyOf(c, res) : null, alsoN: res0 && res0.also ? res0.also.length : 0, blockN: res0 ? mk.format(res0).length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
     if (rows.length % 25 === 0) console.log(`progress ${rows.length}/${cases.length}`);

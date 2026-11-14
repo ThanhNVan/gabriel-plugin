@@ -1,12 +1,13 @@
 # 01 Domain map
 
-gabriel has ten main parts. Each part has one owner file in `src/`. Most parts feed the prompt hook. The rest set up, teach or score the hook.
+gabriel's main parts are below. Each has one owner file in `src/`. Most feed the prompt hook; the rest set up, teach or score it.
 
 ```mermaid
 flowchart TD
   prompt["User prompt"] --> hook["brain.js hook"]
   hook --> rulesG["Rules graph: rules.js"]
   hook --> mapG["Doc-set map: mk.js"]
+  hook --> pin["Session pin: pin.js"] --> mapG
   hook --> hist["Prompt history: history.js"]
   hook --> tips["Tips: tips.js"]
   graphify["graphify-out/graph.json"] --> mapG
@@ -27,6 +28,7 @@ flowchart TD
 |---|---|---|
 | Rules graph | Turns rule files and memory notes into nodes. Picks the few that match a prompt. | `src/rules.js` (`build`, `fresh`, `wordScores`, `rank`), `src/thesaurus.json` (synonyms) |
 | Doc-set map | Turns each doc set into doc and code nodes (neurons) with links (synapses). Searches them from a prompt. | `src/mk.js` (`build`, `search`, `searchAll`, `format`), `src/extract.js` (`extractText`) |
+| Session pin | Limits one session to one doc set (`gabriel use <set>`). | `src/pin.js` (`parsePin`, `getPin`, `setPin`), `src/brain.js` (`pinNote`) |
 | Doc-set config | Lists the doc sets, their folders, aliases and options. | `src/projects.js` (`loadConfig`, `getProject`), `src/paths.js` |
 | Code graph links | Reads `graphify-out/graph.json` made by `/graphify`. Links doc sections to code classes. Checks that the map matches the graph commit. | `src/mk.js` (`build`, `status`, `stale`, `sources`) |
 | Learning from use | Links the prompt's top parts to a file the user opens or edits after a map. Links fade with time. | `src/mk.js` (`remember`, `touched`, `learnShow`, `learnReset`), `src/brain.js` (`touchedHook`) |
@@ -44,7 +46,7 @@ The data folder holds all of gabriel's state. It is `GABRIEL_DATA` when set, els
 - `graph.json` (or `graph.<host>.json`): the rules graph.
 - `mk.db`: the doc-set maps, learned links and each session's last map.
 - `history/`: saved prompts, one file per month and machine.
-- `seen/`: items already sent per session, and the tip and setup-hint marks.
+- `seen/`: items already sent per session, the tip and setup-hint marks, and the session pin (`<session>.pin`).
 - `projects.json`: the doc sets.
 - `docs/<name>/`: doc sets kept in the data folder.
 - `private/<name>/`: your eval cases and ranking weights.
@@ -53,7 +55,7 @@ Rule files live in each host's rules folder, for example `~/.claude` (`CLAUDE.md
 
 ## Where the parts meet
 
-- The prompt hook calls the rules graph and the doc-set map, then the history. Each part has its own limit (see [02-business-rules.md](02-business-rules.md)).
+- The prompt hook calls the rules graph, the doc-set map and the history. Limits: [02-business-rules.md](02-business-rules.md).
 - The map and the rules graph share the meaning model. Without it, both fall back to words and synonyms.
 - Learning only changes the map. It never changes the docs or the code graph.
 - Retrain rebuilds one doc set's map. It may also replace that set's ranking weights (`rank.json`). Nothing else changes.

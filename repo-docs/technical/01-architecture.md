@@ -7,8 +7,6 @@ It has two parts:
 - **Rules graph.** Short rules and memory notes from the host's rules folder.
 - **Project map.** Doc sections and code names from your doc sets (called projects).
 
-Other docs say more about use: `docs/ARCHITECTURE.md` (the lead for this page) and `docs/HOSTS.md`.
-
 ## The parts
 
 | Part | Where | Job |
@@ -20,6 +18,7 @@ Other docs say more about use: `docs/ARCHITECTURE.md` (the lead for this page) a
 | Meaning model | `src/embed.js` | Loads the local embedding model and reads and writes `vectors.json`. |
 | Prompt history | `src/history.js`, `src/graphdb.js` | Saves each prompt (with secrets hidden) and finds earlier similar prompts. |
 | Project map | `src/mk.js` | Builds `mk.db` from doc chunks and code nodes. Runs the spreading search. |
+| Session pin | `src/pin.js` | Reads `gabriel use <set>` and keeps the session's pin. The hook applies it ([R35](../business/02-business-rules.md#r35-session-pin)). |
 | Doc readers | `src/extract.js` | Turns doc files (Markdown, Word, PDF and more) into text for the map. |
 | Question index | `src/dq.js` | Optional. Embeds written questions per doc section. |
 | Projects | `src/projects.js` | Reads `projects.json` and gives each project its folders and settings. |
@@ -70,6 +69,7 @@ The data folder is `GABRIEL_DATA`, then `BRAIN_DATA`, then `~/.claude/gabriel-da
 | `history/<YYYY-MM>.<machine>.jsonl` | `history.js` `append` | `history.js`, `graphdb.js` |
 | `history/graph.db` | `graphdb.js` `sync` | `graphdb.js` `lexical`, `related` |
 | `seen/<session>.json` | `brain.js` `dedupe` | `brain.js` `dedupe` |
+| `seen/<session>.pin` | `pin.js` `setPin` | `pin.js` `getPin`, `brain.js` `hook` |
 | `projects.json` | the user, `setup.js` | `projects.js` |
 | `dq.<project>.bin` | `dq.js` `embedAll` | `mk.js` `search` |
 | `refresh.lock`, `mk.lock`, `docs-add.lock` | `brain.js` (background starters) | `brain.js` |
@@ -104,6 +104,7 @@ sequenceDiagram
   participant BG as "detached child process"
   Host->>B: prompt JSON on stdin
   B->>Ad: readInput(raw)
+  Note over B: pin command: note only, no search
   Note over B: slash command, under 4 words or automated: no search
   B->>R: fresh(home) and wordScores
   B->>E: getEmbedder(false) and readVectors
@@ -122,7 +123,5 @@ Order in code: `gather()` in `brain.js` runs the rules search, the history log, 
 
 ## Where to look next
 
-- The rules matching and the map search: `docs/ARCHITECTURE.md`.
-- Host input and output shapes: `src/hosts/` and `docs/HOSTS.md`.
-- Build, test and release steps: [03-dev-workflow.md](03-dev-workflow.md).
-- Open points and doc drift: [findings.md](findings.md).
+- Rules matching and the map search: `docs/ARCHITECTURE.md`. Host input and output: `docs/HOSTS.md`.
+- Build, test and release: [03-dev-workflow.md](03-dev-workflow.md). Open points: [findings.md](findings.md).

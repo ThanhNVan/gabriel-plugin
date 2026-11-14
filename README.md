@@ -45,9 +45,7 @@ On a first install, `/gabriel:setup` warns that the full setup is big, then offe
 
 Installed from a local folder? Claude Code runs a copy in `~/.claude/plugins/cache/`. After you change the folder, run `claude plugin update gabriel@gabriel` and restart Claude Code.
 
-`add-docs` points gabriel at a folder of doc files and builds its map, so the first question can show it. Gabriel reads Markdown, text, reStructuredText, AsciiDoc, Org, HTML, Word, PowerPoint, OpenDocument, Excel, CSV, TSV and PDF. PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs. JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: list them in `"extensions"` in `projects.json` to read them. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md). You can also copy folders into `~/.gabriel/docs/<name>/` (older installs: `~/.claude/gabriel-data/docs/<name>/`) and run `/gabriel:setup` again, but only while there is no `projects.json`. Each folder there is one doc set.
-
-After you add or change doc files later, gabriel picks them up in the background on a later prompt: new folders under `~/.gabriel/docs/` (including `docs/stack/`, made by setup for your stack docs) and changed files. Run `/gabriel:update` to do it now. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md).
+`add-docs` points gabriel at a folder of doc files and builds its map. Gabriel reads Markdown, text, reStructuredText, AsciiDoc, Org, HTML, Word, PowerPoint, OpenDocument, Excel, CSV, TSV and PDF (PDFs need the optional `pdfjs-dist` package, which `npm ci --omit=dev` installs). JSON (`.json`), JSON Lines (`.jsonl`, `.ndjson`) and YAML (`.yaml`, `.yml`) are opt-in: list them in `"extensions"` in `projects.json`. See [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md). You can also copy folders into `~/.gabriel/docs/<name>/` (older installs: `~/.claude/gabriel-data/docs/<name>/`) and run `/gabriel:setup` again, but only while there is no `projects.json`. Each folder is one doc set.
 
 To check how well it finds your docs, and to train it on your own questions, see [docs/EVAL.md](docs/EVAL.md) and `/gabriel:retrain`.
 
@@ -77,6 +75,20 @@ My notes map (spreading search over docs, built 2026-11-10; start here, then con
 ```
 
 The `map` skill tells Claude how to read this block. Claude treats it as a lead, not as proof.
+
+### Pin one doc set per session
+
+Working in one project all session? Type this as a prompt:
+
+```
+gabriel use makillez
+```
+
+From then on, this session's map searches only that doc set. Naming another set in a prompt does not switch it. The fallback general docs can still show. Every gabriel note starts with `📌 pinned: makillez  ("gabriel use auto" to undo)`.
+
+- `gabriel use auto`: search all doc sets again.
+- `gabriel use ?` (or any unknown name): list your doc sets.
+- A name or an alias works. A new session starts unpinned. A pin is dropped about 7 days after it was set.
 
 ## What leaves your machine
 

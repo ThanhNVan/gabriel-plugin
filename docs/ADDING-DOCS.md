@@ -174,10 +174,9 @@ Expected lines: `added doc set <name>` for each new folder, `<name>: map built` 
 1. Open `~/.gabriel/private/<name>/eval-cases.suggested.json`. Keep the new cases you want. Rewrite each question in your own words, and save them in `eval-cases.json`.
 2. Retrain the ranking: `/gabriel:retrain <name>`.
 
-A folder dropped into `docs/` is a new doc set only when `projects.json` exists. With no `projects.json`, gabriel already reads every folder under `docs/`.
-
 ## 10. projects.json fields
 
-- `"aliases": ["name"]`: a prompt that names the set routes to it. `add-docs` and `--update` set it. `--update` adds `[name]` to any older set that has none, and prints `set alias for <name>`.
+- `"aliases": ["name"]`: a prompt that names the set routes to it, and so does `gabriel use <alias>` (see README, "Pin one doc set per session"). `add-docs` and `--update` set it. `--update` adds `[name]` to an older set that has none, and prints `set alias for <name>`.
 - `"cwdHints": ["repo-name"]`: set by `add-docs --code`. A prompt run from a folder with this name adds a small score to the set.
 - `"sessionGate": true`: on the first prompt of a session, a weak match that names no doc set and comes from outside its folder shows nothing. Default: `false`. Use it when several doc sets overlap.
+- `"chain": { "seeds": 4, "max": 3, "stem": 3 }`: the "2 links away" step (see [ARCHITECTURE](ARCHITECTURE.md), Firing). `seeds` is how many top code hits it starts from, `max` how many extra code names it may add, and `stem` how many name parts must match (higher is stricter). Partial values merge with these defaults. Numbers outside the range are limited to it (seeds and max 0 to 10, stem 1 to 6). A value that is not a number uses the default. `seeds` or `max` of 0 turns the step off. Try values with `eval/eval-map.js --chain` (see [EVAL](EVAL.md)).

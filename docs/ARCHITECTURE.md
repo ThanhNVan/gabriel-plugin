@@ -2,7 +2,7 @@
 
 For the step-by-step flows, with diagrams, see [WORKFLOWS.md](WORKFLOWS.md).
 
-This page explains how gabriel works inside. Read the [README](../README.md) first.
+How gabriel works inside. Read the [README](../README.md) first.
 
 gabriel has two parts:
 
@@ -92,6 +92,7 @@ For each prompt, the map search does this:
    - A doc line shows the file, the section and the text (cut at 210 characters).
    - A code line shows the name and the file, with its line.
    - For the top 3 code names, up to 4 neighbours each appear as `↔` lines. A `↔` line is one hop along a graph link. It has no direction.
+   - Then up to `max` (default 3) more code names two strong links away from the top `seeds` (default 4) code hits, marked `2 links away`. Both links must weigh 0.6 or more. The name must contain the hit's stem: its first `stem` (default 3) name parts, leading verb dropped (`SetIhmEventTaskStatus...` gives `IhmEventTask`). This finds the rest of a flow through a shared type, which the spreading search does not pass. Per-set values: [ADDING-DOCS](ADDING-DOCS.md), section 10.
 
 A "session gate" applies only to a project with `"sessionGate": true` in `projects.json` (off by default). A weak match is a match that is not named in the prompt and is outside the project folder. For that project it shows only when this session already had a map for it. See [ADDING-DOCS](ADDING-DOCS.md), section 10.
 
@@ -99,7 +100,7 @@ A "session gate" applies only to a project with `"sessionGate": true` in `projec
 
 - **Default.** Docs are ranked by their activation score.
 - **Trained weights (optional).** If a project has `private/<name>/rank.json`, docs are ranked with its weights (key `w`). Signals include word and meaning scores, heading match, file depth and file size.
-- **Picking.** At most 6 docs. At most 2 per file. One per section. Only docs within 3 points of the top score.
+- **Picking.** With trained weights: at most 6 docs, at most 2 per file, one per section, and only docs within 3 points of the top score. Default: at most 6 docs, at most 2 per file, and none under 30 percent of the top score.
 - **Training.** `node src/train-rank.js --project <name>` trains the weights from your own questions, for any doc set. See [EVAL](EVAL.md).
 
 ## Routing and fallback
@@ -111,7 +112,7 @@ Each project in `projects.json` is scored for a prompt:
 - plus 1.2 when one of its `aliases` appears as a whole word in the prompt;
 - plus 0.3 when the working folder path contains the project name or one of its `cwdHints`.
 
-The top project answers. A second project within 0.4 of the top adds a short block.
+The top project answers. A second project within 0.4 of the top adds a short block. A session pinned with `gabriel use <set>` scores only that set (the fallback still applies).
 
 A project with `fallback: true` is the general docs. It answers only when no other project does, or when it is clearly stronger. Its block says it is background reading, not a rule of your repo. Its own stricter gate (1.7) applies.
 
@@ -158,18 +159,7 @@ Each prompt that reaches the search (4 words or more, not a slash command, not a
 
 ## Setup steps
 
-`node src/setup.js` (or `/gabriel:setup`) runs 10 steps and shows a progress bar.
-
-1. Check Node.js (22.5 or newer).
-2. Install npm packages with `npm ci --omit=dev`.
-3. Create the data folder, with `docs/stack/` for stack docs.
-4. If there are no doc sets, create the starter file `docs/README.md` (a file, not a doc set).
-5. Download the meaning model.
-6. Copy data from an old brain folder. Copies only, and only with `--yes`.
-7. Build the rules graph.
-8. Build each doc set's map.
-9. Run `npm test`.
-10. Print a summary.
+`node src/setup.js` (or `/gabriel:setup`) runs 10 steps, shown in section 1 of [WORKFLOWS](WORKFLOWS.md). Copying old data happens only with `--yes`.
 
 Flags: `--dry-run`, `--skip-model`, `--skip-test`, `--yes`, `--data <dir>`, `--only model|build|test`. Setup is safe to run again.
 
@@ -208,7 +198,7 @@ flowchart TD
 | `graph.json` | The rules graph (Claude Code). Other hosts: `graph.<host>.json`. |
 | `models/` | The meaning model files. |
 | `history/` | Your prompts (one `YYYY-MM.<machine>.jsonl` file per month), their meaning numbers, and `graph.db`. |
-| `seen/` | Dedupe state per session. Removed after 7 days. |
+| `seen/` | Dedupe state and session pins, per session. Files not written for 7 days are removed. |
 | `private/<name>/` | Optional files for ranking and questions: `rank.json`, `doc-questions.json`, `eval-cases.json`. Also `privacy-words.txt` and `thesaurus.local.json` for your own word lists. `notes/EVAL-MK.md` is the eval report. |
 | `dq.<name>.bin`, `dq.<name>.idx.json` | The question index for one doc set. Optional. |
 | `*.lock`, `mk-check`, `history-check` | Small lock and timing files. |
