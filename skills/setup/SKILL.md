@@ -21,7 +21,8 @@ Flags:
 - `--skip-model`: do not download the meaning model.
 - `--skip-test`: do not run the self-tests.
 - `--yes`: setup copies old data from `~/.claude/brain` (step 6). Add-docs also accepts a very large folder (over 20000 files or 500 MB).
-- `--onboard`: run the first-run steps below even when you already have projects (for example to add stack docs later). Only this skill reads it: never pass it to `setup.js`. the optional Python packages for the tune run (see `docs/TUNING.md`). It only does this step: it finds Python 3.10 or newer, makes the venv in the data folder, installs torch (CPU) and the tune packages, and prints the install size. A normal setup never does this. Works with `--dry-run`.
+- `--onboard`: run the first-run steps below even when you already have projects (for example to add stack docs later). Only this skill reads it: never pass it to `setup.js`.
+- `--tune`: installs the optional Python packages for the tune run (see `docs/TUNING.md`). It only does this step: it finds Python 3.10 or newer, makes the venv in the data folder, installs torch (CPU) and the tune packages, and prints the install size. A normal setup never does this. Works with `--dry-run`.
 
 Report the summary lines the command prints. Keep them as they are.
 
@@ -72,14 +73,7 @@ On a pick, run `/graphify <code folder>` and wait for it to finish. It writes `<
 
 1. Move that folder to `<name>-code-docs/graphify-out/`.
 2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone. Delete `graph.html` and any dated backup folder (`graphify-out/<YYYY-MM-DD>/`) in `<name>-code-docs/graphify-out/`: they are not used, and `graph.html` can trip a privacy scan.
-3. Check the graph matches the code. Run these two one-line commands. Never read `graph.json` into the chat:
-
-   ```
-   node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).built_at_commit)" "<name>-code-docs/graphify-out/graph.json"
-   git -C "<code folder>" rev-parse HEAD
-   ```
-
-   The two values must be equal. If not, show both and ask before you go on.
+3. Check the graph matches the code: `node "${CLAUDE_PLUGIN_ROOT}/tools/graph-stats.js" "<name>-code-docs/graphify-out/graph.json" --repo "<code folder>"`. Never read `graph.json` into the chat. It must print `graph-stats: 0 hits`. On `commit mismatch`, show the line and ask before you go on.
 
 Save `graph` as `<code folder>`.
 

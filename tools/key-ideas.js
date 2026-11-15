@@ -25,7 +25,7 @@ function tokens(text) {
     if (fence) continue;
     for (const m of line.matchAll(/`([^`]+)`/g)) out.add(m[1].trim());
     for (const m of line.matchAll(/\]\(([^)\s]+)\)/g)) out.add(m[1]);
-    for (const m of line.matchAll(NUMBER)) out.add(m[0]);
+    for (const m of line.matchAll(NUMBER)) out.add(m[0].trim());   // "10 seeds" matches as "10 " (the optional space): trim, or it is never found again
   }
   out.delete('');
   return [...out];

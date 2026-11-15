@@ -12,7 +12,7 @@ Two events in order:
 1. **Remember the seeds.** When a map block is made, `src/mk.js` `remember()` saves the prompt's top 10 seeds for this session in the `last` table. Learning later uses the first 8. The fallback doc set saves nothing.
 2. **Read the file.** `src/brain.js` `touchedHook()` reads the file path from the tool input (`src/hosts/claude.js` `readTouched`). It stops when there is no session id or no path.
 3. **Check the window.** `mk.js` `touched()` needs a `last` row for this session, made no more than 45 minutes ago (`LEARN_WINDOW_MS`). Otherwise it does nothing.
-4. **Check the file.** The file must be a file in that doc set's map (`mapFile()`). A file already counted for this map is skipped. A file the map does not know is added to the session's miss list (`noteMiss()`, see [R38](../02-business-rules.md#r38-miss-warning)).
+4. **Check the file.** The file must be a file in that doc set's map (`mapFile()`). A file already counted for this map is skipped. A code file inside the set's repo that the map does not know is added to the session's miss list (`isRepoCodeFile()`, `noteMiss()`, see [R38](../02-business-rules.md#r38-miss-warning)).
 5. **Pick the targets.** Up to 3 main code classes of that file, not generic names, with degree of 600 or less (`LEARN_TARGETS`, `HUB`).
 6. **Learn.** For each seed and each target, the link weight grows: `w + 0.2 × activation × (1 − w)`, capped at 1. The confirmation count goes up by one. See [R23](../02-business-rules.md#r23-a-learned-link-needs-two-confirmations-and-fades).
 7. **Use the link next time.** `mk.js` `search()` reads the links with at least 2 confirmations. It spreads from them, never starts from them (see [R24](../02-business-rules.md#r24-learned-links-never-start-a-search)).

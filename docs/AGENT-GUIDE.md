@@ -34,6 +34,26 @@ In Claude Code, the user types the skill: every skill except `map` is set so the
 | `/gabriel:tune-embeddings` | Only when the user asks. It is slow. | Never run it as part of another skill. | The before and after table, kept or rolled back. |
 | `map` (not a command) | A map block is in the prompt. | It is a lead: name the doc or file, then confirm it in the code. | n/a |
 
+## `/gabriel:setup`, step by step
+
+The skill (`skills/setup/SKILL.md`) has the full text. Follow this list in order. After each step, tell the user the step and its check result (`step 3/9 done: ...`). Stop at a failed check: show the line, and ask.
+
+| # | Do | Check | If it fails |
+|---|---|---|---|
+| 1 | New or known user? Run the one-line `projects.json` check from the skill. | It prints `new` or `known`. | `known` with no `--onboard`, or any of `--dry-run`, `--tune`, `--yes`: run step 2 only, then report. `--onboard`: skip step 2 and the warning, go to step 3. |
+| 2 | Run `node "<plugin folder>/src/setup.js"` with the user's flags (never `--onboard`). Wait. A new user first gets the "Heads up" warning, in the skill's words. | Its summary lines. `mk-status all` shows each set `ok`. | Node too old, npm blocked, model download: see [TROUBLESHOOTING](TROUBLESHOOTING.md). |
+| 3 | Read `<data>/onboarding.json`. | You know which of the 4 steps are `done`. | No file: all 4 are open. |
+| 4 | Ask once (multi-select) which open steps to run: helper tools, graph a project, docs from the graph, stack docs. | The user's picks. | None picked: report and stop. |
+| 5 | **Helper tools.** Install only the picked tools that are missing. | `graphify --help` works; `claude plugin list` shows the plugins. | A plugin needs a Claude Code restart before use. Save `tools` in `onboarding.json`. |
+| 6 | **Graph a project.** Skip it when graphify is missing. Ask the code folder and `<name>` (default: the folder name in lower case; letters, digits, `-`, `_`, up to 40 characters). Ask before you make `<parent>/<name>-code-docs/` and before `git init`. Run `/graphify <code folder>`. Move `graphify-out/` into `<name>-code-docs/`. Delete `graph.html` and dated backups. | `graph-stats.js <name>-code-docs/graphify-out/graph.json --repo <code folder>`: `graph-stats: 0 hits`. No `graphify-out/` left in the code folder. | `commit mismatch`: show it and ask. Save `graph`. |
+| 7 | **Docs from the graph.** Ask which kinds. Read `DOC-LAYOUT.md`, then `GRAPH_REPORT.md`. Write to `<name>-code-docs/docs/`, with a Mermaid diagram in each doc. Confirm each claim in the code. | `check-docs` and `check-claims` on `<name>-code-docs/docs`: 0 hits each. | Fix each flagged line, run again. |
+| 8 | **Register.** `/gabriel:add-docs <name> <docs> --code <name>-code-docs --repo <code folder>` (full paths, no question). Then `docs-checked <name>`. No docs picked in step 7: register `<name>-code-docs` itself as `<docs>`, and skip `docs-checked`. | `mk-status all`: `<name>` is `ok` with a `repo` line. `docs checked for <name> at <sha>`. | `repo refused: ...`: show it and stop. Save `docs`. |
+| 9 | **Stack docs.** Ask languages, frameworks, process. Search for trusted sources, show the list with sizes, and wait for a yes. Downloads go to Haiku subagents. Then `/gabriel:add-docs stack <data>/docs/stack` (or `/gabriel:update` when it exists). | Files are in `<data>/docs/stack/`; `stack` is `ok`. | A page that fails is listed, not retried in a loop. Save `stack`. |
+
+Save each step's key in `onboarding.json` (`done`, the folder, or `skipped`) right after it, so a stopped run can resume. End with the finish checklist below and tell the user: after code changes, run `/gabriel:refresh-docs <name>`.
+
+**Save tokens in setup:** run graphify once (later runs use `graphify update`); let the scripts check the graph and the docs; write only the doc kinds the user picked; send downloads to Haiku.
+
 ## Known errors and fixes
 
 | You see | Cause | Fix |

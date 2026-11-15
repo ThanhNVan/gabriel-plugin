@@ -1,16 +1,16 @@
 # Graph Report - gabriel-plugin  (2026-11-15)
 
 ## Corpus Check
-- 125 files · ~125,578 words
+- 132 files · ~130,784 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1300 nodes · 2097 edges · 85 communities (71 shown, 14 thin omitted)
-- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 187 edges (avg confidence: 0.85)
+- 1372 nodes · 2175 edges · 103 communities (89 shown, 14 thin omitted)
+- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 189 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b6cbeba7`
+- Built from commit: `0e54fc6a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,7 +23,7 @@
 - retrain.js
 - package.json
 - extract.js
-- paths.js
+- projects.js
 - test-update.js
 - repo.js
 - test-workflow.js
@@ -37,6 +37,7 @@
 - test-brain.js
 - test-extract.js
 - train-rank.js
+- eval-rerank.js
 - test-graph.js
 - test-tune.js
 - wide-test.js
@@ -44,7 +45,8 @@
 - test-hosts.js
 - check-public.js
 - pin.js
-- export-pairs.js
+- dbFile
+- test-repo.js
 - test-history.js
 - check-docs.js
 - brain.js
@@ -59,26 +61,33 @@
 - test-tune-pairs.js
 - R26 Retrain keeps new weights only when strict score does not fall
 - How a prompt is handled
+- check-claims.js
 - test-projects.js
 - Spreading search
 - R35 Session pin
 - gabriel 0.3.0 release notes
+- paths.js
+- key-ideas.js
+- search
 - export-onnx.js
 - run-all.js
 - test-embed-model.js
 - eval-rules.js
-- W03 Add docs
+- Architecture (01)
 - make-corpus.js
 - test-check-docs.js
 - test-paths.js
 - test-plain-docs.js
 - test-version.js
-- debug
+- addDocs
+- test-debuglog.js
+- W03 Add docs
 - test-statusview.js
 - test-lint.js
 - test-mermaid.js
 - test-util.js
 - R36 Exact code lines
+- build
 - R33 A code graph must exist and match the docs
 - find_transformer_dir
 - train.py
@@ -98,12 +107,21 @@
 - Who uses gabriel (developer, doc owner, tuner)
 - Rationale: the refresh skill never commits or pushes
 - Data folder (GABRIEL_DATA)
+- run
+- getProject
+- test-key-ideas.js
+- AGENT GUIDE: read this before you run a gabriel step
+- rankDocRows
+- test-check-claims.js
+- test-graph-stats.js
+- graph-stats.js
+- test-retrieval.js
 
 ## God Nodes (most connected - your core abstractions)
 1. `build()` - 25 edges
-2. `search()` - 24 edges
-3. `dataDir()` - 24 edges
-4. `getProject()` - 24 edges
+2. `getProject()` - 25 edges
+3. `search()` - 24 edges
+4. `dataDir()` - 24 edges
 5. `addDocs()` - 22 edges
 6. `main()` - 21 edges
 7. `extractText()` - 20 edges
@@ -112,16 +130,16 @@
 10. `relinkDocs()` - 17 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `build()` --references--> `mk.db (project map store)`  [EXTRACTED]
-  src/mk.js → repo-docs/technical/01-architecture.md
+- `Rationale: never block a prompt (time limits, fail open)` --rationale_for--> `hook()`  [EXTRACTED]
+  repo-docs/technical/01-architecture.md → src/brain.js
 - `Rationale: rebuild maps in background with locks, old map serves` --rationale_for--> `refreshMapInBackground()`  [EXTRACTED]
   repo-docs/technical/01-architecture.md → src/brain.js
 - `Rationale: session dedupe (save state only after output is written)` --rationale_for--> `dedupe()`  [EXTRACTED]
   repo-docs/technical/01-architecture.md → src/brain.js
 - `Findings (known gaps)` --references--> `dedupe()`  [EXTRACTED]
   repo-docs/technical/findings.md → src/brain.js
-- `Rationale: never block a prompt (time limits, fail open)` --rationale_for--> `hook()`  [EXTRACTED]
-  repo-docs/technical/01-architecture.md → src/brain.js
+- `embedNodes()` --references--> `vectors.json`  [EXTRACTED]
+  src/embed.js → repo-docs/technical/01-architecture.md
 
 ## Import Cycles
 - None detected.
@@ -131,27 +149,27 @@
 - **Hook fails open** — docs_architecture_fail_open, repo_docs_business_02_business_rules_hook_never_blocks, docs_workflows_one_prompt, docs_superpowers_plans_global_constraints [INFERRED 0.85]
 - **Retrain keep rule** — repo_docs_business_02_business_rules_r26_retrain_keep, docs_eval_retrain_keep_rule, skills_retrain_skill_retrain, repo_docs_business_workflows_w06_eval_and_retrain_flow, repo_docs_technical_02_modules_src_retrain_js, changelog_retrain_guard [INFERRED 0.85]
 
-## Communities (85 total, 14 thin omitted)
+## Communities (103 total, 14 thin omitted)
 
 ### Community 0 - "tune.js"
-Cohesion: 0.09
-Nodes (40): Rationale: a tuned model wins only on scores, tune-embeddings skill, modelsDir(), ask(), bar(), BRAIN, capture(), copyIfThere() (+32 more)
+Cohesion: 0.05
+Nodes (57): Rationale: a tuned model wins only on scores, tune-embeddings skill, casesFile(), { embedText }, exportPairs(), fs, { loadProjects, getProject }, mk (+49 more)
 
 ### Community 1 - "mk.js"
-Cohesion: 0.06
-Nodes (81): Rationale: atomic writes (temp file, then rename), Rationale: node:sqlite, not a native package, extSet(), isDocName(), addExactLines(), addNamedCode(), addNeighbours(), AUTO_SKIP (+73 more)
+Cohesion: 0.09
+Nodes (26): Rationale: node:sqlite, not a native package, AUTO_SKIP, canon(), CHAIN_DEFAULT, CHAIN_VERBS, chunkDoc(), clean(), CODE_FILLER (+18 more)
 
 ### Community 2 - "codex.js"
 Cohesion: 0.08
 Nodes (25): Host adapter, W08 Other hosts, os, path, { readCommon }, os, path, { readCommon, toolInput, pathsFrom } (+17 more)
 
 ### Community 3 - "setup.js"
-Cohesion: 0.08
-Nodes (52): Rationale: backup before host hook file write (--apply), Meaning model (embedding model), add-docs skill, setup skill, update skill, ADD_SKIP, addDocs(), addGabriel() (+44 more)
+Cohesion: 0.09
+Nodes (30): Rationale: backup before host hook file write (--apply), update skill, ADD_SKIP, addGabriel(), CODE_EXT, codeHintName(), dirBytes(), fetchModel() (+22 more)
 
 ### Community 4 - "eval-map.js"
-Cohesion: 0.06
-Nodes (47): argv, { defLine }, evalProject(), exactOf(), flag(), fs, { getEmbedder }, { homeDir } (+39 more)
+Cohesion: 0.19
+Nodes (16): argv, { defLine }, evalProject(), exactOf(), flag(), fs, { getEmbedder }, { homeDir } (+8 more)
 
 ### Community 5 - "retrain.js"
 Cohesion: 0.06
@@ -163,19 +181,19 @@ Nodes (29): eslint, @eslint/js, globals, @huggingface/transformers, jsdom, depen
 
 ### Community 7 - "extract.js"
 Cohesion: 0.15
-Nodes (30): adocText(), delimited(), docxText(), elems(), ENT, extractText(), fs, htmlText() (+22 more)
+Nodes (31): isRepoCodeFile(), adocText(), delimited(), docxText(), elems(), ENT, extractText(), fs (+23 more)
 
-### Community 8 - "paths.js"
-Cohesion: 0.15
-Nodes (25): pinNote(), registerNewDocFolders(), checkName(), dataDir(), defaultRuleFiles(), docsDir(), fs, hosts (+17 more)
+### Community 8 - "projects.js"
+Cohesion: 0.20
+Nodes (20): pinNote(), registerNewDocFolders(), checkName(), dataDir(), docsDir(), privateDir(), projectsFile(), { dataDir, projectsFile, privateDir, checkName, defaultRuleFiles } (+12 more)
 
 ### Community 9 - "test-update.js"
 Cohesion: 0.07
 Nodes (21): assert, casesFile, casesHash, crypto, data, docs, env, filler (+13 more)
 
 ### Community 10 - "repo.js"
-Cohesion: 0.10
-Nodes (23): checkRepo(), commitsSince(), defLineIn(), defRegexes(), escapeRe(), exactLines(), { execFileSync }, fileLines() (+15 more)
+Cohesion: 0.22
+Nodes (14): checkRepo(), defLine(), defLineIn(), defRegexes(), escapeRe(), exactLines(), { execFileSync }, fileLines() (+6 more)
 
 ### Community 11 - "test-workflow.js"
 Cohesion: 0.08
@@ -194,8 +212,8 @@ Cohesion: 0.11
 Nodes (21): crypto, { dataDir, checkName }, expand(), fs, hashFile(), migrate(), MOVES, path (+13 more)
 
 ### Community 15 - "rules.js"
-Cohesion: 0.15
-Nodes (26): search(), searchFull(), withTimeout(), mkSynonyms(), contextFile(), pluginRoot(), addPrivateThesaurus(), blocks() (+18 more)
+Cohesion: 0.14
+Nodes (27): search(), searchFull(), withTimeout(), mkSynonyms(), contextFile(), pluginRoot(), addPrivateThesaurus(), blocks() (+19 more)
 
 ### Community 16 - "suggest-cases.js"
 Cohesion: 0.13
@@ -221,6 +239,10 @@ Nodes (19): assert, check(), data, DOCX, ex, fs, home, main() (+11 more)
 Cohesion: 0.10
 Nodes (15): argv, casesFile, EXCLUDE, fs, { getEmbedder }, { getProject }, { homeDir }, LAMBDA (+7 more)
 
+### Community 22 - "eval-rerank.js"
+Cohesion: 0.16
+Nodes (17): judge(), judgeRendered(), argv, fs, { getEmbedder }, { homeDir }, { judge, judgeRendered }, main() (+9 more)
+
 ### Community 23 - "test-graph.js"
 Cohesion: 0.11
 Nodes (18): assert, cli, { DatabaseSync }, filler, fs, gdb, history, home (+10 more)
@@ -234,12 +256,12 @@ Cohesion: 0.11
 Nodes (15): brain, BRAINDIR, FILL, FILL_S, FILL_T, fs, history, MAY_HIT (+7 more)
 
 ### Community 26 - "embed.js"
-Cohesion: 0.18
-Nodes (16): vectors.json, refreshInBackground(), crypto, { dataDir, writeAtomic }, ehash(), embedders, { embedModel, DEFAULT_EMBED_MODEL }, embedNodes() (+8 more)
+Cohesion: 0.16
+Nodes (17): Rationale: local only, the hook never downloads, Rationale: never block a prompt (time limits, fail open), vectors.json, refreshInBackground(), crypto, { dataDir, writeAtomic }, ehash(), embedders (+9 more)
 
 ### Community 27 - "test-hosts.js"
-Cohesion: 0.11
-Nodes (16): HOSTS, assert, baseEnv(), BRAIN, codexHome, data, fakeHome, fs (+8 more)
+Cohesion: 0.12
+Nodes (15): assert, baseEnv(), BRAIN, codexHome, data, fakeHome, fs, hosts (+7 more)
 
 ### Community 28 - "check-public.js"
 Cohesion: 0.19
@@ -249,9 +271,13 @@ Nodes (16): DEFAULT_ROOT, escapeRe(), findWordsFile(), fs, gitLines(), isSkipped
 Cohesion: 0.18
 Nodes (13): { dataDir }, fs, getPin(), parsePin(), path, seenFile(), setPin(), assert (+5 more)
 
-### Community 30 - "export-pairs.js"
+### Community 30 - "dbFile"
 Cohesion: 0.22
-Nodes (11): casesFile(), { embedText }, exportPairs(), fs, { loadProjects, getProject }, mk, mulberry32(), path (+3 more)
+Nodes (15): codeFiles(), dbFile(), effective(), hadMap(), hasMap(), integrate(), learnReset(), learnShow() (+7 more)
+
+### Community 31 - "test-repo.js"
+Cohesion: 0.14
+Nodes (10): commitsSince(), graphDrift(), lastCommitTime(), assert, { checkRepo, defLine, exactLines, graphDrift, lastCommitTime, commitsSince }, { execFileSync }, fs, os (+2 more)
 
 ### Community 32 - "test-history.js"
 Cohesion: 0.16
@@ -262,8 +288,8 @@ Cohesion: 0.23
 Nodes (13): checkFile(), codeBlockHits(), codeMask(), fenceBlocks(), fs, lineNumberHits(), linkHits(), path (+5 more)
 
 ### Community 34 - "brain.js"
-Cohesion: 0.09
-Nodes (32): Rationale: local only, the hook never downloads, Rationale: never block a prompt (time limits, fail open), Rationale: session dedupe (save state only after output is written), buildNote(), capText(), contextArgs(), contextText(), { debug } (+24 more)
+Cohesion: 0.08
+Nodes (39): Rationale: rebuild maps in background with locks, old map serves, Rationale: session dedupe (save state only after output is written), buildNote(), capText(), contextArgs(), contextText(), { debug }, dedupe() (+31 more)
 
 ### Community 35 - "eval-model.js"
 Cohesion: 0.15
@@ -282,8 +308,8 @@ Cohesion: 0.15
 Nodes (12): assert, fs, GENERIC, mk, owner, ownFile, path, paths (+4 more)
 
 ### Community 39 - "dataDir"
-Cohesion: 0.20
-Nodes (14): cache, { dataDir }, embedAll(), { embedModel, DEFAULT_EMBED_MODEL }, files(), fs, load(), path (+6 more)
+Cohesion: 0.27
+Nodes (11): cache, { dataDir }, embedAll(), { embedModel, DEFAULT_EMBED_MODEL }, files(), fs, load(), path (+3 more)
 
 ### Community 40 - "test-tips.js"
 Cohesion: 0.18
@@ -309,6 +335,10 @@ Nodes (12): Retrain keep rule (0.3.0 entry), No-name retrain always keeps (earli
 Cohesion: 0.23
 Nodes (12): Hook fails open, Fallback gate value (1.7 in ARCHITECTURE), How a prompt is handled, Routing and fallback, The hook runs twice, One prompt flow, Install and first setup flow, R01 Hook never blocks a prompt (+4 more)
 
+### Community 46 - "check-claims.js"
+Cohesion: 0.19
+Nodes (13): buildIndex(), checkFile(), CODE_DIRS, esc(), found(), fs, judge(), path (+5 more)
+
 ### Community 47 - "test-projects.js"
 Cohesion: 0.17
 Nodes (9): assert, dir, fs, later, m, os, path, ps (+1 more)
@@ -324,6 +354,18 @@ Nodes (11): projects.json (doc set config), Quiet gate (0.65), Task 5: gabriel w
 ### Community 50 - "gabriel 0.3.0 release notes"
 Cohesion: 0.29
 Nodes (10): CI workflow test.yml, Lint and test on Windows and Ubuntu, gabriel 0.3.0 release notes, CHANGELOG version history, Global constraints of the plan, Review improvements plan (2026-11-14), Task 10: CI workflow, Task 12: release 0.3.0 (+2 more)
+
+### Community 51 - "paths.js"
+Cohesion: 0.19
+Nodes (9): HOSTS, activeHost(), defaultRuleFiles(), fs, hostAdapter(), hosts, os, path (+1 more)
+
+### Community 52 - "key-ideas.js"
+Cohesion: 0.20
+Nodes (7): esc(), fs, pairs(), path, present(), SKIP_DIRS, walk()
+
+### Community 53 - "search"
+Cohesion: 0.18
+Nodes (11): addExactLines(), addNeighbours(), chainNum(), expand(), gateAndNormalize(), namedProjects(), pickResults(), search() (+3 more)
 
 ### Community 54 - "export-onnx.js"
 Cohesion: 0.22
@@ -341,9 +383,9 @@ Nodes (8): assert, base, embed, { embedModel, DEFAULT_EMBED_MODEL }, fs, os, pat
 Cohesion: 0.22
 Nodes (7): brain, CASES, fs, home, mk, path, PRIVATE_CASES
 
-### Community 58 - "W03 Add docs"
-Cohesion: 0.16
-Nodes (16): 02-business-rules.md (cited, not in chunk), W03 Add docs, W07 Refresh docs, Repo docs index, Architecture (01), Doc set (project), Code graph (graphify graph.json), mk.db (project map store) (+8 more)
+### Community 58 - "Architecture (01)"
+Cohesion: 0.28
+Nodes (9): 02-business-rules.md (cited, not in chunk), Repo docs index, Architecture (01), Build lock (mk.lock), Project map, Session pin, Findings (known gaps), Technical docs index (+1 more)
 
 ### Community 59 - "make-corpus.js"
 Cohesion: 0.25
@@ -365,9 +407,17 @@ Nodes (8): assert, data, fs, home, mk, os, path, tmp
 Cohesion: 0.22
 Nodes (7): assert, fs, market, path, pkg, plugin, ROOT
 
-### Community 65 - "debug"
-Cohesion: 0.11
-Nodes (19): Rationale: rebuild maps in background with locks, old map serves, format(), gather(), mapFor(), noteMiss(), refreshMapInBackground(), touchedHook(), debug() (+11 more)
+### Community 64 - "addDocs"
+Cohesion: 0.31
+Nodes (11): addDocs(), buildMap(), checkRepoArg(), countLine(), expandHome(), graphRel(), hasCodeFiles(), main() (+3 more)
+
+### Community 65 - "test-debuglog.js"
+Cohesion: 0.17
+Nodes (10): fs, path, paths, assert, DATA, { debug }, file, fs (+2 more)
+
+### Community 66 - "W03 Add docs"
+Cohesion: 0.22
+Nodes (10): W03 Add docs, W07 Refresh docs, Doc set (project), Code graph (graphify graph.json), Meaning model (embedding model), projects.json, add-docs skill, setup skill (+2 more)
 
 ### Community 67 - "test-statusview.js"
 Cohesion: 0.33
@@ -389,6 +439,10 @@ Nodes (8): home(), brainPath, fs, homes, os, path, { spawnSync }, tempHome()
 Cohesion: 0.40
 Nodes (6): Exact code and doc lines (0.3.0), Dedupe per session, repo refused, R07 An item is not sent twice in one session, R36 Exact code lines, One-prompt flow (W01)
 
+### Community 72 - "build"
+Cohesion: 0.24
+Nodes (10): Rationale: atomic writes (temp file, then rename), mk.db (project map store), build(), camel(), listDocs(), roleWords(), slug(), sources() (+2 more)
+
 ### Community 73 - "R33 A code graph must exist and match the docs"
 Cohesion: 0.40
 Nodes (5): Code graph check (wrong-repo warning), graph not found, R33 A code graph must exist and match the docs, Code graph (glossary term), status skill
@@ -409,6 +463,42 @@ Nodes (3): Code docs layout, Keep it lean rules, Workflow page template
 Cohesion: 0.67
 Nodes (3): Deleting everything, Prompt history redaction, What never leaves the machine
 
+### Community 94 - "run"
+Cohesion: 0.27
+Nodes (10): extSet(), isDocName(), countDocs(), listDocFiles(), readJson(), run(), runNode(), step() (+2 more)
+
+### Community 95 - "getProject"
+Cohesion: 0.36
+Nodes (10): defaultProject(), docsRoot(), format(), graphOnDisk(), graphPathOf(), stale(), status(), where() (+2 more)
+
+### Community 96 - "test-key-ideas.js"
+Cohesion: 0.20
+Nodes (7): assert, fs, KEY, os, path, ROOT, { spawnSync }
+
+### Community 97 - "AGENT GUIDE: read this before you run a gabriel step"
+Cohesion: 0.22
+Nodes (8): AGENT GUIDE: read this before you run a gabriel step, Before step 1, Finish checklist, Known errors and fixes, Run each skill, Save tokens: let scripts check, The 7 rules, When you edit docs
+
+### Community 98 - "rankDocRows"
+Cohesion: 0.28
+Nodes (9): addNamedCode(), coreDoc(), f32(), families(), isFallback(), loadRank(), rankDocRows(), remember() (+1 more)
+
+### Community 99 - "test-check-claims.js"
+Cohesion: 0.22
+Nodes (7): assert, CHECK, fs, os, path, ROOT, { spawnSync }
+
+### Community 100 - "test-graph-stats.js"
+Cohesion: 0.22
+Nodes (7): assert, fs, os, path, ROOT, { spawnSync }, STATS
+
+### Community 101 - "graph-stats.js"
+Cohesion: 0.29
+Nodes (3): fs, path, { spawnSync }
+
+### Community 102 - "test-retrieval.js"
+Cohesion: 0.33
+Nodes (5): assert, fs, mk, os, path
+
 ## Ambiguous Edges - Review These
 - `Retrain keep rule (0.3.0 entry)` → `No-name retrain always keeps (earlier 0.3.0 entry)`  [AMBIGUOUS]
   CHANGELOG.md · relation: conceptually_related_to
@@ -418,7 +508,7 @@ Nodes (3): Deleting everything, Prompt history redaction, What never leaves the 
   docs/WORKFLOWS.md · relation: references
 
 ## Knowledge Gaps
-- **654 isolated node(s):** `globals`, `fs`, `path`, `{ homeDir }`, `paths` (+649 more)
+- **693 isolated node(s):** `globals`, `fs`, `path`, `{ homeDir }`, `paths` (+688 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -431,11 +521,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `Fallback gate value (1.7 in ARCHITECTURE)` and `One prompt flow`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **Why does `Architecture (01)` connect `W03 Add docs` to `tune.js`, `mk.js`, `brain.js`, `setup.js`, `retrain.js`, `embed.js`?**
-  _High betweenness centrality (0.038) - this node is a cross-community bridge._
-- **Why does `W08 Other hosts` connect `codex.js` to `W03 Add docs`, `setup.js`?**
-  _High betweenness centrality (0.033) - this node is a cross-community bridge._
-- **Why does `run()` connect `setup.js` to `paths.js`, `mk.js`, `embed.js`, `migrate-data.js`?**
-  _High betweenness centrality (0.015) - this node is a cross-community bridge._
+- **Why does `W08 Other hosts` connect `codex.js` to `Architecture (01)`, `setup.js`?**
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+- **Why does `Architecture (01)` connect `Architecture (01)` to `tune.js`, `mk.js`, `brain.js`, `setup.js`, `retrain.js`, `embed.js`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `relinkDocs()` connect `addDocs` to `mk.js`, `W03 Add docs`, `setup.js`, `projects.js`, `paths.js`, `Architecture (01)`, `getProject`?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
 - **What connects `globals`, `fs`, `path` to the rest of the system?**
-  _654 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _693 weakly-connected nodes found - possible documentation gaps or missing edges._

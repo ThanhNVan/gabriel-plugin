@@ -49,6 +49,12 @@ try {
   assert.match(r.stdout, /^a\.md: 8 -> 3 lines, key ideas kept: 2\/4$/m);
   assert.match(r.stdout, /key-ideas: 2 lost/);
 
+  // A number before a plain word ("top 10 seeds") is kept when the words around it change.
+  write(path.join(ROOT, 'before3', 'n.md'), ['Saves the top 10 seeds.']);
+  write(path.join(ROOT, 'after3', 'n.md'), ['Keeps 10 seeds now.']);
+  r = check([path.join(ROOT, 'before3'), path.join(ROOT, 'after3')]);
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+
   // A doc removed in "after" is still checked: its ideas must be in another after doc.
   write(path.join(ROOT, 'before2', 'gone.md'), ['Keep `kept.js` and `lostFn()`.']);
   write(path.join(ROOT, 'after2', 'other.md'), ['Now `kept.js` lives here.']);
