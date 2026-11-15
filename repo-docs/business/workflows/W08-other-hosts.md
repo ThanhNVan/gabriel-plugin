@@ -49,4 +49,4 @@ flowchart TD
 - For Codex and Gemini: the hook file has gabriel's entries, and a backup file exists when the file was there before.
 - For Copilot and generic: the printed lines are the only output. The user adds them by hand.
 - For Claude Code: no change from setup.
-- Check: `node src/setup.js --host <name>` (no `--apply`) prints "already set up: nothing to change" when the file is correct.
+- Check: `node src/setup.js --host <name>` (no `--apply`) prints "already set up: no change" when the file is correct. With `--apply` it prints "already set up: nothing to change".

@@ -90,7 +90,7 @@ A build writes a temp file. The new rows replace the old ones in one transaction
 
 ### R18 Background builds: one at a time, checked each minute
 - The hook checks for stale maps at most once a minute, and starts the first stale doc set. A set whose graph file is missing is skipped.
-- One background build runs at a time. Its lock file `mk.lock` names the set and counts as held for 10 minutes. A build removes it when it is the default or the named set.
+- One background build runs at a time. Its lock file `mk.lock` names the set and counts as held for 10 minutes. A build removes it when it is empty (an old-style lock) or names the set just built. A lock that names another set stays.
 - Where: `src/brain.js` `refreshMapInBackground()` (`mk-check`, `MK_LOCK_MS`), `mk.graphPathOf()`; `src/brain.js` build mode (lock removal).
 
 ### R19 New doc folders join only when they hold files
@@ -140,7 +140,7 @@ The tuned model is kept only when the held-out total rises, no doc set's held-ou
 ## Tips and hints
 
 ### R28 One tip per session
-A session gets at most one tip, in order, starting again at the end of the list. Tips are off when `projects.json` has `"tips": false`.
+A session gets at most one tip, in order, starting again at the first tip after the last. Tips are off when `projects.json` has `"tips": false` or does not exist.
 - Where: `src/tips.js` `tipFor()`.
 
 ### R29 Setup hint until setup is done
@@ -204,8 +204,8 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
   - With 2 or more pins, the session gate hides only the set it gates. The other pinned sets still show.
   - The fallback general docs ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) run after the pinned blocks, as before.
   - Learning ([R23](#r23-a-learned-link-needs-two-confirmations-and-fades)) uses the top set only.
-- Every user note starts with a blank line, then `📌 pinned: a, b  ("gabriel use auto" to undo)`. The model text never gets it.
-- Not pinned, with 2 or more doc sets: each map note ends with a 💡 line that suggests `gabriel use <set>`. The model text never gets it.
+- While pinned, every user note starts with a blank line, then `📌 pinned: a, b  ("gabriel use auto" to undo)`. The model text never gets it.
+- Not pinned, with 2 or more doc sets: each map note ends with a 💡 line that suggests `gabriel use <set>`. A due setup hint, drift or miss warning, or tip takes that line first (`brain.js` `noteHint()`). The model text never gets it.
 - No session id: nothing is pinned or cleared, and the reply says so.
 - If the pin check fails with an error, the prompt goes on as an ordinary question.
 - Gaps: [findings](../technical/findings.md).

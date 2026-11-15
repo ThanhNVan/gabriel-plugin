@@ -174,7 +174,7 @@ Message: `repo refused: <reason>`. Nothing is saved. The reasons:
 
 `mk-status all` (or `/gabriel:status`) shows a `REPO MISSING` header, and a `repo <path>   REPO MISSING` line under it, when the folder is gone. The map still works. It shows the graph's lines, with no check mark. Fix: put the folder back, or set a new one with `/gabriel:add-docs <name> --repo <folder> --relink`.
 
-`(<file>:<line> ✓ moved)` means the file moved inside the repo. The name was found in the new file, so use that line. `mk-status all` shows `no repo (add-docs <name> --repo <folder> --relink)` for a set with a graph but no repo folder: its code lines have no check mark and the line may be old.
+`(<file>:<line> ✓ moved)` means the file moved inside the repo. The name was found in the new file, so use that line. `mk-status all` shows `repo   none (add-docs <name> --repo <folder> --relink)` for a set with a graph but no repo folder: its code lines have no check mark and the line may be old.
 
 ## `/gabriel:retrain` asks you to review cases
 

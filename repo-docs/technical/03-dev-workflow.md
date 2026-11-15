@@ -16,7 +16,7 @@ Optional tuning packages: `node src/setup.js --tune` (tune parts in [01-architec
 - One file: `node test/test-hosts.js`.
 - One run at a time. `run-all.js` takes the lock `gabriel-test.lock` in the system temp folder. A second run stops with the first run's pid. A stuck lock is deleted by hand.
 - Tests use temp folders, so the real `~/.claude` is not read.
-- CI runs lint and tests on each push and pull request (`.github/workflows/test.yml`).
+- CI runs lint and tests on each push to `master` and on each pull request (`.github/workflows/test.yml`).
 
 ## Lint, Mermaid and privacy checks
 
@@ -39,7 +39,7 @@ The owner word list is `private/privacy-words.txt` in the data folder or in the 
 A host is one file in `src/hosts/`. Copy `src/hosts/generic.js` (no hook file) or `src/hosts/codex.js` (hook file) as a start.
 
 1. Create `src/hosts/<name>.js`. It exports `name`, `readInput`, `readTouched`, `writeOutput`, `rulesHome`, `defaultRuleFiles`, `contextFile`, `maxChars` and `setup`. Use `null` for `setup` when the host has no hook file.
-2. If `setup` is set, give it `configFile()` and `entries(root)`. Each hook command must end with `--host <name>`. `setup.js` finds its own hooks by that text (`addGabriel`, `removeGabriel`).
+2. If `setup` is set, give it `configFile()` and `entries(root)`. Each hook command must contain `--host <name>`; only `--data "<dir>"` may follow it (when `GABRIEL_DATA` is set). `setup.js` finds its own hooks by that text (`addGabriel`, `removeGabriel`).
 3. Add the adapter to the `HOSTS` object in `src/hosts/index.js`. The name comes from the key.
 4. Add cases to `test/test-hosts.js` and `test/test-setup-hosts.js`. Run `npm test`.
 5. Update the host table in `docs/HOSTS.md`.

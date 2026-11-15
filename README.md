@@ -24,7 +24,7 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 - **Knows the flows.** Workflow and architecture docs, plus one-hop code graph links, show how the parts connect.
 - **Quiet when it should be.** Prompts that match nothing get no extra text.
 - **Local.** After setup, nothing leaves your machine. No API key, no cloud index.
-- **Gets better with use.** It learns from the files you open after a map. You can retrain its ranking on your own questions, and keep the new weights only if they score better.
+- **Gets better with use.** It learns from the files you open after a map. You can retrain its ranking on your own questions, and keep the new weights only if they score at least as well.
 - **One brain, many tools.** Claude Code, Codex CLI, Gemini CLI, GitHub Copilot and any other tool share the same data folder.
 - **Your rules, when they fit.** It adds only the rules that match the prompt, not the whole rule file.
 
@@ -141,7 +141,7 @@ From then on, this session's map searches only those doc sets. Naming another se
 - `gabriel use auto`: search all doc sets again.
 - Not pinned and you have 2 or more doc sets? Each map note ends with a 💡 line that reminds you of `gabriel use <set>`.
 - `gabriel use ?` (or any unknown name): list your doc sets.
-- A name or an alias works. A new session starts unpinned. A pin is dropped about 7 days after it was set.
+- A name or an alias works. A new session starts unpinned. A pin is dropped about 7 days after its last use.
 
 ## What leaves your machine
 
@@ -167,6 +167,8 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
 - [docs/TUNING.md](docs/TUNING.md): the optional fine-tune of the meaning model.
 - [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md): the folder layout and lean rules for the code docs that setup writes and refresh-docs keeps.
+
+<!-- Maintainers: private tests on real local data live in the gitignored private/tests/ (not in npm test). Run: node private/tests/run.js. Baseline: node private/tests/baseline.js --compare (or --save). See private/tests/README.md. -->
 
 ## Best results: graph your code, then write its docs
 

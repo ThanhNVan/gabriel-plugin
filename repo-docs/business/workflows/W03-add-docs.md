@@ -20,7 +20,7 @@ In `src/setup.js` `addDocs()`:
 
 ### Relink (`--relink`)
 
-1. Check the set exists in `projects.json` (`unknown doc set` if not), and that `--code` is given.
+1. Check the set exists in `projects.json` (`unknown doc set` if not), and that `--code` or `--repo` is given. With `--repo` alone, it writes only the repo fields: no graph write and no map rebuild.
 2. Check `<repo>/graphify-out/graph.json` (same rule as step 6).
 3. Write only that set's `graph` entry, then rebuild its map. Nothing else in the entry changes.
 

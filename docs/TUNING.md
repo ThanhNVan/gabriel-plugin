@@ -31,7 +31,7 @@ node src/setup.js --tune
 
 This is the only setup step that installs the Python packages. A normal setup does not.
 It finds Python, makes a venv in your data folder (`<data>/tune-venv`), and installs the packages.
-Add `--dry-run` to see the steps first. The last line says the packages are ready and how big they are.
+Add `--dry-run` to see the steps first. At the end it says the packages are ready, then prints `install size: <n> MB`.
 
 Manual steps, if you want them:
 
@@ -52,7 +52,7 @@ Use `--venv <dir>` to pick another venv.
 
 Or run `/gabriel:tune-embeddings` in Claude Code.
 
-The run prints one progress line per step, like `[###---] 40% step 3/5`. It stops at the first failure.
+The run prints a progress line when each step starts and when it is done, like `[##----] 40% step 3/5 export ONNX`. It stops at the first failure.
 
 ## Why 50 or more reviewed cases
 
