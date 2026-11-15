@@ -26,8 +26,6 @@
 
 - The map adds up to 3 code names two strong graph links from the top 4 code hits, marked `2 links away`, when they share the hit's name stem (a leading verb dropped). Per set, the `chain` setting in `projects.json` sets the counts (default seeds 4, max 3, stem 3). It finds the rest of a flow through a shared type (an event base class, say). On 12 Makillez questions: chain off 9/12, seeds 3 max 3 stem 3 10/12, seeds 4 max 3 stem 3 (the default) 11/12. Makillez main gate unchanged (strict 523/569, quiet 30/31); the block grows about 54 characters on average.
 
-- `/gabriel:retrain` with no name always keeps the new weights for the default doc set, and saves the old file as `rank.prev.json`. With a name, the score guard stays.
-
 - Retrain rule changed: no name now means the default doc set under the same guard. The new weights are kept only when the strict count is not lower. `--force` keeps the new weights anyway. Whenever an existing rank file is replaced, the old one is saved as `rank.prev.json`.
 - CI: `.github/workflows/test.yml` runs lint and tests on Windows and Ubuntu for each push to `master` and each pull request.
 

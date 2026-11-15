@@ -10,7 +10,7 @@ Graph communities: [Brain Context Engine], [Prompt History Hook], [Tips Module].
 
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
-| `src/brain.js` | The entry. Runs the prompt hook, the post-tool hook, the `context` text, and the build and status modes. Handles pin commands (`pinNote`). Gathers rules, map and history, then dedupes and writes output. `refreshMapInBackground()` starts one stale map build at a time (lock `mk.lock`). `mk-status all` prints each set's graph path and `GRAPH MISSING`. | `build`, `query`, `search`, `searchFull`, `embedNodes`, `format`, `tokens`, `capText`, `contextText` | `hooks/hooks.json`; the hook commands written by `hosts/codex.js` and `hosts/gemini.js`; `setup.js` build steps; `skills/status`; `eval/eval-rules.js` |
+| `src/brain.js` | The entry. Runs the prompt hook, the post-tool hook, the `context` text, and the build and status modes. Handles pin commands (`pinNote`). Gathers rules, map and history, then dedupes and writes output. `refreshMapInBackground()` starts one stale map build at a time (lock `mk.lock`). `mk-status all` prints each set's graph path and `GRAPH MISSING`. | `build`, `query`, `search`, `searchFull`, `embedNodes`, `format`, `tokens`, `capText`, `contextText`, `skipReason` | `hooks/hooks.json`; the hook commands written by `hosts/codex.js` and `hosts/gemini.js`; `setup.js` build steps; `skills/status`; `eval/eval-rules.js` |
 | `src/pin.js` | Reads `gabriel use <set>` and keeps the session's pin in `seen/<session>.pin`. | `parsePin`, `getPin`, `setPin` | `brain.js` |
 | `src/tips.js` | Picks one tip per session for the hook note. Off with `"tips": false` in `projects.json`. | `TIPS`, `tipFor` | `brain.js` |
 | `src/debuglog.js` | Writes one line per caught error to `debug.log` in the data folder. Only with `GABRIEL_DEBUG=1`. Never throws. | `debug` | `brain.js`, `mk.js` |
@@ -103,6 +103,7 @@ Graph communities: [Public Check Script].
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
 | `tools/check-public.js` | Privacy scan of publishable files: emails, IP addresses, secrets, user paths, owner words. Prints file, line and kind only. | script | `npm run privacy`, `npm run prepack` (`--release`), `test/run-all.js` |
+| `tools/check-docs.js` | Checks a docs folder: size, long code blocks, line numbers, placeholders, broken links and, with `--code`, code paths. Prints file and line per hit. Rules: [DOC-LAYOUT](../../docs/DOC-LAYOUT.md). | script | `skills/setup`, `skills/refresh-docs`; run by hand |
 
 ## Plugin manifests and skills
 

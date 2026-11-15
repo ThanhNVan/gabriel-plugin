@@ -23,6 +23,7 @@ Optional tuning packages: `node src/setup.js --tune` (tune parts in [01-architec
 | Lint | `npm run lint` | ESLint on the whole repo (`eslint.config.js`). `test/test-lint.js` runs it too. |
 | Mermaid | `node test/test-mermaid.js` | Parses every Mermaid block in the repo's `.md` files. Skips `node_modules`, `private`, `.git` and `graphify-out`. Includes `repo-docs/`. |
 | Privacy | `npm run privacy` | `tools/check-public.js`: finds emails, IP addresses, secrets, user paths and owner words. Prints file, line and kind only. |
+| Doc check | `node tools/check-docs.js <docs folder> [--code <repo>]` | `tools/check-docs.js`: checks a docs folder against [DOC-LAYOUT](../../docs/DOC-LAYOUT.md). One line per hit, then `check-docs: <n> hits`. |
 
 Lint and Mermaid need the dev packages (`npm ci` installs them). When a package is missing, the test prints a skip line and exits 0. See [findings.md](findings.md).
 

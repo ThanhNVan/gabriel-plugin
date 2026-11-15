@@ -1,6 +1,6 @@
 # Findings
 
-Known gaps, and places where the docs and the code disagree. Each item was checked in the code (2026-11-14).
+Known gaps, and places where the docs and the code disagree. Checked in the code at 9380b0f2 (2026-11-15): items 1, 3 to 7 and 10 to 12 were read again and still hold. Items 2, 8 and 9 were not run again.
 
 ## Open gaps
 
@@ -16,3 +16,4 @@ Known gaps, and places where the docs and the code disagree. Each item was check
 10. **`--repo` with `--code --relink` checks the old graph.** `relinkDocs()` in `src/setup.js` checks the folder against the set's current graph (`graphPathOf()`) before it links the new `--code` graph. A folder that fits only the new graph is refused. Fix: check against the new graph file.
 11. **A cold first run can leave lines unchecked.** `exactLines()` stops at 450 ms (`BUDGET_MS` in `src/repo.js`). One cold run took 458 ms and left 3 items unchecked. Those keep the graph's line, with no mark. Fix: none yet. Add a disk cache if this happens often.
 12. **A neighbour with no file prints `(external)`.** `exactLines()` sets `exact = false` for a neighbour with no `file`. `format()` still prints `(external)`, as it did before the layer. The text does not say "not found in repo". Fix: decide which text is right.
+13. **A wrong reason for a file with no named code type.** `touched()` in `src/mk.js` returns `file not in the map` when every code type in the file is cut by its filter (name under 4 characters or in `GENERIC`). The file is in the map, so the reason is wrong. Fix: give that case its own reason.

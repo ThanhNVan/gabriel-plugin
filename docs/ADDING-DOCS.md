@@ -16,7 +16,7 @@ Option A: put the files in a folder under the data folder.
 ~/.gabriel/docs/<name>/
 ```
 
-Use one folder per topic. Option A works only while there is no `projects.json` file in the data folder. After the first `add-docs`, that file exists, and a new folder under `docs/` is ignored. Then use `add-docs --copy`, or add an entry to `projects.json`.
+Use one folder per topic. Option A works with or without a `projects.json` file. Without one, every folder under `docs/` is a doc set. With one, a new folder that holds files is added in the background (section 9), or run `/gabriel:update` now.
 
 Option B: point gabriel at a folder you already have.
 

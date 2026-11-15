@@ -69,7 +69,7 @@ flowchart LR
   V --> DB
 ```
 
-- **Which files.** `layout: "auto"` reads `technical-docs/` when it exists. Otherwise it reads every `.md` file, except tool folders (`graphify-out`, `node_modules`, `.git`, `atlas`, `_tools`). `layout: "technical-docs"` reads only that folder. `layout: "all-md"` reads every `.md` file except `skipDirs`.
+- **Which files.** `layout: "auto"` reads `technical-docs/` when it exists. Otherwise it reads every doc file of the default types (`src/extract.js`), except tool folders (`graphify-out`, `node_modules`, `.git`, `atlas`, `_tools`). `layout: "technical-docs"` reads only that folder. `layout: "all-md"` reads every doc file except `skipDirs`.
 - **Chunks.** Text is split at headings and at spaces. Each chunk is at most 450 characters and keeps its heading path.
 - **Code nodes.** When a project sets `graph`, the file is read from the project root. If that file is missing, the build stops before it writes, and the old map stays. Links get a weight by relation: `calls` and `implements` 1.0, `method` 0.7, `defines` 0.6, `contains` 0.5, `references` 0.3, `imports` 0.2. The full table is `REL` in `src/mk.js`.
 - **Doc-to-code links.** A doc section links to a code node when it cites the node's file path, or names it in backticks: a capitalized name (`TireRepair`), or a name of 4+ characters that is camelCase or ends in `()` (`addDocs()`). A name that matches more than 3 nodes does not link.

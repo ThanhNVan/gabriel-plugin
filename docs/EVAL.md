@@ -17,7 +17,7 @@ Cases live in `eval-cases.json`. It holds a list of cases. Each case is one obje
 - `tier`: `easy`, `middle` or `hard`. Optional.
 - `project`: the project the question is about. No value means the default project.
 - `fn`: a function name, like `parsePin`. Optional. With `file`, it makes an exact case.
-- `file`: a regular expression for the code file, with forward slashes, like `src/pin\.js$`. Optional. Used with `fn`.
+- `file`: a regular expression for the code file, with forward slashes, like `pin\.js$`. Optional. Used with `fn`.
 
 Matching ignores case.
 

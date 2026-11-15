@@ -121,7 +121,7 @@ To use other settings (aliases, layout, a code graph), edit `projects.json`. See
 `--relink` stops with these errors, and changes nothing:
 
 - `unknown doc set: <name>`: the name is not in `projects.json`.
-- `--relink needs --code <repo>`: add `--code`.
+- `--relink needs --code <repo> or --repo <folder>`: add one of them.
 
 ## No code graph in the repo
 
