@@ -59,8 +59,8 @@ sequenceDiagram
   H->>B: Prompt as JSON on stdin
   B->>A: readInput
   A-->>B: prompt, session, folder, transcript path
-  alt "gabriel use <set>" or "gabriel use auto"
-    B->>B: Save or clear the pin in data/seen/<session>.pin
+  alt "gabriel use ..." (set, add or auto)
+    B->>B: Save or clear the pin list in data/seen/<session>.pin
     B-->>H: One-line note only
   else Slash command, under 4 words, or automated message
     B-->>H: Hint line only (setup, warning or tip), or empty output

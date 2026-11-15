@@ -206,6 +206,17 @@ try {
     assert.ok(!fs.existsSync(path.join(DATA, 'seen', 'p1b.pin')), 'unknown name must not write a pin');
     const noSid = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use notes', '')));
     assert.match(String(noSid.systemMessage || ''), /could not pin\. This tool sends no session id/, JSON.stringify(noSid));
+    const autoNoSid = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use auto', '')));
+    assert.match(String(autoNoSid.systemMessage || ''), /could not pin\. This tool sends no session id/, 'auto with no session: say so, not "pin removed"');
+    // an alias inside a longer word is not that set: "notes-old" is unknown, nothing is pinned
+    const inside = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use notes-old', 'p1c')));
+    assert.match(String(inside.systemMessage || ''), /no doc set "notes-old"/, JSON.stringify(inside));
+    assert.ok(!fs.existsSync(path.join(DATA, 'seen', 'p1c.pin')), 'a word holding an alias must not pin');
+    // a pinned set that is gone from projects.json is not shown on the 📌 line
+    fs.mkdirSync(path.join(DATA, 'seen'), { recursive: true });
+    fs.writeFileSync(path.join(DATA, 'seen', 'p1d.pin'), 'notes\ngoneset');
+    const stale = String(parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'p1d'))).systemMessage || '');
+    assert.match(stale, /📌 pinned: notes {2}\(/, 'only live sets on the pin line: ' + stale);
     const auto = parseHook(node(BRAIN, ['hook'], hookStdin('gabriel use auto', 'p1')));
     assert.match(String(auto.systemMessage || ''), /all doc sets again/, JSON.stringify(auto));
     assert.ok(!fs.existsSync(pinFile), 'use auto must clear the pin file');
@@ -236,6 +247,54 @@ try {
     assert.ok(!npMsg.includes(SUGGEST), 'one doc set only: no pin suggestion (it shows only with 2 or more sets): ' + npMsg);
     assert.ok(!ctxOf(neverPinned.o).includes('gabriel use <set>'), 'pin suggestion must not go into additionalContext');
     assert.ok(!qMap.systemMessage.includes(SUGGEST), 'pinned map note has no pin suggestion');
+  });
+
+  // 13
+  // Several pins (src/pin.js, plan Task 3). notes2 is a copy of notes with its own bikes.md text, so both sets answer PROMPT.
+  // (Identical text would be dropped by dedupe: the second block would vanish.) Runs after step 12.
+  step('several pins: list, +add, dedupe, limit, unknown name, real question, both maps shown', () => {
+    const NOTES2 = path.join(TMP, 'notes2');
+    fs.cpSync(NOTES, NOTES2, { recursive: true });
+    fs.writeFileSync(path.join(NOTES2, 'bikes.md'), [
+      '# Bike tyres', '', '## Repair a flat bike tyre', '',
+      'Remove the tube and find the puncture. Patch the hole, put the tube back, and pump the tyre up.', '',
+    ].join('\n'));
+    const added = node(SETUP, ['add-docs', 'notes2', NOTES2]);
+    assert.strictEqual(added.status, 0, show(added));
+    const pinFile = path.join(DATA, 'seen', 'm1.pin');
+    const pinText = () => fs.readFileSync(pinFile, 'utf8');
+    const say = (prompt) => String(parseHook(node(BRAIN, ['hook'], hookStdin(prompt, 'm1'))).systemMessage || '');
+    assert.match(say('gabriel use notes notes2'), /pinned to notes, notes2\. The map now searches only notes, notes2/);
+    assert.strictEqual(pinText(), 'notes\nnotes2');
+    say('gabriel use auto');
+    assert.ok(!fs.existsSync(pinFile), 'use auto must clear the list');
+    say('gabriel use +notes2');
+    assert.strictEqual(pinText(), 'notes2', 'add to an empty list');
+    say('gabriel use +notes');
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'add keeps the order');
+    assert.match(say('gabriel use +notes2 +NOTES2'), /pinned to notes2, notes\./, 'duplicate (any case) dropped');
+    assert.strictEqual(pinText(), 'notes2\nnotes');
+    assert.match(say('gabriel use notes2 nottes'), /gabriel: no doc set "nottes"\. Did you mean "notes"\? To pin, type: gabriel use notes2 notes\. Nothing changed\.$/, 'a near-miss asks to confirm (after the pin line)');
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'near-miss: pin unchanged');
+    assert.match(say('gabriel use +nottes'), /To pin, type: gabriel use \+notes\. Nothing changed\.$/, 'the + form is kept in the suggestion');
+    assert.match(say('gabriel use nope'), /gabriel: no doc set "nope"\. Your doc sets: /, 'one unknown word, not near: the set list (after the pin line)');
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'unknown name: pin unchanged');
+    const nopeNote = say('gabriel use nope');   // a pinned session: the error note also shows the pin line
+    assert.ok(nopeNote.includes('📌 pinned:') && nopeNote.includes('no doc set'), 'error note must show the pin: ' + nopeNote);
+    const q = say('gabriel use notes docs for this');   // a known set plus other words: a real question, searched
+    assert.ok(q && !q.includes('gabriel: '), 'a question that names a set must not become a command: ' + q);
+    assert.match(q, /📌 pinned: notes2, notes/, 'the question went through the normal flow (pin line shown)');
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'question: pin unchanged');
+    assert.match(say('gabriel use notes notes2 notesa notesb notesc notesd'), /gabriel: at most 5 doc sets can be pinned\. Nothing changed\.$/, 'limit is checked before the near-miss note (after the pin line)');
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'limit: pin unchanged');
+    const real = say('gabriel use these files now');   // C1b: not a command, a normal prompt
+    assert.ok(!real.includes('gabriel: '), 'a real question must not become a command: ' + real);
+    assert.strictEqual(pinText(), 'notes2\nnotes', 'real question: pin unchanged');
+    const both = parseHook(node(BRAIN, ['hook'], hookStdin(PROMPT, 'm1')));
+    const ctx = String((both.hookSpecificOutput && both.hookSpecificOutput.additionalContext) || '');
+    assert.ok(ctx.includes('notes map ('), ctx);
+    assert.ok(ctx.includes('notes2 map ('), ctx);
+    assert.match(String(both.systemMessage || ''), /📌 pinned: notes2, notes {2}\("gabriel use auto" to undo\)/);
   });
 
   // 13

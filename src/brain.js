@@ -61,7 +61,7 @@ function mapFor(home, text, pv, started, session, cwd = '') {
   try {
     if (Date.now() - started > MK_BUDGET_MS) return '';
     const mk = require('./mk.js');
-    const res = mk.searchAll(home, text, { pv, cwd, session, pin: require('./pin.js').getPin(home, session) || undefined });   // one of the projects in projects.json, or (as a fallback) the general docs
+    const res = mk.searchAll(home, text, { pv, cwd, session, pins: require('./pin.js').getPins(home, session) });   // one of the projects in projects.json, or (as a fallback) the general docs
     if (res && session) mk.remember(home, session, res);   // so a file opened soon after can teach the network (see `touched`)
     return mk.format(res);
   } catch (e) { debug('mapFor', e); return ''; }
@@ -374,18 +374,50 @@ function capText(text, max) {
 // Writes host output to stdout and waits for the write to finish. Empty output writes nothing.
 const emit = (s) => (s ? new Promise((resolve) => process.stdout.write(s, resolve)) : undefined);
 
-// "gabriel use <set>" pins this session to one doc set; "gabriel use auto" clears it (src/pin.js). Returns the note to show. Fails open.
+// "gabriel use <set>..." pins this session to one or more doc sets; "gabriel use +<set>" adds; "gabriel use auto" clears (src/pin.js).
+// Returns the note to show, or null when the words are an ordinary prompt (C1b: 2+ words and no word is a known set). Fails open.
 function pinNote(cmd, sid) {
   try {
-    const pin = require('./pin.js'), mk = require('./mk.js'), { loadProjects } = require('./projects.js');
-    if (cmd.auto) { pin.setPin(homeDir(), sid, null); return 'gabriel: pin removed. The map searches all doc sets again.'; }
+    const pin = require('./pin.js'), { loadProjects } = require('./projects.js'), home = homeDir();
+    const noSid = 'gabriel: could not pin. This tool sends no session id, so there is no session to pin.';
+    if (cmd.auto) return pin.setPins(home, sid, null) ? 'gabriel: pin removed. The map searches all doc sets again.' : noSid;
     const sets = loadProjects().filter((p) => !p.fallback), names = sets.map((p) => p.name);
-    const lc = cmd.name.toLowerCase();
-    const name = names.find((n) => n.toLowerCase() === lc) || mk.namedProjects(sets, lc)[0];   // exact name, else an alias
-    if (!name) return `gabriel: no doc set "${cmd.name}". Your doc sets: ${names.join(', ')}. Type "gabriel use <name>" with one of them.`;
-    if (!pin.setPin(homeDir(), sid, name)) return 'gabriel: could not pin. This tool sends no session id, so there is no session to pin.';
-    return `gabriel: pinned to ${name}. The map now searches only ${name} in this session. Type "gabriel use auto" to undo.`;
-  } catch { return ''; }
+    const resolve = (word) => {   // the whole word is a set name or an alias (any case); "esg-tool" is not esg
+      const lc = word.toLowerCase();
+      return names.find((n) => n.toLowerCase() === lc) || (sets.find((p) => (p.aliases || []).some((a) => a.toLowerCase() === lc)) || {}).name;
+    };
+    const asked = cmd.names || cmd.add;
+    const all = [...names, ...sets.flatMap((p) => p.aliases || [])];
+    const near = (w) => { const n = pin.nearName(w, all); return n ? resolve(n) : null; };   // a typo of a set name or alias -> that set
+    // 2+ words: a pin command only when each word is a set, an alias, or a near-miss of one. Any other word: a real question, searched.
+    if (asked.length >= 2 && !asked.every((w) => resolve(w) || near(w))) return null;
+    const existing = cmd.add ? pin.getPins(home, sid).filter((n) => names.includes(n)) : [];   // a set removed from projects.json drops out
+    const seen = new Set(), words = [];
+    for (const w of [...existing, ...asked]) if (!seen.has(w.toLowerCase())) { seen.add(w.toLowerCase()); words.push(w); }   // duplicates, any case, are dropped
+    if (words.length > pin.MAX_PINS) return `gabriel: at most ${pin.MAX_PINS} doc sets can be pinned. Nothing changed.`;
+    const typo = asked.find((w) => !resolve(w) && near(w));
+    if (typo) {   // nothing is pinned: the user confirms by typing the corrected command
+      const fixed = asked.map((w) => (cmd.add ? '+' : '') + (resolve(w) ? w : near(w) || w)).join(' ');
+      return `gabriel: no doc set "${typo}". Did you mean "${near(typo)}"? To pin, type: gabriel use ${fixed}. Nothing changed.`;
+    }
+    const list = [];
+    for (const w of words) {
+      const name = resolve(w);
+      if (!name) return `gabriel: no doc set "${w}". Your doc sets: ${names.join(', ')}. Type "gabriel use <name>" with one of them.`;
+      if (!list.includes(name)) list.push(name);
+    }
+    const joined = list.join(', ');
+    if (!pin.setPins(home, sid, list)) return noSid;
+    return `gabriel: pinned to ${joined}. The map now searches only ${joined} in this session. Type "gabriel use auto" to undo.`;
+  } catch (e) { debug('pinNote', e); return null; }   // fail open: the prompt goes on as an ordinary question
+}
+
+// The session's pinned sets that still exist in projects.json (a removed set drops out, as in searchAll). [] when none or on error.
+function livePins(home, sid) {
+  try {
+    const live = new Set(require('./projects.js').loadProjects().filter((p) => !p.fallback).map((p) => p.name));
+    return require('./pin.js').getPins(home, sid).filter((n) => live.has(n));
+  } catch { return []; }
 }
 
 // Why hook() and contextText() skip a prompt: the reason, or '' when the prompt is searched. Checked in this order.
@@ -400,12 +432,13 @@ function skipReason(prompt) {
 // The setup hint or tip wins over the pin hint. The pin hint shows only with a view, unpinned and with 2+ doc sets.
 // Empty parts are left out; all empty gives ''. skipPrefix goes in front of the skipped count (the no-context note).
 const PIN_HINT = '💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';
-function buildNote({ view, skipped, hint, pinned, manySets, skipPrefix = '' }) {
+const pinLine = (names) => `\n📌 pinned: ${names.join(', ')}  ("gabriel use auto" to undo)`;
+function buildNote({ view, skipped, hint, pinned = [], manySets, skipPrefix = '' }) {   // pinned: the session's doc sets, [] = not pinned
   const lines = [];
-  if (pinned) lines.push(`\n📌 pinned: ${pinned}  ("gabriel use auto" to undo)`);
+  if (pinned.length) lines.push(pinLine(pinned));
   if (view) lines.push(view);
   if (skipped) lines.push(`${skipPrefix}(${skipped} item${skipped > 1 ? 's' : ''} already in context, not repeated)`);
-  const oneHint = hint || (!pinned && manySets && view ? PIN_HINT : '');
+  const oneHint = hint || (!pinned.length && manySets && view ? PIN_HINT : '');
   if (oneHint) lines.push(oneHint);
   return lines.join('\n');
 }
@@ -413,13 +446,17 @@ function buildNote({ view, skipped, hint, pinned, manySets, skipPrefix = '' }) {
 async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
-    const pinned = require('./pin.js').getPin(homeDir(), sid);
-    const withPin = (note) => pinned ? `\n📌 pinned: ${pinned}  ("gabriel use auto" to undo)` + (note ? '\n' + note : '') : note;
+    const pinned = livePins(homeDir(), sid);
+    if (pinned.length) require('./pin.js').touchPin(homeDir(), sid);   // a pin used now lasts another 7 days
+    const withPin = (note) => pinned.length ? pinLine(pinned) + (note ? '\n' + note : '') : note;
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
       await emit(host.writeOutput({ text: '', note: withPin(noteHint(sid)) }));
     };
-    const cmd = require('./pin.js').parsePin(prompt);
-    if (cmd) return await emit(host.writeOutput({ text: '', note: pinNote(cmd, sid) }));
+    const cmd = require('./pin.js').parsePin(prompt), cmdNote = cmd ? pinNote(cmd, sid) : null;
+    if (cmdNote !== null) {   // null: an ordinary prompt (C1b), the normal flow goes on. An error reply also shows the pin line.
+      const failed = /^gabriel: (no doc set|at most)/.test(cmdNote);
+      return await emit(host.writeOutput({ text: '', note: failed ? withPin(cmdNote) : cmdNote }));
+    }
     if (skipReason(prompt)) return await hintOnly();
     const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
@@ -432,7 +469,7 @@ async function hook(host) {
     }
     // additionalContext (full text) goes to the model; note is a short, readable view of the same items for the user.
     const manySets = () => { try { return require('./projects.js').loadProjects().filter((p) => !p.fallback).length > 1; } catch { return false; } };
-    await emit(host.writeOutput({ text: additionalContext, note: buildNote({ view: humanize(additionalContext), skipped, hint, pinned, manySets: !pinned && manySets() }) }));
+    await emit(host.writeOutput({ text: additionalContext, note: buildNote({ view: humanize(additionalContext), skipped, hint, pinned, manySets: !pinned.length && manySets() }) }));
     save();
   } catch (e) { debug('hook', e); /* fail open: never block a prompt */ }
 }
@@ -593,11 +630,12 @@ const MODES = {
     run: async ({ arg, home }) => {
       const prompt = arg || '', skip = skipReason(prompt);
       if (skip) return console.log(`gabriel skips this prompt: ${skip}. No search runs.`);
-      const mk = require('./mk.js'), session = flagValue('--session') || '', pin = require('./pin.js').getPin(home, session) || '';
+      const mk = require('./mk.js'), session = flagValue('--session') || '', pins = livePins(home, session);
       let pv = null;
       const embed = await getEmbedder(false); if (embed) [pv] = await embed([prompt.slice(0, 500)]);
       const trace = {};
-      const won = (mk.searchAll(home, prompt, { pv, cwd: process.cwd(), session, pin: pin || undefined, learn: false, trace }) || {}).project;   // the hook shows one map: the top set's
+      const res = mk.searchAll(home, prompt, { pv, cwd: process.cwd(), session, pins, learn: false, trace }) || {};
+      const won = res.project, shownSets = new Set([res.project, ...(res.also || []).map((a) => a.project)]);   // the top set, and the extra blocks (pinned sets, a close call)
       const label = (name) => (getProject(name) || {}).label || name;
       const noWord = (L) => `${L}: no map, no word of this prompt is in these docs`;
       for (const p of require('./projects.js').loadProjects()) {
@@ -605,10 +643,10 @@ const MODES = {
         const L = label(p.name), b = s.best.toFixed(2), gate = s.gate.toFixed(2);
         const line = { 'no-map-file': `${L}: no map file yet. Run /gabriel:setup`, 'old-version': `${L}: map format is old. Run /gabriel:update`,
           'no-words': noWord(L), 'no-seeds': noWord(L), 'below-gate': `${L}: no map, best match ${b} is under the gate ${gate}`, 'nothing-to-show': `${L}: no map, best match ${b} is under the gate ${gate}`,
-          error: `${L}: no map, an error stopped the search. Set GABRIEL_DEBUG=1 and read debug.log`, shown: p.name === won ? `${L}: shown (best ${b})` : `${L}: matched (best ${b}), not shown` + (won ? `: ${label(won)} ranked higher` : '') }[s.reason];
+          error: `${L}: no map, an error stopped the search. Set GABRIEL_DEBUG=1 and read debug.log`, shown: shownSets.has(p.name) ? `${L}: shown (best ${b})` : `${L}: matched (best ${b}), not shown` + (won ? `: ${label(won)} ranked higher` : '') }[s.reason];
         if (line) console.log(line);
       }
-      if (pin) console.log(`pinned: ${pin}. Only that doc set is searched. Type "gabriel use auto" to undo.`);
+      if (pins.length) console.log(`pinned: ${pins.join(', ')}. Only those doc sets are searched. Type "gabriel use auto" to undo.`);
       if (trace.sessionGate) console.log(`session gate: a weak match, and this session had no map of ${label(trace.gated)} yet.`);
     },
   },

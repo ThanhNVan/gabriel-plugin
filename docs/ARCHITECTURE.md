@@ -107,7 +107,7 @@ A "session gate" applies only to a project with `"sessionGate": true` in `projec
 
 Each project in `projects.json` scores a prompt: its best map score, plus its `prior` (a number you set), plus 1.2 when an `aliases` word appears as a whole word in the prompt, plus 0.3 when the working folder contains the project name or a `cwdHints` entry.
 
-The top project answers. A second project within 0.4 of the top adds a short block. A session pinned with `gabriel use <set>` scores only that set (the fallback still applies).
+The top project answers. A second project within 0.4 of the top adds a short block. A session pinned to doc sets scores only those sets, and each one that matches gets a block (the fallback still applies). See [R35](../repo-docs/business/02-business-rules.md#r35-session-pin).
 
 A project with `fallback: true` is the general docs. It answers only when no other project does, or when it is clearly stronger. Its block says it is background reading, not a rule of your repo. Its own stricter gate (1.7) applies.
 
@@ -135,9 +135,6 @@ An item sent once in a session is not sent again in that session.
 ## Question index (optional)
 
 The optional question index matches questions worded unlike the doc. Write questions per section in `private/<name>/doc-questions.json`. Then `node src/brain.js build-dq --project <name>` writes `dq.<name>.bin` and `dq.<name>.idx.json`. A project with the index adds its 15 closest sections to the candidates. A trained `rank.json` can use the match as one signal.
-
-The rescue step is off: `Q_GATE` in `src/mk.js` is 9, and a meaning score cannot reach 9, so it never fires.
-
 ## Prompt history
 
 Each prompt that reaches the search (4 words or more, not a slash command, not automated) is saved. Secrets are cut out first by pattern. Similar earlier prompts (score 0.6 or more) can appear as "Earlier prompts of yours that look related". At most 2 appear. Details are in [PRIVACY](PRIVACY.md).

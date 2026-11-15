@@ -158,16 +158,40 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     { const t = {}; assert.strictEqual(mk.search(home, 'zzzz qqqq xxxx wwww', { project: 'alpha', trace: t }), null); assert.strictEqual(t.reason, 'no-seeds'); }
     { const t = {}; assert.ok(mk.search(home, order, { project: 'alpha', trace: t })); assert.strictEqual(t.reason, 'shown'); assert.ok(t.best > 0); }
     { const t = {}; mk.searchAll(home, order, { trace: t }); assert.strictEqual(t.sets.alpha.reason, 'shown'); assert.ok('beta' in t.sets); }
-    // a pinned session (opts.pin, from "gabriel use <name>") searches only that set; an unknown pin is ignored
-    const pa = mk.searchAll(home, parcel, { pin: 'alpha' });
+    // a pinned session (opts.pins, from "gabriel use <name>") searches only those sets; an unknown pin is ignored
+    const pa = mk.searchAll(home, parcel, { pins: ['alpha'] });
     assert.ok(!pa || pa.project !== 'beta', 'pinned to alpha: beta is never chosen');
     assert.ok(!pa || !(pa.also || []).some((a) => a.project === 'beta'), 'pinned: no beta block');
-    const pn = mk.searchAll(home, 'in beta, ' + parcel, { pin: 'alpha' });
+    const pn = mk.searchAll(home, 'in beta, ' + parcel, { pins: ['alpha'] });
     assert.ok(!pn || pn.project !== 'beta', 'naming beta does not beat the pin');
-    const pg = mk.searchAll(home, parcel, { pin: 'gone' }), p0 = mk.searchAll(home, parcel, {});
+    const pg = mk.searchAll(home, parcel, { pins: ['gone'] }), p0 = mk.searchAll(home, parcel, {});
     assert.strictEqual(pg && pg.project, p0 && p0.project, 'unknown pin = no pin');
-    const pb = mk.searchAll(home, parcel, { pin: 'beta' });
+    const pb = mk.searchAll(home, parcel, { pins: ['beta'] });
     assert.ok(pb && pb.project === 'beta', 'pinned to beta finds beta');
+    // two pins (Task 2): one block per pinned set that matches, the top one full, the others short
+    // alpha does not match the parcel prompt (line 145 needs that), so this prompt names both sets' topics
+    const both = order + ' and ' + parcel;
+    const pab = mk.searchAll(home, both, { pins: ['alpha', 'beta'], strong: 0 });   // strong: 0 skips the session gate (alpha has sessionGate)
+    assert.ok(pab, 'two pins: a map');
+    const pinShown = [pab.project, ...(pab.also || []).map((a) => a.project)];
+    assert.ok(pinShown.includes('beta'), 'both pinned sets that match are shown');
+    assert.strictEqual(new Set(pinShown).size, pinShown.length, 'no set twice');
+    // two pins, the session gate hides weak alpha: beta still shows (the gate drops only the gated set)
+    const gated = mk.searchAll(home, both, { pins: ['alpha', 'beta'] });
+    assert.ok(gated && [gated.project, ...(gated.also || []).map((a) => a.project)].includes('beta'), 'gate on alpha must not hide beta');
+    // Review Focus 5: only one pinned set matches: one block, no empty one
+    const only = mk.searchAll(home, 'ParcelRouter zone courier', { pins: ['alpha', 'beta'] });
+    assert.ok(only && only.project === 'beta', 'beta answers');
+    assert.ok(!(only.also || []).some((a) => a.project === 'alpha'), 'alpha did not match: no alpha block');
+    assert.ok((only.also || []).every((a) => a.docs.length || a.code.length), 'no empty block');
+    // Review Focus 2: a gone set in the list is dropped; the others still work; all gone = no pin
+    const pgb = mk.searchAll(home, parcel, { pins: ['gone', 'beta'] });
+    assert.ok(pgb && pgb.project === 'beta', 'a gone set is dropped, the others still work');
+    const pg1 = mk.searchAll(home, parcel, { pins: ['gone'] });
+    assert.strictEqual(pg1 && pg1.project, p0 && p0.project, 'all pins gone = no pin');
+    // C4: the extra pinned set prints as a short block with its own header
+    const pabText = mk.format(pab);
+    assert.ok(pabText.includes('Alpha map (') && pabText.includes('Beta map ('), pabText);
     await mk.build(home, { root: root2, project: 'beta', noEmbed: true });   // a rebuild replaces the project rows and leaves the others
     assert.ok(mk.search(home, order, {}) && mk.search(home, parcel, { project: 'beta' }), 'both projects still answer after a rebuild');
     assert.strictEqual(mk.stale(home, 'beta'), false, 'the rebuilt project is not stale');

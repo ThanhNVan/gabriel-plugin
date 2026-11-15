@@ -182,14 +182,34 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - Where: `src/mk.js` `search()`, `CHAIN_VERBS`, `CHAIN_DEFAULT`, `chainNum()`; `src/projects.js` `loadConfig()`; `eval/eval-map.js`.
 
 ### R35 Session pin
-- `gabriel use <set>` (a set name or an alias, any case) pins this session to that set. The pin is one line in `<data>/seen/<session>.pin`. The reply is a note only. The pin check runs before the [R02](#r02-short-and-slash-prompts-get-no-context) gate.
-- `gabriel use auto` clears the pin. An unknown name, such as `gabriel use ?`, lists the set names.
-- While pinned, `src/mk.js` `searchAll()` searches only that set. The fallback rule ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) is unchanged.
-- Every user note starts with a blank line, then `📌 pinned: <set>  ("gabriel use auto" to undo)`. The model text never gets it.
+- A pin is a list of doc sets for one session. The check runs before the [R02](#r02-short-and-slash-prompts-get-no-context) gate. The reply is a note only.
+- Syntax:
+  - `gabriel use a b` sets the list. It replaces the old list.
+  - `gabriel use +c` adds to the list. It counts only when every word has a `+`.
+  - Mixed words, such as `gabriel use a +b`, set the list. The `+` is dropped.
+  - `gabriel use auto` clears the list.
+- Which prompts are commands:
+  - One word after `use` is always a command. An unknown name gets the near-miss note or the error note (below).
+  - Two to 6 words are a command only when each word is a set, an alias, or a near-miss of one. Any other word makes the prompt an ordinary question, and it gets searched. For example, `gabriel use makillez docs for this` is searched.
+- Names: the whole word is a set name or an alias (any case). `esg-tool` is not `esg`. Duplicates are dropped. The general docs (the fallback set) cannot be pinned.
+- A near-miss is a typo of a set name or alias: at most 2 letters off (a swap of 2 letters counts as 1), and under half the word (`pin.js` `nearName()`). It pins nothing. The note asks the user to confirm by typing the fixed command, for example `Did you mean "makillez"? To pin, type: gabriel use esg makillez. Nothing changed.`
+- One unknown word that is not a near-miss gets the error note with the set names. The pin stays as it was.
+- At most 5 sets can be pinned (`MAX_PINS`). Over 5, the reply says nothing changed. A pin file edited by hand or corrupt reads as its first 5 unique names (`getPins()`).
+- File: `<data>/seen/<session>.pin`, one name per line. Blank lines are ignored. An old file with one name still works.
+- Each prompt in a pinned session refreshes the file's time (`pin.js` `touchPin()`). So a pin ends 7 days after its last use, by the `seen/` cleanup in [R07](#r07-an-item-is-not-sent-twice-in-one-session).
+- An error or near-miss reply starts with the current 📌 line. A success reply names the new pins and has no 📌 line.
+- A set that was removed from `projects.json` drops out of the search and the 📌 line (`brain.js` `livePins()`). If no pinned set is left, the search runs as if nothing were pinned.
+- While pinned, `src/mk.js` `searchAll()` searches only the pinned sets:
+  - The top set gets the full map block. Each other pinned set that matched gets a short block.
+  - With 2 or more pins, the session gate hides only the set it gates. The other pinned sets still show.
+  - The fallback general docs ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) run after the pinned blocks, as before.
+  - Learning ([R23](#r23-a-learned-link-needs-two-confirmations-and-fades)) uses the top set only.
+- Every user note starts with a blank line, then `📌 pinned: a, b  ("gabriel use auto" to undo)`. The model text never gets it.
 - Not pinned, with 2 or more doc sets: each map note ends with a 💡 line that suggests `gabriel use <set>`. The model text never gets it.
-- No session id: nothing is pinned, and the reply says so.
+- No session id: nothing is pinned or cleared, and the reply says so.
+- If the pin check fails with an error, the prompt goes on as an ordinary question.
 - Gaps: [findings](../technical/findings.md).
-- Where: `src/pin.js` `parsePin()`, `getPin()`, `setPin()`; `src/brain.js` `pinNote()`, `hook()`, `mapFor()`; `src/mk.js` `searchAll()` (`opts.pin`). Tests: `test/test-pin.js`, `test/test-workflow.js`.
+- Where: `src/pin.js` `parsePin()`, `getPins()`, `setPins()`, `touchPin()`, `nearName()`, `MAX_PINS`; `src/brain.js` `pinNote()`, `hook()`, `mapFor()`; `src/mk.js` `searchAll()` (`opts.pins`). Tests: `test/test-pin.js`, `test/test-map.js`, `test/test-workflow.js`, `test/test-brain.js`.
 
 ## Exact lines
 
@@ -197,8 +217,10 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - Each code name in the map, and each `↔` neighbour, shows the line where the name is defined in the set's repo folder. The file is read on each prompt, so the line is the one on disk now. It prints `(<file>:<line> ✓)`.
 - If the file is gone, or the name is not in it, it prints `(<file>, not found in repo)`.
 - If the file is gone but the name is found in another file of the repo, it prints `(<file>:<line> ✓ moved)` with the new file.
+- A neighbour with no file in the graph (an outside library name) prints `(external)`. It is not a repo file, so "not found in repo" would be wrong.
+- `--repo` with `--code --relink` checks the folder against the new graph, before anything is written.
 - A set with no repo folder keeps the graph's line, with no mark. `mk-status all` then shows `no repo (add-docs <name> --repo <folder> --relink)`. A label that is not a plain name (such as `R33 a code graph must exist`) also keeps the graph's line.
-- Limits: at most 30 files, 2 MB each, 450 ms per prompt. A file past a limit keeps the graph's line. Any error keeps it too.
+- Limits: at most 30 files, 2 MB each, 5 s per prompt (`BUDGET_MS`). A file past a limit keeps the graph's line. Any error keeps it too.
 - The repo folder comes from `add-docs --repo`, which checks it first: a git repo, the graph's commit in its history, and at least 80% of 200 sampled graph files in it.
 - Gaps: [findings](../technical/findings.md).
 - Where: `src/repo.js` `checkRepo()`, `exactLines()`, `defLine()`; `src/setup.js` `checkRepoArg()`; `src/mk.js` `search()` and `format()` (`where()`). Tests: `test/test-repo.js`, `test/test-map.js`, `test/test-workflow.js`.

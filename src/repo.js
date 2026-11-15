@@ -82,7 +82,7 @@ function graphDrift(repoDir, commit, files, base = '') {
 }
 
 // ---- prompt time: exact lines from the real repo files ----
-const MAX_FILES = 30, MAX_BYTES = 2 * 1024 * 1024, BUDGET_MS = 450;
+const MAX_FILES = 30, MAX_BYTES = 2 * 1024 * 1024, BUDGET_MS = 5000;   // at most 5 s per prompt; a warm run takes a few ms
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A label like ".Handle()" becomes "Handle". Anything else that is not a plain name gives ''.

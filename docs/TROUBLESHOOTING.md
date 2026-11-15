@@ -27,11 +27,11 @@ A map appears only when a prompt matches your docs well enough. Check these in o
 5. **The words do not match.** Use your docs' words, or name the set (its `aliases` in `projects.json` count). A pinned session ignores other names: see the next section.
 6. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
 
-## The map shows only one project
+## The map shows only some projects
 
-Cause: the session is pinned with `gabriel use <set>`. Every gabriel note then starts with `📌 pinned: <set>`, and the map searches only that set. Naming another set in a prompt does not help.
+Cause: the session is pinned with `gabriel use ...`. Every gabriel note then starts with `📌 pinned: <sets>`, and the map searches only those doc sets. Naming another set in a prompt does not help.
 
-Fix: type `gabriel use auto`. The 📌 line goes away. See the README section "Pin one doc set per session".
+Fix: type `gabriel use auto`. The 📌 line goes away. See the README section "Pin doc sets per session" and [R35](../repo-docs/business/02-business-rules.md#r35-session-pin).
 
 ## A PDF shows no text
 

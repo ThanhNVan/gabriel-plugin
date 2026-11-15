@@ -39,7 +39,7 @@ Everything is in one data folder, `~/.gabriel`. Older installs keep `~/.claude/g
 | `graph.codex.json`, `graph.gemini.json`, `graph.generic.json` | The same kind of graph for Codex CLI, Gemini CLI and `gabriel context`. | Yes. |
 | `history/*.jsonl` | Your prompts, one file per month and machine. All hosts write here. | Yes. |
 | `history/graph.db` | Word links built from your prompts. | Yes, in word form. |
-| `seen/` | Which items were sent in each session, and whether its tip was shown. | Item text. Removed after 7 days. |
+| `seen/` | Which items were sent in each session, and whether its tip was shown. Also the session's pinned doc set names (`<session>.pin`). | Item text. Removed after 7 days. The pin file holds names only. |
 | `tip-index` | The number of the next tip. | No. |
 | `onboarding.json` | Which first-run steps are done or skipped, the folders picked, and the date. | Folder paths only. |
 | `docs-add.lock` | Stops a second background update for 10 minutes. | No. |

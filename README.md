@@ -71,7 +71,7 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 | See if everything is up to date | `/gabriel:status` |
 | I want to know why I got no map | `/gabriel:why "<prompt>"` |
 | Make gabriel pick better results, using my test questions | `/gabriel:retrain <name>` |
-| Work on one project only in this chat | type `gabriel use <name>` (no slash) |
+| Work on chosen projects only in this chat | type `gabriel use <name>` (no slash) |
 
 **`/gabriel:setup`.** Run it once after you install gabriel, and again after you update it. It installs what gabriel needs, creates its data folder (`~/.gabriel/`), and builds the maps. The first time, it also offers some optional steps, and asks before each one. To see those steps again later: `/gabriel:setup --onboard`.
 
@@ -128,15 +128,15 @@ My notes map (spreading search over docs, built 2026-11-10; start here, then con
 
 The `map` skill tells Claude how to read this block. Claude treats it as a lead, not as proof.
 
-### Pin one doc set per session
+### Pin doc sets per session
 
-Working in one project all session? Type this as a prompt:
+Working in one project or a few all session? Type a prompt that names the sets:
 
 ```plain
-gabriel use makillez
+gabriel use makillez esg
 ```
 
-From then on, this session's map searches only that doc set. Naming another set in a prompt does not switch it. The fallback general docs can still show. Every gabriel note starts with `📌 pinned: makillez  ("gabriel use auto" to undo)`.
+From then on, this session's map searches only those doc sets. Naming another set in a prompt does not switch it. The fallback general docs can still show. Every gabriel note starts with `📌 pinned: makillez, esg  ("gabriel use auto" to undo)`. The full rules are in [R35](repo-docs/business/02-business-rules.md#r35-session-pin).
 
 - `gabriel use auto`: search all doc sets again.
 - Not pinned and you have 2 or more doc sets? Each map note ends with a 💡 line that reminds you of `gabriel use <set>`.

@@ -11,6 +11,8 @@ Optional tuning packages: `node src/setup.js --tune` (tune parts in [01-architec
 ## Run the tests
 
 - `npm test` runs `node test/run-all.js`: every `test/test-*.js` file in name order, then the privacy scan. One line per file. A failed file prints its last 20 output lines. Exit code 1 on any failure.
+- A file whose last line is a skip line, such as `lint skipped (dev package eslint missing: run npm install)`, shows `SKIP` with that line. The last line then says `all checks passed (<n> skipped)`. A skip is not a failure (`statusOf()`, `summaryLine()`, tested by `test/test-run-all.js`).
+- `node private/tests/run.js` runs the private tests on the real data. They are not in `npm test`, because CI has no real data.
 - One file: `node test/test-hosts.js`.
 - One run at a time. `run-all.js` takes the lock `gabriel-test.lock` in the system temp folder. A second run stops with the first run's pid. A stuck lock is deleted by hand.
 - Tests use temp folders, so the real `~/.claude` is not read.

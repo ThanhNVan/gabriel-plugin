@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A session can pin up to 5 doc sets, and each pinned set that matches gets a map block (the top one in full). A typo of a set name pins nothing and asks you to confirm the fixed command. A question that starts with "gabriel use" and has other words is searched as usual. Rules: [R35](repo-docs/business/02-business-rules.md#r35-session-pin). Pin code: `src/pin.js` `parsePin()`, `getPins()`, `setPins()`, `nearName()`, `touchPin()`.
+- A pin now lasts 7 days after its last use, not 7 days after it was set. Error and typo replies show the current 📌 line. A corrupt pin file reads as at most 5 unique names (it could flood the note before).
+- `npm test` shows `SKIP` for a check whose dev package is missing, and counts it in the last line.
+- `add-docs --code <repo> --repo <folder> --relink` checks the folder against the new graph.
+- Removed the unused question-index rescue (`Q_GATE`). Eval scores are unchanged.
 - Privacy scan: an npm version pin such as `pkg@3.4.2` is no longer reported as an email. graphify 0.9.109 puts `package.json` dependencies in the graph.
 
 - Saving a file no longer fails on Windows when antivirus or the indexer locks it for a moment: the rename is retried for about 1 s (paths.js moveIntoPlace(), used by setup, rules and history).

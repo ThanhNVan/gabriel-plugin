@@ -163,13 +163,14 @@ process.on('exit', () => { if (!finished) { console.error('TEST DID NOT FINISH')
   {
     const { buildNote } = require(brainPath);
     const PIN_HINT = '💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';
-    const both = buildNote({ view: '🧭 A map', skipped: 0, hint: '💡 Tip: x', pinned: null, manySets: true });
+    const both = buildNote({ view: '🧭 A map', skipped: 0, hint: '💡 Tip: x', pinned: [], manySets: true });
     assert.strictEqual((both.match(/💡/g) || []).length, 1, 'one hint line at most');
     assert.ok(both.includes('💡 Tip: x'), 'the tip wins');
-    assert.ok(buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: null, manySets: true }).endsWith(PIN_HINT));
-    assert.ok(!buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: 'alpha', manySets: true }).includes('💡'));
-    assert.ok(buildNote({ view: '', skipped: 2, hint: '', pinned: null, manySets: true }).includes('(2 items already in context, not repeated)'));
-    assert.strictEqual(buildNote({ view: '', skipped: 0, hint: '', pinned: null, manySets: false }), '');
+    assert.ok(buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: [], manySets: true }).endsWith(PIN_HINT));
+    assert.ok(!buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: ['alpha'], manySets: true }).includes('💡'));
+    assert.ok(buildNote({ view: '', skipped: 2, hint: '', pinned: [], manySets: true }).includes('(2 items already in context, not repeated)'));
+    assert.strictEqual(buildNote({ view: '', skipped: 0, hint: '', pinned: [], manySets: false }), '');
+    assert.ok(buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: ['a', 'b'], manySets: true }).includes('📌 pinned: a, b  ("gabriel use auto" to undo)'));
   }
   // warnings: drift and miss notes show once per session, at their level, and ignore tips:false
   {

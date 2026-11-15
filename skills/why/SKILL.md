@@ -21,7 +21,7 @@ Then name the next step that each line gives:
 - `no map file yet`: run `/gabriel:setup`.
 - `map format is old`: run `/gabriel:update`.
 - `an error stopped the search`: set `GABRIEL_DEBUG=1`, try again, and read `debug.log`.
-- `pinned:`: only the pinned set is searched. Type `gabriel use auto` to undo.
+- `pinned:`: only the pinned sets are searched. Type `gabriel use auto` to undo.
 - `session gate:`: a weak match was hidden. Ask again inside the repo folder, or ask a clearer question.
 - `gabriel skips this prompt`: the prompt is too short, a slash command or an automated prompt. Ask a full question.
 

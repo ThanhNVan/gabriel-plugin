@@ -289,31 +289,33 @@ function relinkDocs(name, opt) {
   const P = fs.existsSync(file) ? loadProjects().find((p) => p.name === name) : null;
   if (!P) return fail(`unknown doc set: ${name}`);
   if (!opt.code && !opt.repo) return fail('--relink needs --code <repo> or --repo <folder>');
-  if (opt.repo) {   // checked against the set's current graph; --repo alone needs no --code
-    const { graphPathOf } = require('./mk.js');
-    const repoSet = checkRepoArg(name, opt.repo, graphPathOf(name));
-    if (!repoSet) return 1;
-    const j0 = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const e0 = (j0.projects || []).find((p) => p.name === name);
-    e0.repo = repoSet.repo; e0.repoBase = repoSet.repoBase;
-    try { writeJsonAtomic(file, j0); } catch (e) { return fail(`cannot write projects.json: ${e.message}`); }
-    if (!opt.code) return 0;
+  // every check runs before the one write, so a refused repo or graph leaves projects.json unchanged
+  let graph = null, graphFile = null;
+  if (opt.code) {
+    const codeDir = path.resolve(expandHome(opt.code));
+    if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+    const refused = pluginPathRefusal(codeDir, name);
+    if (refused) return fail(refused);
+    graphFile = path.join(codeDir, 'graphify-out', 'graph.json');
+    if (!fs.existsSync(graphFile)) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
+    graph = graphRel(P.root, graphFile);   // relative to the doc set's root, as add-docs stores it
+    if (!graph) return fail('code graph is on another drive, so it cannot be linked. The docs work without it.');
   }
-  const codeDir = path.resolve(expandHome(opt.code));
-  if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
-  const refused = pluginPathRefusal(codeDir, name);
-  if (refused) return fail(refused);
-  const graphFile = path.join(codeDir, 'graphify-out', 'graph.json');
-  if (!fs.existsSync(graphFile)) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
-  const graph = graphRel(P.root, graphFile);   // relative to the doc set's root, as add-docs stores it
-  if (!graph) return fail('code graph is on another drive, so it cannot be linked. The docs work without it.');
+  let repoSet = null;
+  if (opt.repo) {   // with --code, the repo is checked against the new graph; alone, against the set's current graph
+    const { graphPathOf } = require('./mk.js');
+    repoSet = checkRepoArg(name, opt.repo, graphFile || graphPathOf(name));
+    if (!repoSet) return 1;
+  }
   const j = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (j.version !== 1) throw new Error(`projects.json version ${j.version} is not supported (expected 1)`);
   const entry = (j.projects || []).find((p) => p.name === name);
   if (!entry) return fail(`unknown doc set: ${name}`);
-  entry.graph = graph;
+  if (graph) entry.graph = graph;
+  if (repoSet) { entry.repo = repoSet.repo; entry.repoBase = repoSet.repoBase; }
   try { writeJsonAtomic(file, j); }
   catch (e) { return fail(`cannot write projects.json: ${e.message}`); }
+  if (!graph) return 0;   // --repo alone: no map rebuild
   console.log(`relinked ${name}: graph ${graph}`);
   if (buildMap(name) !== 0) return fail(`${name} is in projects.json but its map was not built. Retry: node "${path.join(SRC, 'brain.js')}" build-mk ${name}`);
   return 0;

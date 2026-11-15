@@ -104,6 +104,4 @@ The index is used in two ways:
 - When a project has the index, its 15 closest sections join the candidate pool.
 - A trained ranking (`rank.json`) can use the match as one signal.
 
-The rescue step is off. It lets a strong match pass the gate alone, but its threshold is 9 (`Q_GATE` in `src/mk.js`), and a meaning score cannot reach 9. Nothing sets a lower value, so the rescue never fires.
-
 Without these two files for a set, the map works without the index.

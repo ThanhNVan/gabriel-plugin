@@ -16,7 +16,7 @@ gabriel is a Node.js plugin (Node 22.5 or newer), with no server. For each promp
 | Meaning model | `src/embed.js` | Loads the local embedding model and reads and writes `vectors.json`. |
 | Prompt history | `src/history.js`, `src/graphdb.js` | Saves each prompt (with secrets hidden) and finds earlier similar prompts. |
 | Project map | `src/mk.js` | Builds `mk.db` from doc chunks and code nodes. Runs the spreading search. |
-| Session pin | `src/pin.js` | Reads `gabriel use <set>` and keeps the session's pin. The hook applies it ([R35](../business/02-business-rules.md#r35-session-pin)). |
+| Session pin | `src/pin.js` | Reads `gabriel use ...` and keeps the session's pin list. The hook applies it ([R35](../business/02-business-rules.md#r35-session-pin)). |
 | Doc readers | `src/extract.js` | Turns doc files (Markdown, Word, PDF and more) into text for the map. |
 | Question index | `src/dq.js` | Optional. Embeds written questions per doc section. |
 | Projects | `src/projects.js` | Reads `projects.json` and gives each project its folders and settings. |
@@ -67,7 +67,7 @@ The data folder is `GABRIEL_DATA`, then `BRAIN_DATA`, then `~/.claude/gabriel-da
 | `history/<YYYY-MM>.<machine>.jsonl` | `history.js` `append` | `history.js`, `graphdb.js` |
 | `history/graph.db` | `graphdb.js` `sync` | `graphdb.js` `lexical`, `related` |
 | `seen/<session>.json` | `brain.js` `dedupe` | `brain.js` `dedupe` |
-| `seen/<session>.pin` | `pin.js` `setPin` | `pin.js` `getPin`, `brain.js` `hook` |
+| `seen/<session>.pin` | `pin.js` `setPins` | `pin.js` `getPins`, `brain.js` `hook` |
 | `projects.json` | the user, `setup.js` | `projects.js` |
 | `dq.<project>.bin` | `dq.js` `embedAll` | `mk.js` `search` |
 | `refresh.lock`, `mk.lock`, `docs-add.lock` | `brain.js` (background starters) | `brain.js` |

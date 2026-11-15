@@ -24,7 +24,7 @@ const ALSO_CLOSE = 0.4, FALLBACK_IF_WEAKER_THAN = 1.6, ALSO_CHARS = 1100;   // a
 const FALLBACK_FIRST = 0.8;
 const FALLBACK_GATE = 1.7, FALLBACK_MARGIN = 0.3, FALLBACK_PROBE_ALONE = 0.5, FALLBACK_PROBE_WITH_PROJECT = 1.0;   // general docs: their own stricter gate (positives: median 2.35, 10th percentile 1.75; unrelated prompts: median 0.67, 90th percentile 1.10), the lead needed over a project, and the words-only look that decides whether the full tech search runs
 const CODE_SIM = 0.55;  // a class name must be this close in meaning to the question to be added
-const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65, Q_GATE = 9;   // Q_GATE: a question-index match this close can rescue a prompt the gate would drop (9 = off until measured)
+const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65;
 // Learning from use: opening or editing a file soon after a map was shown strengthens the links from that prompt's strongest seeds to the file's main types.
 // Bounded on purpose: a link saturates at LEARN_MAX (a full link counts like one full graph edge), fades with a half-life, needs several confirmations to show, and is never used to start a search or pass the gate.
 const LEARN_RATE = 0.2, LEARN_MAX = 1, LEARN_GAIN = 1, LEARN_PRUNE = 0.02, LEARN_MIN_N = 2, LEARN_CAP = 0.45, HALF_LIFE_DAYS = 45, LEARN_WINDOW_MS = 45 * 60000, LEARN_SEEDS = 8, LEARN_TARGETS = 3;
@@ -636,8 +636,6 @@ function seedByMeaning(S) {
           let s = 0; const o = i * Q.dim; for (let j = 0; j < Q.dim; j++) s += Q.vecs[o + j] * opts.pv[j];
           if (s > (qsimOf.get(id) ?? -1)) qsimOf.set(id, s);
         }
-        const rescue = Math.max(0, ...[...seeds.values()].map((o) => o.s)) < (opts.gate ?? GATE);
-        if (rescue) for (const [id, s] of qsimOf) if (s >= (opts.qGate ?? Q_GATE)) { const o = seeds.get(id) || { kind: 'doc', s: 0 }; o.s += Math.min(1, (s - SIM_FLOOR) / SIM_SPAN); seeds.set(id, o); }
       }
     } catch { /* no question index */ }
   }
@@ -934,7 +932,9 @@ function searchAll(home, text, opts = {}) {
   const outTrace = opts.trace && typeof opts.trace === 'object' ? opts.trace : null, record = (name, t) => { if (outTrace) (outTrace.sets ||= {})[name] = { reason: t.reason, best: t.best || 0, gate: t.gate ?? GATE }; };   // opts.trace: per doc set, why it gave no map (search() fills a fresh object for each set)
   const ps = loadProjects(), fb = ps.find((p) => p.fallback);
   let main = ps.filter((p) => !p.fallback);
-  if (opts.pin && main.some((p) => p.name === opts.pin)) main = main.filter((p) => p.name === opts.pin);   // a session pinned with "gabriel use <name>" (src/pin.js): only that set
+  const pinList = Array.isArray(opts.pins) ? opts.pins : [];
+  const pins = pinList.filter((n) => main.some((p) => p.name === n));
+  if (pins.length) main = main.filter((p) => pins.includes(p.name));   // a session pinned with "gabriel use a b" (src/pin.js): only those sets, one block each
   const named = namedProjects(main, lc);
   const hits = [];
   for (const p of main) {   // file order; a tie keeps the earlier project
@@ -946,9 +946,10 @@ function searchAll(home, text, opts = {}) {
   // Session gate: off-topic prompts (job tips, questions about this brain) scored 0.68-1.40 here while real unnamed questions have a median of 1.68
   // (2026-11-09 measurement). So a weak, unnamed match outside the repo folder shows a map only when this session already had one for that project.
   // Opt-in per project (projects.json "sessionGate": true). Off by default.
-  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated = hits[0].r.project; } hits.length = 0; }
+  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated = hits[0].r.project; } if (pins.length >= 2) hits.shift(); else hits.length = 0; }   // 2+ pins: drop only the gated set, the other pinned sets still show
   const top = hits[0], also = [];
-  if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
+  if (pins.length >= 2) also.push(...hits.slice(1).map((h) => h.r));   // two or more pinned sets: every other pinned set that matched gets a short block
+  else if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
   // The fallback project (general docs): the answer when no project answers, and a short extra block when the project's own answer is weak and the general docs are clearly stronger.
   // A words-only look costs 0.3 s; the meaning scan of the fallback chunks about 1 s, so it only runs when the project is weak and the words already match something.
   if (fb && (!top || top.r.best < FALLBACK_IF_WEAKER_THAN)) {

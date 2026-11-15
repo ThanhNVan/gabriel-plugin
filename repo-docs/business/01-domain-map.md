@@ -30,7 +30,7 @@ flowchart TD
 |---|---|---|
 | Rules graph | Turns rule files and memory notes into nodes. Picks the few that match a prompt. | `src/rules.js` (`build`, `fresh`, `wordScores`, `rank`), `src/thesaurus.json` (synonyms) |
 | Doc-set map | Turns each doc set into doc and code nodes (neurons) with links (synapses). Searches them from a prompt. | `src/mk.js` (`build`, `search`, `searchAll`, `format`), `src/extract.js` (`extractText`) |
-| Session pin | Limits one session to one doc set (`gabriel use <set>`). | `src/pin.js` (`parsePin`, `getPin`, `setPin`), `src/brain.js` (`pinNote`) |
+| Session pin | Limits one session to a list of doc sets (`gabriel use <set>`). Rules in [R35](02-business-rules.md#r35-session-pin). | `src/pin.js` (`parsePin`, `getPins`, `setPins`), `src/brain.js` (`pinNote`) |
 | Doc-set config | Lists the doc sets, their folders, aliases and options. | `src/projects.js` (`loadConfig`, `getProject`), `src/paths.js` |
 | Code graph links | Reads `graphify-out/graph.json` made by `/graphify`. Links doc sections to code classes. Checks that the map matches the graph commit. | `src/mk.js` (`build`, `status`, `stale`, `sources`) |
 | Learning from use | Links the prompt's top parts to a file the user opens or edits after a map. Links fade with time. | `src/mk.js` (`remember`, `touched`, `learnShow`, `learnReset`), `src/brain.js` (`touchedHook`) |

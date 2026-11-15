@@ -14,7 +14,7 @@ Terms in the order a reader meets them.
 - **Map**: the searchable form of a doc set, in `mk.db`. Built from its docs and its code graph.
 - **Map block**: the text the hook adds for the map: doc hits, code hits, `↔` links and "2 links away" lines.
 - **Two links away**: a code name reached by two strong links from a top code hit. Set per doc set by `chain` in `projects.json`. See [R34](02-business-rules.md#r34-two-links-away-code-names).
-- **Session pin**: `gabriel use <set>`. The session then searches only that doc set, until `gabriel use auto`. See [R35](02-business-rules.md#r35-session-pin).
+- **Session pin**: a list of doc sets (`gabriel use <set>`). The session then searches only those doc sets, until `gabriel use auto`. See [R35](02-business-rules.md#r35-session-pin).
 - **Neuron**: one node of the map: a doc section or a code class or file.
 - **Synapse**: a link between two neurons in the map.
 - **Code graph**: `graphify-out/graph.json`, made by `/graphify`. gabriel reads it for code neurons and links. See [R33](02-business-rules.md#r33-a-code-graph-must-exist-and-match-the-docs).

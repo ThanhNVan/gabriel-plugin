@@ -243,6 +243,41 @@ const graphJson = {
   console.log('  relink errors: unknown set, no --code, no graph: exit 1, projects.json unchanged');
 }
 
+// 11b: --relink --code B --repo R: R is checked against the NEW graph B, not the set's current graph A. A repo that fits neither is refused
+{
+  const codeSrc = { 'src/tire.cs': 'class TireRepair {}\n', 'src/tube.cs': 'class PatchTube {}\n' };
+  // the commit email is joined at run time, so the privacy scan does not read it as an email
+  const gitRepo = (dir, files) => {
+    writeFiles(dir, files);
+    const g = (...a) => { const r = spawnSync('git', ['-C', dir, '-c', 'user.name=test', '-c', 'user.email=' + ['test', 'example.com'].join('@'), ...a], { encoding: 'utf8' }); assert.strictEqual(r.status, 0, r.stderr); return r.stdout.trim(); };
+    g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'init');
+    return g('rev-parse', 'HEAD');
+  };
+  const repoA = writeFiles(path.join(tmp, 'relink-repo-a'), { ...codeSrc, 'graphify-out/graph.json': JSON.stringify(graphJson) });
+  const docs = writeFiles(path.join(tmp, 'relink-repo-docs'), { 'bikes.md': bikes });
+  assert.strictEqual(run(['relink-repo', docs, '--code', repoA]).status, 0);   // set linked to graph A
+  // R: a git repo whose HEAD is the commit graph B was built from. Graph A's commit is not in R.
+  const R = path.join(tmp, 'relink-repo-r');
+  const headR = gitRepo(R, codeSrc);
+  const B = writeFiles(path.join(tmp, 'relink-repo-b'), { ...codeSrc, 'graphify-out/graph.json': JSON.stringify({ ...graphJson, built_at_commit: headR }) });
+  const r = run(['relink-repo', '--code', B, '--repo', R, '--relink']);
+  assert.strictEqual(r.status, 0, text(r));
+  assert.strictEqual(entry('relink-repo').repo, path.resolve(R));
+  assert.strictEqual(entry('relink-repo').graph, path.relative(docs, path.join(B, 'graphify-out', 'graph.json')).split(path.sep).join('/'));
+  assert.match(text(r), /repo set for relink-repo/);
+  console.log('  relink --code B --repo R: R checked against graph B, accepted');
+
+  // Q: a git repo that fits neither graph (its commit is not graph B's or graph A's): refused, projects.json unchanged
+  const Q = path.join(tmp, 'relink-repo-q');
+  gitRepo(Q, { 'src/other.cs': 'class Other {}\n' });
+  const hash = hashProjects();
+  const bad = run(['relink-repo', '--code', B, '--repo', Q, '--relink']);
+  assert.strictEqual(bad.status, 1, text(bad));
+  assert.match(text(bad), /repo refused: graph commit .* not in this repo/, text(bad));
+  assert.strictEqual(hashProjects(), hash, 'projects.json must not change when the repo is refused');
+  console.log('  relink --code B --repo Q: a repo fitting neither graph is refused, projects.json unchanged');
+}
+
 // 12: cwdHints come from --code: the lower-case repo name; a code folder inside a git repo uses the git repo root's name
 {
   const repo = writeFiles(path.join(tmp, 'Hint-Repo'), { 'src/tire.cs': 'class TireRepair {}\n', 'graphify-out/graph.json': JSON.stringify(graphJson) });

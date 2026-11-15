@@ -5,14 +5,20 @@
   "4": "eval-map.js",
   "17": "test",
   "20": "ref_path",
-  "22": "run",
+  "22": "test-setup-hosts.js",
   "30": "build",
   "31": "graphdb.js",
   "53": "test-tune-keep.js",
   "64": "Learning from use",
   "65": "ref_node_path",
   "66": "W03 Add docs",
+  "67": "dbFile",
   "68": "ref_node_fs",
+  "69": "addDocs",
   "71": "R36 Exact code lines",
-  "74": "train.py"
+  "72": "ref_node_assert",
+  "74": "train.py",
+  "75": "hostSetup",
+  "79": "test-mermaid.js",
+  "82": "Project map"
 }

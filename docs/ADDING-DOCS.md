@@ -184,7 +184,7 @@ Expected lines: `added doc set <name>` for each new folder, `<name>: map built` 
 
 ## 10. projects.json fields
 
-- `"aliases": ["name"]`: a prompt that names the set routes to it, and so does `gabriel use <alias>` (see README, "Pin one doc set per session"). `add-docs` and `--update` set it. `--update` adds `[name]` to an older set that has none, and prints `set alias for <name>`.
+- `"aliases": ["name"]`: a prompt that names the set routes to it, and so does `gabriel use <alias>` (see README, "Pin doc sets per session"). `add-docs` and `--update` set it. `--update` adds `[name]` to an older set that has none, and prints `set alias for <name>`.
 - `"cwdHints": ["repo-name"]`: set by `add-docs --code`. A prompt run from a folder with this name adds a small score to the set.
 - `"repo"` and `"repoBase"`: set by `add-docs --repo` (see section 5). `repo` is the code folder. `repoBase` is `""`, or `"src"` when the graph's paths start under `src/`. With no `repo`, the map shows the graph's lines, with no check mark.
 - `"sessionGate": true`: on the first prompt of a session, a weak match that names no doc set and comes from outside its folder shows nothing. Default: `false`. Use it when several doc sets overlap.

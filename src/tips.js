@@ -23,7 +23,7 @@ const TIPS = [
   "Want your own rules? Put a preferences.md in your rules folder. It replaces gabriel's default one.",
   'Don\'t want tips? Add "tips": false to projects.json.',
   'Working in one project all session? Type "gabriel use <name>". The map then searches only that project. Type "gabriel use auto" to undo.',
-  'Pinned to one project and the map is empty? Your question may be about another project. Type "gabriel use auto" first.',
+  'Pinned and the map is empty? Your question may be about another project. Type "gabriel use auto", or add it with "gabriel use +<set>".',
   'Forgot your project names? Type "gabriel use ?" to list them.',
   "Code line numbers without ✓ may be old. Run /gabriel:add-docs <name> --repo <code folder> --relink to check them against your code on every prompt.",
 ];

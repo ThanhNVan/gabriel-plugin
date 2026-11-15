@@ -13,4 +13,4 @@ Read the map like this:
 - A code line with no `✓` may have an old line (the set has no repo folder, or the check ran out of time). Open the file and search for the name before you trust the line number.
 - A fallback block holds public background docs. It is reading, not a rule of this repo. Say so when you use it.
 - The map is a lead, not proof. Its header date or commit can be old.
-- A session can be pinned. Then each note starts with `📌 pinned: <set>` and the map searches only that set. If the question clearly belongs to another set, tell the user to type `gabriel use auto`.
+- A session can be pinned to one or more doc sets. Then each note starts with `📌 pinned: <sets>` and the map searches only those sets. If the question clearly belongs to another set, tell the user to type `gabriel use auto`.

@@ -7,7 +7,7 @@ The user sends a prompt in a host with the gabriel hook. In Claude Code: `UserPr
 ## Steps
 
 1. The host sends the prompt JSON on stdin. `src/hosts/claude.js` `readInput` (via `readCommon`) reads the prompt, session id, folder and transcript path.
-2. `src/brain.js` `hook()` first checks for a pin command (`gabriel use <set>`, `gabriel use auto`). It answers with a note and stops ([R35](../02-business-rules.md#r35-session-pin)). Then a slash command, a prompt under 4 words or a harness message gets no context, only the setup hint or a tip ([R02](../02-business-rules.md#r02-short-and-slash-prompts-get-no-context)).
+2. `src/brain.js` `hook()` first checks for a pin command (`gabriel use ...`). It answers with a note and stops ([R35](../02-business-rules.md#r35-session-pin)). Then a slash command, a prompt under 4 words or a harness message gets no context, only the setup hint or a tip ([R02](../02-business-rules.md#r02-short-and-slash-prompts-get-no-context)).
 3. `gather()` calls `searchFull()`: the rules graph is scored by words and synonyms (`src/rules.js` `wordScores`), plus meaning scores when the meaning model is installed (`src/embed.js` `getEmbedder`, 9 s limit).
 4. `src/history.js` `append()` saves the prompt, redacted. See [R06](../02-business-rules.md#r06-prompt-history-hides-secrets-and-has-a-size-cap).
 5. `gather()` starts two background checks: `refreshInBackground()` (embed new rules) and `refreshMapInBackground()` (rebuild a stale map). See [W04](W04-update-and-auto-add.md).
