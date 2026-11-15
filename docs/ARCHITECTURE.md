@@ -92,7 +92,8 @@ For each prompt, the map search does this:
 4. **Output.** Up to 6 doc chunks and 6 code names, in at most 2200 characters.
    - Doc lines show file, section and text (cut at 210 characters). Code lines show name, file and line.
    - For the top 3 code names, up to 4 neighbours each appear as `↔` lines. A `↔` line is one hop along a graph link. It has no direction.
-   - Then up to `max` (default 3) more code names two strong links away from the top `seeds` (default 4) code hits, marked `2 links away`. Both links must weigh 0.6 or more. The name must contain the hit's stem: its first `stem` (default 3) name parts, leading verb dropped (`SetIhmEventTaskStatus...` gives `IhmEventTask`). This finds the rest of a flow through a shared type, which the spreading search does not pass. Per-set values: [ADDING-DOCS](ADDING-DOCS.md), section 10.
+   - Then up to `max` (default 3) more code names two strong links away from the top `seeds` (default 4) code hits, marked `2 links away`. Both links must weigh 0.6 or more. The name must contain the hit's stem: its first `stem` (default 3) name parts, leading verb and trailing role words dropped (`SetIhmEventTaskStatus...` gives `IhmEventTask`). Event handlers named `On<stem>...` are also found by name. This finds the rest of a flow through a shared type, which the spreading search does not pass. Rules: [R34](../repo-docs/business/02-business-rules.md#r34-two-links-away-code-names). Per-set values: [ADDING-DOCS](ADDING-DOCS.md), section 10.
+   - Named pairs: right after `addNamedCode()`, a shown `XCommand`, `XQuery` or `XRequest` name is swapped for its handler (the same name plus `Handler`) from the same folder, if that handler is not shown yet. It takes the command's slot, so the block does not grow (`pairHandlers()` in `src/mk.js`). Numbers: [R08](../repo-docs/business/02-business-rules.md#r08-map-block-at-most-6-doc-hits-and-6-code-hits-2200-characters).
 
 A "session gate" applies only to a project with `"sessionGate": true` in `projects.json` (off by default). A weak match is a match that is not named in the prompt and is outside the project folder. For that project it shows only when this session already had a map for it. See [ADDING-DOCS](ADDING-DOCS.md), section 10.
 
@@ -100,7 +101,7 @@ A "session gate" applies only to a project with `"sessionGate": true` in `projec
 
 - **Default.** Docs are ranked by their activation score.
 - **Trained weights (optional).** If a project has `private/<name>/rank.json`, docs are ranked with its weights (key `w`). Signals include word and meaning scores, heading match, file depth and file size.
-- **Picking.** With trained weights: at most 6 docs, at most 2 per file, one per section, and only docs within 3 points of the top score. Default: at most 6 docs, at most 2 per file, and none under 30 percent of the top score.
+- **Picking.** With trained weights: at most 6 docs, at most 2 per file, one per section, and only docs within 3 points of the top score. Default: at most 6 docs, at most 2 per file, and none under 30 percent of the top score. Code names: at most 6, at most 2 types per file, with the same 30 percent rule.
 - **Training.** `node src/train-rank.js --project <name>` trains the weights from your own questions, for any doc set. See [EVAL](EVAL.md).
 
 ## Routing and fallback

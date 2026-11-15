@@ -446,6 +446,7 @@ function buildNote({ view, skipped, hint, pinned = [], manySets, skipPrefix = ''
 async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
+    if (history.isAutomated(prompt)) return;   // a harness or subagent message, not the user's prompt: no map, no note, no history
     const pinned = livePins(homeDir(), sid);
     if (pinned.length) require('./pin.js').touchPin(homeDir(), sid);   // a pin used now lasts another 7 days
     const withPin = (note) => pinned.length ? pinLine(pinned) + (note ? '\n' + note : '') : note;
@@ -474,8 +475,10 @@ async function hook(host) {
   } catch (e) { debug('hook', e); /* fail open: never block a prompt */ }
 }
 
-// For `brain.js context "<prompt>"`: the same items as the hook, as plain text. Short prompts and slash commands give ''.
+// For `brain.js context "<prompt>"`: the same items as the hook, as plain text. Pin commands give their reply. Short prompts and slash commands give ''.
 async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
+  const cmd = require('./pin.js').parsePin(prompt), cmdNote = cmd ? pinNote(cmd, sid) : null;
+  if (cmdNote !== null) return cmdNote;   // the same pin reply as hook()
   if (skipReason(prompt)) return '';
   const parts = await gather(prompt, sid, cwd);
   if (!parts.length) return '';

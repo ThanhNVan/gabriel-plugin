@@ -38,8 +38,8 @@ function redact(text) {
   });
 }
 
-// Messages the harness sends through the same hook (task finished, reminders, local commands). They are not the user's words.
-const AUTOMATED = /^\s*(<task-notification|<system-reminder|<local-command|<command-(name|message)|<user-prompt-submit-hook|\[SYSTEM NOTIFICATION|Caveat: The messages below|Below is a conversation log from a Claude Code|This session is being continued from a previous conversation)/i;
+// Messages the harness sends through the same hook (task finished, reminders, local commands, subagent hand-backs). They are not the user's words.
+const AUTOMATED = /^\s*(<task-notification|<system-reminder|<agent-message|Another Claude session sent a message|<local-command|<command-(name|message)|<user-prompt-submit-hook|\[SYSTEM NOTIFICATION|Caveat: The messages below|Below is a conversation log from a Claude Code|This session is being continued from a previous conversation)/i;
 const isAutomated = (prompt) => AUTOMATED.test(String(prompt));
 
 function append(home, prompt, cwd) {

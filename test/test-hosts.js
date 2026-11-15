@@ -113,7 +113,12 @@ const run = (args, input, extra = {}) => spawnSync(process.execPath, [BRAIN, ...
   const s2 = run(['context', PROMPT, '--host', 'generic', '--session', 'chat-7'], '', { GABRIEL_RULES_HOME: rulesDir });
   assert.match(s1.stdout, /Run the unit tests/);
   assert.ok(!/Run the unit tests/.test(s2.stdout), 'second prompt in the same session repeats nothing: ' + s2.stdout);
-  console.log('context command: plain text, short prompt prints nothing, --session stops repeats');
+  // a pin command gives its reply, not a search; with no session id it cannot pin
+  const pinOk = run(['context', 'gabriel use auto', '--host', 'generic', '--session', 'chat-pin'], '', { GABRIEL_RULES_HOME: rulesDir });
+  assert.match(pinOk.stdout, /pin removed/);
+  const pinNoSid = run(['context', 'gabriel use auto', '--host', 'generic'], '', { GABRIEL_RULES_HOME: rulesDir });
+  assert.match(pinNoSid.stdout, /could not pin/);
+  console.log('context command: plain text, short prompt prints nothing, --session stops repeats, pin commands reply');
 }
 
 // 7: the claude hook output for a fixed input is the same bytes as before (golden string from the baseline check)

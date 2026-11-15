@@ -128,6 +128,42 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       assert.deepStrictEqual(chainOf({ chain: { stem: 'x' } }), ['OrderTaskStatusQuery'], 'bad stem: the default 3 is used');
     }
 
+    // handler pairing: a shown XCommand is swapped for its XCommandHandler from the same folder; a handler in another folder is not used
+    {
+      const root6 = path.join(tmp, 'docs6'), home6 = path.join(tmp, 'home6');
+      write(path.join(root6, 'technical-docs', '01-submit.md'), '# 01 — Submit\n\n## Submit order\n\nThe `SubmitOrderCommand` sends a new order to the shop.\n\n## Ship parcel\n\nThe `ShipParcelCommand` sends a parcel out.\n');
+      write(path.join(root6, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+      const n6 = (id, label, file) => ({ id, label, source_file: file, source_location: 'L3', community: 1, community_name: 'Shop' });
+      write(path.join(root6, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [
+        n6('c', 'SubmitOrderCommand', 'Services/Shop/Submit/SubmitOrderCommand.cs'),
+        n6('ch', 'SubmitOrderCommandHandler', 'Services/Shop/Submit/SubmitOrderCommandHandler.cs'),
+        n6('p', 'ShipParcelCommand', 'Services/Post/Ship/ShipParcelCommand.cs'),
+        n6('ph', 'ShipParcelCommandHandler', 'Services/Other/ShipParcelCommandHandler.cs'),
+      ], links: [], built_at_commit: 'fff666' }));
+      await mk.build(home6, { root: root6, project: 'beta', noEmbed: true });
+      // unit tests of pairHandlers on the built map (node:sqlite, the same file the search reads)
+      const { DatabaseSync } = require('node:sqlite');
+      const db6 = new DatabaseSync(mk.dbFile(home6), { readOnly: true });
+      const rowOf = (label) => db6.prepare("SELECT * FROM nodes WHERE kind = 'code' AND label = ? AND project = 'beta'").get(label);
+      const cmd = rowOf('SubmitOrderCommand'), handler = rowOf('SubmitOrderCommandHandler');
+      const shipCmd = rowOf('ShipParcelCommand');
+      assert.ok(cmd && handler && shipCmd, 'the fixture rows exist');
+      // same folder: the Command slot is replaced by its handler, the slot count stays 1
+      const S1 = { db: db6, project: 'beta', code: [{ a: 1, n: cmd }] };
+      mk.pairHandlers(S1);
+      assert.strictEqual(S1.code[0].n.label, 'SubmitOrderCommandHandler', 'the same-folder handler replaces the command');
+      assert.strictEqual(S1.code.length, 1, 'the block does not grow');
+      // handler in another folder (ShipParcelCommandHandler is in Services/Other): not swapped
+      const S2 = { db: db6, project: 'beta', code: [{ a: 1, n: shipCmd }] };
+      mk.pairHandlers(S2);
+      assert.strictEqual(S2.code[0].n.label, 'ShipParcelCommand', 'a handler in another folder is not used');
+      // handler already shown: nothing changes
+      const S3 = { db: db6, project: 'beta', code: [{ a: 1, n: cmd }, { a: 0.5, n: handler }] };
+      mk.pairHandlers(S3);
+      assert.deepStrictEqual(S3.code.map((c) => c.n.label), ['SubmitOrderCommand', 'SubmitOrderCommandHandler'], 'a handler already shown: no swap');
+      db6.close();
+    }
+
     // the printed block names the commit and stays short
     const text = mk.format(res);
     assert.ok(text.includes('abc12345') && text.length <= 2300, 'format shows the commit and respects the size cap');
@@ -179,6 +215,19 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     // two pins, the session gate hides weak alpha: beta still shows (the gate drops only the gated set)
     const gated = mk.searchAll(home, both, { pins: ['alpha', 'beta'] });
     assert.ok(gated && [gated.project, ...(gated.also || []).map((a) => a.project)].includes('beta'), 'gate on alpha must not hide beta');
+    // three pins: alpha and beta are both gated and weak, so both are dropped and gamma (no sessionGate) shows. Projects file rewritten here, then restored.
+    {
+      const cfgFile = path.join(process.env.GABRIEL_DATA, 'projects.json'), cfgText = fs.readFileSync(cfgFile, 'utf8'), cfg = JSON.parse(cfgText);
+      cfg.projects.find((p) => p.name === 'beta').sessionGate = true;
+      cfg.projects.splice(2, 0, { name: 'gamma', label: 'Gamma', root: root2, graph: 'graphify-out/graph.json', prior: 0, learn: false, aliases: ['gamma'] });
+      fs.writeFileSync(cfgFile, JSON.stringify(cfg));
+      try {
+        await mk.build(home, { root: root2, project: 'gamma', noEmbed: true });
+        const three = mk.searchAll(home, both, { pins: ['alpha', 'beta', 'gamma'], session: 'fresh3', strong: 1.5 });   // strong: 1.5 so the weak beta (best 1.46) is gated too; gamma has no sessionGate
+        assert.ok(three && three.project === 'gamma', 'two gated pins are both dropped and the third shows: ' + (three && three.project));
+        assert.ok(!(three.also || []).some((a) => a.project === 'alpha' || a.project === 'beta'), 'dropped pins do not return as short blocks');
+      } finally { fs.writeFileSync(cfgFile, cfgText); }
+    }
     // Review Focus 5: only one pinned set matches: one block, no empty one
     const only = mk.searchAll(home, 'ParcelRouter zone courier', { pins: ['alpha', 'beta'] });
     assert.ok(only && only.project === 'beta', 'beta answers');
@@ -343,6 +392,17 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
           assert.ok(withRepo.includes('exact: 1/1 (100%)'), 'eval: the fn case is exact with the repo ' + withRepo);
           const noRepo = runEval('--no-repo');
           assert.ok(noRepo.includes('exact: 0/1 (0%)'), 'eval --no-repo: the stale graph line is not exact ' + noRepo);
+          // --half: only the cases of that half run; a case with no half runs in both
+          const halfFile = path.join(tmp, 'eval-half.json'), base = { set: 'dev', tier: 'easy', project: 'alpha', code: 'OrderHandler', fn: 'OrderHandler', file: 'Services/Shop/OrderHandler\\.cs$' };
+          fs.writeFileSync(halfFile, JSON.stringify([
+            { ...base, id: 'H-1', q: 'how does the order handler save an order', half: 'check' },
+            { ...base, id: 'H-2', q: 'zzqx unrelated words only', half: 'tune' },
+            { ...base, id: 'H-3', q: 'how does the order handler save an order' },
+          ]));
+          const runHalf = (h) => require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'eval', 'eval-map.js'), '--project', 'alpha', '--cases', halfFile, '--no-meaning', '--half', h], { encoding: 'utf8' }).stdout;
+          const chk = runHalf('check'), tun = runHalf('tune');
+          assert.ok(chk.includes('half: check (2 cases)') && chk.includes('exact: 2/2 (100%)'), 'eval --half check: H-1 and H-3 only ' + chk);
+          assert.ok(tun.includes('half: tune (2 cases)') && tun.includes('exact: 1/2 (50%)'), 'eval --half tune: H-2 and H-3 only ' + tun);
         }
         // the neighbour's file is gone from the repo: marked as not found, the code line stays exact
         fs.rmSync(path.join(repo, 'Services', 'Shop', 'OrderRepository.cs'));
@@ -371,6 +431,24 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
         const nofolder = showQ();
         assert.ok(nofolder.includes('- code OrderHandler (Services/Shop/OrderHandler.cs:7)\n') && !/✓|not found in repo/.test(nofolder), 'a missing repo folder: the old text ' + nofolder);
       } finally { fs.writeFileSync(projFile, projJson); }
+    }
+
+    // chain by name: an event handler On<stem>... with no graph path to the hit is still found (trailing role words are not the stem)
+    {
+      // same shape as the two-links fixture above, plus two event handlers with no graph link at all
+      const root8 = path.join(tmp, 'docs8'), home8 = path.join(tmp, 'home8');
+      write(path.join(root8, 'technical-docs', '01-status.md'), '# 01 — Status\n\n## Change status\n\nThe `SetOrderTaskStatusCommandHandler` changes the status of an order task.\n');
+      write(path.join(root8, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+      const n8 = (id, label) => ({ id, label, source_file: 'src/' + label + '.cs', source_location: 'L3', community: 1, community_name: 'Tasks' });
+      const fill8 = Array.from({ length: 650 }, (_, i) => n8('f' + i, 'Filler' + i));
+      write(path.join(root8, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [n8('s', 'SetOrderTaskStatusCommandHandler'), n8('m', 'Mediator'), n8('on', 'OnOrderTaskStatusChanged'), n8('x', 'OnParcelShipped'), ...fill8],
+        links: [{ source: 's', target: 'm', relation: 'calls', confidence_score: 1 }, ...fill8.map((f) => ({ source: f.id, target: 'm', relation: 'references', confidence_score: 1 }))], built_at_commit: 'ddd888' }));
+      await mk.build(home8, { root: root8, project: 'beta', noEmbed: true });
+      const res8 = mk.search(home8, 'how does the set order task status command handler change the status', { project: 'beta' }) || { code: [] };
+      const labels8 = res8.code.map((c) => c.n.label);
+      assert.ok(labels8.includes('SetOrderTaskStatusCommandHandler'), 'chain by name: the hit is shown ' + labels8);
+      assert.ok(res8.code.some((c) => c.chain && c.n.label === 'OnOrderTaskStatusChanged'), 'chain by name: the On<stem> handler is added with no graph link (role words Command, Handler dropped) ' + labels8);
+      assert.ok(!labels8.includes('OnParcelShipped'), 'chain by name: a handler with another stem is not added ' + labels8);
     }
 
     // a broken map file never throws

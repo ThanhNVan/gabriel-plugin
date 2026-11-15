@@ -1,6 +1,7 @@
 node_modules/
 # per-user data lives outside the repo (~/.gabriel, or ~/.claude/gabriel-data on older installs) or in the gitignored private/ folder
 private/
+.superpowers/
 gabriel-data/
 .gabriel/
 brain-data/
@@ -25,3 +26,4 @@ repo-docs/graphify-out/.graphify_root
 repo-docs/graphify-out/.graphify_python
 repo-docs/graphify-out/.graphify_build_state.json
 docs\superpowers
+

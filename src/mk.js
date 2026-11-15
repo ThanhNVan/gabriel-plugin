@@ -31,6 +31,7 @@ const LEARN_RATE = 0.2, LEARN_MAX = 1, LEARN_GAIN = 1, LEARN_PRUNE = 0.02, LEARN
 const GENERIC = new Set('Empty Task CancellationToken IEnumerable DateTime Guid List Dictionary String Int32 Result IRequest IRequestHandler Unit Component Object Json Action Func Exception Boolean Nullable Type Tuple'.split(' '));
 const NB_CODE = 3, NB_PER = 4, NB_CHARS = 900;   // map output: neighbors shown for the top 3 code hits, 4 each
 const CHAIN_VERBS = new Set(['Set', 'Get', 'Create', 'Update', 'Delete', 'Add', 'Remove', 'On']);
+const CHAIN_ROLES = new Set(['Command', 'Query', 'Request', 'Handler', 'Dto', 'Event', 'Notification', 'Message', 'Service', 'Repository', 'Result']);   // trailing role words are not the stem (VesselPurgeCommandHandler -> Vessel%Purge, which also finds OnVesselPurged)
 const CHAIN_DEFAULT = { seeds: 4, max: 3, stem: 3 };   // seeds 4: 11/12 on eval-cases-chain.json vs 10/12 with 3; main gate unchanged (523/569, quiet 30/31), 2026-11-14   // fallback for the "two links away" step (seeds, max, stem); the real values come from the project's chain setting in projects.js, or opts.chain. Clamped in search().
 // a setting that is not a finite number falls back to its default; the rest is clamped into its range
 const chainNum = (v, d, lo, hi) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d;
@@ -714,8 +715,8 @@ function pickResults(S) {
   // 4. read the strongest neurons of each layer
   const info = db.prepare('SELECT * FROM nodes WHERE id = ?');
   const ranked = [...act].sort((a, b) => b[1] - a[1]);
-  // code: one type per file first (a class, interface or record), methods and file nodes only when too few types fire
-  let docs = [], seen = new Map(), types = [], extra = [], files = new Set();
+  // code: up to two types per file first (a class, interface or record), methods and file nodes only when too few types fire
+  let docs = [], seen = new Map(), types = [], extra = [], files = new Map();
   const shown = new Set();
   for (const [id, a] of ranked) {
     const n = info.get(id); if (!n) continue;
@@ -727,8 +728,8 @@ function pickResults(S) {
       shown.add(n.label);
       const isFile = n.label.toLowerCase() === path.basename(n.file).toLowerCase(), isMethod = n.label.startsWith('.');
       if (isFile || isMethod) { if (extra.length < MAX_CODE) extra.push({ a, n }); continue; }
-      if (files.has(n.file) || types.length >= MAX_CODE || (types.length && a < types[0].a * 0.3)) continue;
-      files.add(n.file); types.push({ a, n });
+      if ((files.get(n.file) || 0) >= 2 || types.length >= MAX_CODE || (types.length && a < types[0].a * 0.3)) continue; // up to 2 types per file (a Map counts them)
+      files.set(n.file, (files.get(n.file) || 0) + 1); types.push({ a, n });
     }
   }
   // padding with file and method nodes keeps the same 0.3 cut as the types (a weak padding line is noise)
@@ -837,6 +838,25 @@ function rankDocRows(S) {
   if (!S.docs.length && !S.code.length) return giveUp('nothing-to-show');
 }
 
+// search() step: a shown XCommand/XQuery/XRequest is swapped for its XCommandHandler... from the same folder (the class that does the work)
+function pairHandlers(S) {
+  const { db, project, code } = S;
+  try {
+    const dirOf = (f) => String(f || '').replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+    const byHandler = db.prepare("SELECT * FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg DESC");
+    const have = new Set(code.map((c) => c.n.label));
+    for (let i = 0; i < code.length; i++) {
+      const c = code[i];
+      if (!/(Command|Query|Request)$/.test(c.n.label)) continue;
+      const label = c.n.label + 'Handler';
+      if (have.has(label)) continue;
+      const row = byHandler.all(label, project).find((r) => dirOf(r.file) === dirOf(c.n.file));
+      if (!row) continue;   // no pairing across folders
+      code[i] = { a: c.a, n: row }; have.add(label);
+    }
+  } catch { /* fails open: the list stays */ }
+}
+
 // search() step 9: one-hop and two-hop code neighbours.
 function addNeighbours(S) {
   const { db, info, code, project, opts } = S;
@@ -850,19 +870,22 @@ function addNeighbours(S) {
     const pc = (getProject(project) || {}).chain || {}, oc = opts.chain || {};   // a bad value falls back one level: opts -> the project's setting -> CHAIN_DEFAULT
     const pick = (k, lo, hi) => chainNum(oc[k], chainNum(pc[k], CHAIN_DEFAULT[k], lo, hi), lo, hi);
     const seeds = pick('seeds', 0, 10), max = pick('max', 0, 10), stemN = pick('stem', 1, 6);
-    const stemOf = (label) => { let p = label.match(/[A-Z][a-z0-9]*/g) || []; if (CHAIN_VERBS.has(p[0])) p = p.slice(1); return p.length >= stemN ? p.slice(0, stemN).join('') : null; };   // a leading verb is not the stem (SetIhmEventTask... -> IhmEventTask); fewer name parts = too generic, no chain
+    const stemOf = (label) => { let p = label.match(/[A-Z][a-z0-9]*/g) || []; if (CHAIN_VERBS.has(p[0])) p = p.slice(1); const full = p.length; while (p.length && CHAIN_ROLES.has(p[p.length - 1])) p.pop(); if (full >= stemN && p.length >= 2) return p.slice(0, stemN).join('%'); return null; };   // a leading verb is not the stem (SetIhmEventTask... -> IhmEventTask); fewer name parts = too generic, no chain
     const twoHop = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND e1.w >= 0.6 AND e2.w >= 0.6 AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.id != ? AND n.label LIKE ? GROUP BY n.id ORDER BY MAX(e1.w + e2.w) DESC, n.deg DESC LIMIT 10");
-    const have = new Set(code.map((c) => c.n.id)), listed = new Set(code.flatMap((c) => (c.nb || []).map((x) => x.label + '|' + x.file)));
+    // an event handler (On<stem>...) is found by name: it hangs off a different framework hub than the command, so no two-link path joins them
+    const onByName = db.prepare("SELECT id FROM nodes WHERE project = ? AND kind = 'code' AND file != '' AND deg <= ? AND label LIKE ? ORDER BY deg DESC LIMIT 3");
+    const have = new Set(code.map((c) => c.n.id)), labels = new Set(code.map((c) => c.n.label)), listed = new Set(code.flatMap((c) => (c.nb || []).map((x) => x.label + '|' + x.file)));
     let added = 0;
+    const add = (id) => {
+      const n = info.get(id);
+      if (added >= max || !n || have.has(n.id) || labels.has(n.label) || listed.has(n.label + '|' + n.file) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) return;
+      have.add(n.id); labels.add(n.label); code.push({ a: 0, n, chain: true }); added++;
+    };
     for (const c of code.slice(0, seeds)) {
       const stem = stemOf(c.n.label);
       if (!stem) continue;
-      for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) {
-        if (added >= max) break;
-        const n = info.get(r.id);
-        if (!n || have.has(n.id) || listed.has(n.label + '|' + n.file) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) continue;
-        have.add(n.id); code.push({ a: 0, n, chain: true }); added++;
-      }
+      for (const r of onByName.all(project, SEED_HUB, 'On' + stem + '%')) add(r.id);
+      for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) add(r.id);
     }
   } catch { /* chain is optional */ }
 }
@@ -900,6 +923,7 @@ function search(home, text, opts = {}) {
     spread(S);
     pickResults(S);
     addNamedCode(S);
+    pairHandlers(S);
     if (rankDocRows(S) !== undefined) return null;   // the nothing-to-show stop
     addNeighbours(S);
     addExactLines(S);
@@ -946,7 +970,9 @@ function searchAll(home, text, opts = {}) {
   // Session gate: off-topic prompts (job tips, questions about this brain) scored 0.68-1.40 here while real unnamed questions have a median of 1.68
   // (2026-11-09 measurement). So a weak, unnamed match outside the repo folder shows a map only when this session already had one for that project.
   // Opt-in per project (projects.json "sessionGate": true). Off by default.
-  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated = hits[0].r.project; } if (pins.length >= 2) hits.shift(); else hits.length = 0; }   // 2+ pins: drop only the gated set, the other pinned sets still show
+  const gated = (h) => (getProject(h.r.project) || {}).sessionGate && !named.includes(h.r.project) && !cwd.includes(h.r.project) && h.r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, h.r.project);   // is this set cut by the session gate?
+  if (pins.length >= 2) { while (hits[0] && gated(hits[0])) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated ??= hits[0].r.project; } hits.shift(); } }   // 2+ pins: drop each gated set from the top, the other pinned sets still show
+  else if (hits[0] && gated(hits[0])) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated ??= hits[0].r.project; } hits.length = 0; }
   const top = hits[0], also = [];
   if (pins.length >= 2) also.push(...hits.slice(1).map((h) => h.r));   // two or more pinned sets: every other pinned set that matched gets a short block
   else if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
@@ -992,4 +1018,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles };
+module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers };

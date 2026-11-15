@@ -15,6 +15,7 @@
 //   node eval/eval-map.js --why                 for each DOC or FAIL: its miss class (section-rank, not-in-pool, wrong-doc, code-only-miss), then the counts
 //   node eval/eval-map.js --chain 4,5,3         try the "two links away" step as seeds,max,stem (e.g. 4,5,3); default: the project's chain setting in projects.js
 //   --cases <file> overrides the cases file (one project only). No cases file: prints a note and exits 0. See docs/EVAL.md.
+//   --half tune|check           only the cases with that "half" (a case with no half runs in both): tune settings on one half, judge on the other
 //   --no-repo                   no exact lines from the repo folder: the graph's own lines (the "before" score for fn cases)
 // A case: q (the question), doc / sec (regular expressions for a doc file and its section), code (regex for a code name),
 // any (pass when the doc OR the code matches), none (nothing may be returned). Matching ignores case.
@@ -101,7 +102,9 @@ function judgeRendered(c, res, root = res) {
 // Returns true only when --min is set and missed.
 async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const all = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
-  const cases = all.filter((c) => (!opt('--set') || c.set === opt('--set')) && (!opt('--tier') || c.tier === opt('--tier')) && (!opt('--area') || c.id.toUpperCase().startsWith(opt('--area').toUpperCase())));
+  const half = opt('--half');   // tune or check: one half of a split case file; a case with no half runs in both
+  const cases = all.filter((c) => (!opt('--set') || c.set === opt('--set')) && (!opt('--tier') || c.tier === opt('--tier')) && (!opt('--area') || c.id.toUpperCase().startsWith(opt('--area').toUpperCase())) && (!half || !c.half || c.half === half));
+  if (half) console.log(`half: ${half} (${cases.length} cases)`);
   const rows = [];
   for (const c of cases) {
     const start = Date.now();

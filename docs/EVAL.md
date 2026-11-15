@@ -35,6 +35,7 @@ Run `node eval/eval-map.js --project <name>`. It runs every case and prints a su
 - `--route` lets the real router pick the project. An answer from another project counts as a miss. Add `--cwd <dir>` to route as if the prompt came from that folder (it uses `cwdHints`). A case can also set its own `"cwd"`.
 - `--rank <file>` scores other weights, like a candidate file.
 - `--chain <seeds>,<max>,<stem>` (for example `--chain 4,3,3`) tries the "two links away" step with these values. Without it, the project's `chain` setting is used (see [ADDING-DOCS](ADDING-DOCS.md), section 10).
+- `--half tune|check` runs only the cases with that `half` field. A case with no `half` runs in both. Tune settings on one half, then judge on the other.
 - `--report` writes `notes/EVAL-MK.md` in the project's private folder.
 - `--why` says why each miss missed. For each DOC or FAIL it prints `why <id> <class>`, then the counts. The classes:
   - `section-rank`: the right doc and section are in the candidates, but the map did not show them.

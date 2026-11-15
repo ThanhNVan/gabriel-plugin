@@ -51,7 +51,7 @@ process.on('exit', () => {
   for (const input of kept) assert.strictEqual(history.redact(input), input, `redact changed ordinary text: ${input}`);
 
   // 2: harness messages are skipped; user prompts are retained.
-  for (const p of ['<task-notification>\n<task-id>x</task-id>', '<system-reminder>hi', '[SYSTEM NOTIFICATION - NOT USER INPUT]', '<command-name>/compact</command-name>', 'Below is a conversation log from a Claude Code coding session. Create a summary', 'This session is being continued from a previous conversation that ran out of context.']) assert.strictEqual(history.isAutomated(p), true, `automated message not detected: ${p}`);
+  for (const p of ['<task-notification>\n<task-id>x</task-id>', '<system-reminder>hi', '<agent-message from="a1b2">\n[Subagent hand-back] report', 'Another Claude session sent a message:\n<agent-message from="a1b2">', '[SYSTEM NOTIFICATION - NOT USER INPUT]', '<command-name>/compact</command-name>', 'Below is a conversation log from a Claude Code coding session. Create a summary', 'This session is being continued from a previous conversation that ran out of context.']) assert.strictEqual(history.isAutomated(p), true, `automated message not detected: ${p}`);
   for (const p of ['please push the build to the server', '<div> why does this render twice in angular']) assert.strictEqual(history.isAutomated(p), false, `user prompt misclassified: ${p}`);
 
   // 3: append, load, deduplication, redaction, and malformed lines.

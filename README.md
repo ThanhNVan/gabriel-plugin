@@ -187,8 +187,8 @@ Docs that name real files, classes and steps give gabriel the most to link. Keep
 
 ## Credit
 
-Made by ThanhNVan @ Metizoft.
-Made by ThanhNVan @ AIC Lab FPT University.
+Made by ThanhNVan @ Metizoft.\
+Made by ThanhNVan @ AIC Lab FPT University.\
 Made by ThanhNVan @ FPT Education FSB.
 
 ## License

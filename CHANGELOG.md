@@ -2,11 +2,19 @@
 
 ## Unreleased
 
+- Map: a shown `XCommand`, `XQuery` or `XRequest` name is swapped for its `XCommandHandler` from the same folder. Strict exact on 100 private Makillez cases: check half 15/50 to 23/50. Code: `src/mk.js` `pairHandlers()`. Rule: [R08](repo-docs/business/02-business-rules.md#r08-map-block-at-most-6-doc-hits-and-6-code-hits-2200-characters).
+- Map: "2 links away" matches the name stem without trailing role words, in order, with text between. Event handlers `On<stem>...` are found by name. Chain check half 21/50 to 27/50 (100 private cases). Rule: [R34](repo-docs/business/02-business-rules.md#r34-two-links-away-code-names).
+- Eval: `node eval/eval-map.js --half tune|check` runs one half of a split case file. A case with no half runs in both. See [EVAL](docs/EVAL.md).
 - A session can pin up to 5 doc sets, and each pinned set that matches gets a map block (the top one in full). A typo of a set name pins nothing and asks you to confirm the fixed command. A question that starts with "gabriel use" and has other words is searched as usual. Rules: [R35](repo-docs/business/02-business-rules.md#r35-session-pin). Pin code: `src/pin.js` `parsePin()`, `getPins()`, `setPins()`, `nearName()`, `touchPin()`.
 - A pin now lasts 7 days after its last use, not 7 days after it was set. Error and typo replies show the current 📌 line. A corrupt pin file reads as at most 5 unique names (it could flood the note before).
 - `npm test` shows `SKIP` for a check whose dev package is missing, and counts it in the last line.
 - `add-docs --code <repo> --repo <folder> --relink` checks the folder against the new graph.
 - Removed the unused question-index rescue (`Q_GATE`). Eval scores are unchanged.
+- The map can show 2 code types from one file (was 1). gabriel-dev exact eval: 9/15 (was 5/15). Other eval sets unchanged.
+- With 2 or more pins, the session gate now hides every gated set from the top, not only the first.
+- `brain.js context` handles `gabriel use ...` like the hook: it gives the pin reply instead of a search.
+- `dompurify` is now a declared dev package (the Mermaid test needs it).
+- The prompt hook ignores subagent hand-backs (`<agent-message ...>`) and other harness messages: no map, no note, nothing saved to history.
 - Privacy scan: an npm version pin such as `pkg@3.4.2` is no longer reported as an email. graphify 0.9.109 puts `package.json` dependencies in the graph.
 
 - Saving a file no longer fails on Windows when antivirus or the indexer locks it for a moment: the rename is retried for about 1 s (paths.js moveIntoPlace(), used by setup, rules and history).

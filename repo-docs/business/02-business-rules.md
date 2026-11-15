@@ -10,7 +10,7 @@ Any error in the prompt hook prints nothing.
 - Time limits: the hook timeout is 60 s (`hooks/hooks.json`). The map search is skipped after 11 s (`mapFor`, `MK_BUDGET_MS`). The meaning step gives up after 9 s (`EMBED_TIMEOUT`).
 
 ### R02 Short and slash prompts get no context
-A prompt that starts with `/`, has fewer than 4 words, or is a harness message gets no rules, map or history. It may still get the setup hint or a tip. A pin command is checked first ([R35](#r35-session-pin)).
+A harness or subagent message (`history.js` `isAutomated()`, for example `<agent-message`) gets nothing: no note, no hint, no history. A prompt that starts with `/` or has fewer than 4 words gets no rules, map or history. It may still get the setup hint or a tip. A pin command is checked before those two ([R35](#r35-session-pin)).
 - Where: `src/brain.js` `hook()` and `contextText()`; `src/history.js` `isAutomated()`.
 
 ### R03 Rules block: at most 6 rules and 2400 characters
@@ -41,7 +41,8 @@ Each rule, map block or earlier prompt is sent once per session. A second copy i
 ## The map
 
 ### R08 Map block: at most 6 doc hits and 6 code hits, 2200 characters
-- Doc hits: `MAX_DOCS`, at most 2 per file, none under 30% of the best hit. Code hits: `MAX_CODE`, same 30% rule. Each doc snippet: `DOC_CHARS` (210).
+- Doc hits: `MAX_DOCS`, at most 2 per file, none under 30% of the best hit. Code hits: `MAX_CODE`, at most 2 types per file, same 30% rule. Each doc snippet: `DOC_CHARS` (210).
+- Named pairs: a shown `XCommand`, `XQuery` or `XRequest` gives its slot to its handler (the same name plus `Handler`) from the same folder, when that handler is not shown yet. The block does not grow. Strict exact on 100 private Makillez cases (2026-11-16): tune 17/50 -> 28/50, check 15/50 -> 23/50. Where: `src/mk.js` `pairHandlers()`, run after `addNamedCode()` in `search()`.
 - Extra "2 links away" lines come on top, up to the set's `max` ([R34](#r34-two-links-away-code-names)). The size limit (`MAX_CHARS`) still applies to all lines.
 - Where: `src/mk.js` `format()`.
 
@@ -175,11 +176,12 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 ## Chain and session pin
 
 ### R34 Two links away: code names
-- After the one-hop `↔` lines, `src/mk.js` `search()` (block "Two hops out") adds code names reached by two strong links (each weight 0.6 or more) from the top code hits. The name must contain the hit's name stem: its first `stem` PascalCase parts, with a leading verb in `CHAIN_VERBS` dropped. `format()` marks such a line "2 links away".
+- After the one-hop `↔` lines, `src/mk.js` `search()` (block "Two hops out") adds code names reached by two strong links (each weight 0.6 or more) from the top code hits. The name must contain the hit's name stem: its first `stem` PascalCase parts, with a leading verb in `CHAIN_VERBS` and trailing role words in `CHAIN_ROLES` dropped. The stem parts must appear in order, with any text between them. `format()` marks such a line "2 links away".
+- An event handler named `On<stem>...` is also found by name, with no graph path. Its command reaches it by no two-link path.
 - At most `max` such lines per search. A node with more than `SEED_HUB` links is never added.
 - Each doc set can set `chain` in `projects.json`: `seeds` (top code hits it starts from, 0 to 10), `max` (extra lines, 0 to 10), `stem` (name parts that must match, 1 to 6; higher is stricter). Defaults: 4, 3, 3 (`src/projects.js` `DEFAULTS`). Each field can be set on its own. A value that is not a number falls back to the set's value, then the default. A number out of range is clamped to its limit.
-- Test on 12 private questions (2026-11-14): no chain 9/12, 3,3,3 10/12, 4,3,3 11/12. Main gate 523/569 and quiet 30/31 unchanged. Other values: `node eval/eval-map.js --chain <seeds>,<max>,<stem>`.
-- Where: `src/mk.js` `search()`, `CHAIN_VERBS`, `CHAIN_DEFAULT`, `chainNum()`; `src/projects.js` `loadConfig()`; `eval/eval-map.js`.
+- Test on 100 private chain cases (2026-11-16), halves of 50: tune 29/50 -> 31/50, check 21/50 -> 27/50 (after the stem and name change above). The defaults 4, 3, 3 were set on 18 cases and are not re-tested on the 100. Main gate 523/569 and quiet 30/31 were last run on 2026-11-14, before this change. Other values: `node eval/eval-map.js --chain <seeds>,<max>,<stem>`; one half: `--half tune|check`.
+- Where: `src/mk.js` `search()`, `CHAIN_VERBS`, `CHAIN_ROLES`, `CHAIN_DEFAULT`, `chainNum()`; `src/projects.js` `loadConfig()`; `eval/eval-map.js`.
 
 ### R35 Session pin
 - A pin is a list of doc sets for one session. The check runs before the [R02](#r02-short-and-slash-prompts-get-no-context) gate. The reply is a note only.
@@ -201,7 +203,7 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - A set that was removed from `projects.json` drops out of the search and the 📌 line (`brain.js` `livePins()`). If no pinned set is left, the search runs as if nothing were pinned.
 - While pinned, `src/mk.js` `searchAll()` searches only the pinned sets:
   - The top set gets the full map block. Each other pinned set that matched gets a short block.
-  - With 2 or more pins, the session gate hides only the set it gates. The other pinned sets still show.
+  - With 2 or more pins, the session gate hides each set it gates, from the top down. The other pinned sets still show.
   - The fallback general docs ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) run after the pinned blocks, as before.
   - Learning ([R23](#r23-a-learned-link-needs-two-confirmations-and-fades)) uses the top set only.
 - While pinned, every user note starts with a blank line, then `📌 pinned: a, b  ("gabriel use auto" to undo)`. The model text never gets it.
