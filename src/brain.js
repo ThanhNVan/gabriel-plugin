@@ -77,9 +77,24 @@ function touchedHook(host) {
     if (!files.length || !sessionId) return;
     for (const file of files) {
       const r = require('./mk.js').touched(homeDir(), sessionId, file);
-      if (r && r.ignored === 'file not in the map') noteMiss(sessionId, file);
+      if (r && r.ignored === 'file not in the map' && isRepoCodeFile(r.project, file)) noteMiss(sessionId, file);
     }
   } catch (e) { debug('touchedHook', e); /* never block a tool call */ }
+}
+
+// True when the file is a code file (its extension is used by the map's code files) inside the set's repo folder.
+function isRepoCodeFile(project, file) {
+  try {
+    const P = getProject(project);
+    if (!P || !P.repo) return false;
+    const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+    const rel = path.relative(norm(P.repo), norm(file));
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+    const ext = path.extname(file).toLowerCase(), { SUPPORTED, OPT_IN } = require('./extract.js');
+    if (SUPPORTED.includes(ext) || OPT_IN.includes(ext)) return false;   // doc and data files: graphify can list them, but they are not code
+    const exts = new Set([...require('./mk.js').codeFiles(homeDir(), project)].map((f) => path.extname(f).toLowerCase()));
+    return exts.has(ext);
+  } catch { return false; }
 }
 
 // The session's touched files that the map does not know: seen/<sid>.miss (a JSON array, distinct, at most MISS_KEEP).
@@ -432,7 +447,7 @@ async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss };
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss, isRepoCodeFile };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
@@ -668,6 +683,14 @@ const MODES = {
       all[arg] = { commit: h.commit, t: h.t, at: Date.now() };
       fs.mkdirSync(path.dirname(file), { recursive: true });
       writeAtomic(file, JSON.stringify(all, null, 2) + '\n');
+      // the docs are checked now: clear the miss lists so the miss count starts again (*.miss and <sid>.missnote)
+      try {
+        const seen = path.join(paths.dataDir(), 'seen');
+        for (const f of fs.readdirSync(seen)) {
+          if (f.endsWith('.miss')) fs.rmSync(path.join(seen, f), { force: true });
+          if (f.endsWith('.missnote')) fs.rmSync(path.join(seen, f), { force: true });
+        }
+      } catch { /* no seen folder yet */ }
       console.log(`docs checked for ${arg} at ${h.commit.slice(0, 7)}`);
     },
   },

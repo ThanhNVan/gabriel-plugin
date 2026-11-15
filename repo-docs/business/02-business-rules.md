@@ -216,6 +216,7 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - Where: `src/brain.js` `driftNote()`, `readDocsChecked()`, `refreshMapInBackground()`, modes `drift` and `docs-checked`; `src/repo.js` `graphDrift()`, `lastCommitTime()`, `headCommit()`, `commitsSince()`; `src/mk.js` `codeFiles()`. Tests: `test/test-brain.js`, `test/test-repo.js`, `test/test-statusview.js`.
 
 ### R38 Miss warning
-- A warning, not a tip. Touched files that the map does not know are kept per session (at most 20). When 3 or more are kept, the hook note says once per session that the code graph may be old.
+- A warning, not a tip. Only touched code files count: a file inside the set's repo folder whose extension is used by the graph's code files. Other files (docs, temp files, files in other folders) are not counted. Counted misses are kept per session (at most 20). When 3 or more are kept, the hook note says once per session that the code graph may be old.
+- `docs-checked <name>` (run last by /gabriel:refresh-docs) clears the miss lists, so the count starts again.
 - `"tips": false` does not turn it off.
-- Where: `src/brain.js` `touchedHook()`, `noteMiss()`, `missNote()`. Tests: `test/test-brain.js`.
+- Where: `src/brain.js` `touchedHook()`, `isRepoCodeFile()`, `noteMiss()`, `missNote()`. Tests: `test/test-brain.js`.

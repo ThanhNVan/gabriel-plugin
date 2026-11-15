@@ -225,6 +225,16 @@ process.on('exit', () => { if (!finished) { console.error('TEST DID NOT FINISH')
     const nrOut = runBrain(home, ['docs-checked', 'nr']);
     assert.strictEqual(nrOut.status, 1, 'a set with no repo is refused');
     assert.ok(nrOut.stdout.includes('has no repo folder'), nrOut.stdout);
+    // docs-checked clears the miss lists (seen/<sid>.miss and seen/<sid>.missnote), so the count starts again
+    const { isRepoCodeFile } = require(brainPath);
+    assert.strictEqual(isRepoCodeFile('dc', path.join(dcRepo, 'README.md')), false, 'isRepoCodeFile: a .md file inside the repo is not code');
+    assert.strictEqual(isRepoCodeFile('dc', path.join(home, 'outside.js')), false, 'isRepoCodeFile: a .js file outside the repo is not counted');
+    assert.strictEqual(isRepoCodeFile('nr', path.join(home, 'nr-docs', 'a.js')), false, 'isRepoCodeFile: a set with no repo returns false');
+    // (the true case needs a built map with code files; not built in this test)
+    noteMiss('x1', 'a.cs'); fs.writeFileSync(path.join(dataDir, 'seen', 'x1.missnote'), '');
+    runBrain(home, ['docs-checked', 'dc']);
+    assert.ok(!fs.existsSync(path.join(dataDir, 'seen', 'x1.miss')), 'docs-checked removes the .miss list');
+    assert.ok(!fs.existsSync(path.join(dataDir, 'seen', 'x1.missnote')), 'docs-checked removes the .missnote mark');
     console.log('warnings: drift and miss notes checked');
   }
   finished = true;

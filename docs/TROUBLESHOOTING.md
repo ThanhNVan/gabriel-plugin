@@ -198,7 +198,7 @@ Warnings start with `⚠️ gabriel:`. Fix each one with `/gabriel:refresh-docs 
 - `⚠️ gabriel: The <name> graph is N commits behind (M code files changed). Run /gabriel:refresh-docs <name>.` The code graph is from an older commit, and 10 or more changed code files are in it.
 - `⚠️ gabriel: The <name> docs were last checked D days before the latest code commit (K commits since). Run /gabriel:refresh-docs <name>.` The docs are more than 7 days older than the code.
 - `⚠️ gabriel: The <name> docs were never checked with /gabriel:refresh-docs.` Shown only with a graph drift of 10 or more changed files.
-- `⚠️ gabriel: N files you touched are not in the code graph. It may be old. Run /gabriel:refresh-docs.` Shown once per session, at 3 or more files.
+- `⚠️ gabriel: N files you touched are not in the code graph. It may be old. Run /gabriel:refresh-docs.` Shown once per session, at 3 or more files. Only code files inside the repo count. A refresh starts the count again.
 
 The first three show on every other prompt until you refresh. All show even with `"tips": false`. `mk-status all` shows the counts on a `drift` line.
 

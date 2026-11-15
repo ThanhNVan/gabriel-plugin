@@ -456,7 +456,7 @@ function touched(home, session, file, opts = {}) {
       : db.prepare('SELECT session, t, seeds, done, project FROM last WHERE session = ?').get(session);
     if (!row || now - row.t > LEARN_WINDOW_MS) return { ignored: 'no recent map' };
     const project = row.project || defaultProject(), rel = mapFile(db, project, file);
-    if (!rel) return { ignored: 'file not in the map' };
+    if (!rel) return { ignored: 'file not in the map', project };
     const done = JSON.parse(row.done || '[]');
     if (done.includes(rel)) return { ignored: 'already counted' };
     const base = path.basename(rel).replace(/\.[^.]+$/, '');

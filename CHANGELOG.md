@@ -5,6 +5,7 @@
 - `graphDrift()` in `src/repo.js` counts how far a doc set's code graph is behind its repo HEAD. A new `drift` mode in `src/brain.js` writes `drift.json`, started at most once an hour in the background. `mk-status all` shows a `drift` line.
 - Hook warnings (not tips; they ignore `"tips": false`): a drift note at 10 or more changed code files, a docs note when the docs were last checked more than 7 days before the latest code commit, and a miss note at 3 or more touched files the code graph does not know. The drift and docs note shows on every 2nd prompt while the drift lasts; the miss note once per session.
 - New mode `docs-checked <name>` records the repo HEAD the docs match, in `docs-checked.json`. The refresh-docs skill runs it last. The `drift` job reads it; a set never checked gets a note only with a graph drift of 10+ files.
+- The miss note counts only code files inside the set's repo folder (not docs, data files, temp files or other folders): `isRepoCodeFile()` in `src/brain.js`. `docs-checked` clears the miss lists, so a refresh starts the count again.
 - `touched()` in `src/mk.js` says `no named code in the file` (not `file not in the map`) when a mapped file has only short or generic names.
 
 ## 0.3.0 (2026-11-15)
