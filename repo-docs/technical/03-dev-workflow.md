@@ -66,9 +66,7 @@ Tips are the `TIPS` array in `src/tips.js`. Add one short plain string. `tipFor`
 
 ## Plugin cache note
 
-Claude Code runs a copy of the plugin from its plugin cache, even when the plugin was installed from a local folder. After a change, run `claude plugin update gabriel@gabriel` and restart Claude Code. Codex CLI and Gemini CLI run the folder directly, so they need no update.
-
-This note comes from `docs/TROUBLESHOOTING.md`. The cache folder is outside this repo, so this page does not check it.
+Claude Code runs a copy of the plugin from its plugin cache, even when the plugin was installed from a local folder. After a change, run `claude plugin update gabriel@gabriel` and restart Claude Code. Codex CLI and Gemini CLI run the folder directly, so they need no update. Source: `docs/TROUBLESHOOTING.md` (the cache is outside this repo, so not checked here).
 
 ## Rebuild a map by hand
 
@@ -76,4 +74,4 @@ This note comes from `docs/TROUBLESHOOTING.md`. The cache folder is outside this
 - Check the map is current: `node src/brain.js mk-status all`. Under each set with a problem, it prints a `fix:` line with the one command that fixes it.
 - Learned links: `node src/brain.js learn-show`, and `learn-reset [name]` to clear them (a name clears one doc set).
 
-The hook also rebuilds a project in the background when its docs or code graph change: one stale project per check, at most once a minute. A project whose graph file is missing is skipped. `node src/brain.js mk-status all` shows each graph path, and `GRAPH MISSING` when it is gone.
+The hook also rebuilds stale projects in the background ([R18](../business/02-business-rules.md#r18-background-builds-one-at-a-time-checked-each-minute)). `mk-status all` shows `GRAPH MISSING` when a graph file is gone.

@@ -14,17 +14,17 @@ node "<plugin folder>/src/brain.js" mk-status all
 
 A map appears only when a prompt matches your docs well enough. Check these in order.
 
-1. **Ask why.** Run `/gabriel:why "your question"`. It prints one line per doc set and says why it showed no map. Follow the next step in that line.
+1. **Ask why.** Run `/gabriel:why "your question"`. One line per doc set says why no map showed. Follow its next step.
 2. **The prompt is short.** Prompts with fewer than 4 words, and prompts that start with `/`, skip the search. Ask a longer question.
 3. **The map is not built.** Run `/gabriel:status`. If it says "no map", run `/gabriel:setup`. Or run `node "<plugin folder>/src/brain.js" build-mk <name>`.
-4. **The doc set is small.** A few short files may show no map at all. The quiet gate is tuned for bigger doc sets. Add more docs, or check the match yourself:
+4. **The doc set is small.** A few short files may show no map. The gate is tuned for bigger sets. Add docs, or check the match yourself:
 
    ```
    node "<plugin folder>/src/brain.js" mk "your question"
    ```
 
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
-5. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt (its `aliases` in `projects.json` count). A pinned session ignores other set names: see the next section.
+5. **The words do not match.** Use your docs' words, or name the set (its `aliases` in `projects.json` count). A pinned session ignores other names: see the next section.
 6. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
 
 ## The map shows only one project
@@ -43,9 +43,8 @@ Setup prints `found N docs` with the count per type. Check these in order.
 
 ## The hook seems slow or times out
 
-- The hook timeout is 60 seconds. Inside the hook, the map search is skipped after 11 seconds. The meaning step gives up after 9 seconds. A slow step then drops out, and the prompt still goes through.
-- Each prompt starts a new hook process. Loading the meaning model takes time on every prompt.
-- If it is always slow, run setup with `--skip-model`. That gives words-only mode, which is faster.
+- The timeouts are in [ARCHITECTURE](ARCHITECTURE.md#how-a-prompt-is-handled). A slow step drops out, and the prompt still goes through.
+- Each prompt starts a new hook process, so the meaning model loads every time. If it stays slow, run setup with `--skip-model` (words-only, faster).
 
 ## The model download fails
 
@@ -79,7 +78,7 @@ Some packages need an install script. npm can block it. Setup then fails at step
 
 ## Windows paths with spaces
 
-Put quotes around every path that has a space, including the `--data` folder. The `setup.ps1` file in the plugin folder passes its arguments to `src/setup.js`. From PowerShell:
+Quote every path with a space, including `--data`. From PowerShell, `setup.ps1` passes its arguments to `src/setup.js`:
 
 ```
 pwsh -File "D:\My Tools\gabriel\setup.ps1" --dry-run
@@ -95,7 +94,7 @@ Fix: open your Claude Code settings file and remove the old hook entry that runs
 
 **Codex CLI.** Cause: the `UserPromptSubmit` entry for gabriel is in `hooks.json` twice. Setup never adds a second entry, so this comes from a manual edit or a second copy of the file.
 
-Fix: search the hooks file for `brain.js`. The file is `~/.codex/hooks.json`, or `hooks.json` in `CODEX_HOME`. Keep one `hook --host codex` entry and one `touched --host codex` entry. Or remove gabriel's entries with `node "<plugin folder>/src/setup.js" --remove-host codex --apply`, then add them again with `--host codex --apply`. See [HOSTS](HOSTS.md).
+Fix: search `~/.codex/hooks.json` (or `hooks.json` in `CODEX_HOME`) for `brain.js`. Keep one `hook --host codex` and one `touched --host codex` entry. Or run `node "<plugin folder>/src/setup.js" --remove-host codex --apply`, then `--host codex --apply`. See [HOSTS](HOSTS.md).
 
 **Gemini CLI.** Same cause and fix as Codex, in `~/.gemini/settings.json`, with `--host gemini`.
 
@@ -127,9 +126,9 @@ To use other settings (aliases, layout, a code graph), edit `projects.json`. See
 
 Message: `no graphify-out/graph.json in <repo>: run /graphify <repo> first, or leave out --code`.
 
-Cause: `--code` names a repo with no graph file. With `--code`, gabriel does not look in the docs folder.
+Cause: `--code` names a repo with no graph file. gabriel does not look in the docs folder.
 
-Fix: run `/graphify <repo>` in Claude, then run the command again. Or leave out `--code`.
+Fix: run `/graphify <repo>` in Claude, then retry. Or leave out `--code`.
 
 ## `graph not found` when a map is built
 
@@ -194,11 +193,17 @@ Items already sent in this session are not sent again. A note shows how many wer
 
 ## A `⚠️` note says the code graph is behind
 
-A note that says `The <name> graph is N commits behind` means the code graph was built at an older commit, and 10 or more changed code files are in it. Run `/gabriel:refresh-docs <name>`. Another note says files you touched are not in the code graph: run the same command. The graph and docs note shows on every 2nd prompt until you refresh. The touched-files note shows once per session. Both show even with `"tips": false`. `mk-status all` shows the counts on a `drift` line.
+Warnings start with `⚠️ gabriel:`. Fix each one with `/gabriel:refresh-docs <name>`. Its last step records the check. The texts:
+
+- `⚠️ gabriel: The <name> graph is N commits behind (M code files changed). Run /gabriel:refresh-docs <name>.` The code graph is from an older commit, and 10 or more changed code files are in it.
+- `⚠️ gabriel: The <name> docs were last checked D days before the latest code commit (K commits since). Run /gabriel:refresh-docs <name>.` The docs are more than 7 days older than the code.
+- `⚠️ gabriel: The <name> docs were never checked with /gabriel:refresh-docs.` Shown only with a graph drift of 10 or more changed files.
+- `⚠️ gabriel: N files you touched are not in the code graph. It may be old. Run /gabriel:refresh-docs.` Shown once per session, at 3 or more files.
+
+The first three show on every other prompt until you refresh. All show even with `"tips": false`. `mk-status all` shows the counts on a `drift` line.
 
 ## Still stuck
 
-- Run `node "<plugin folder>/src/brain.js" check` to see problems in note headers.
-- Run `node "<plugin folder>/src/brain.js" learn-show` to see learned links.
-- Set `GABRIEL_DEBUG=1`, ask again, then read `<data>/debug.log` (the data folder, `~/.gabriel` by default). It lists each error that gabriel caught. Unset `GABRIEL_DEBUG` when done.
+- Run `node "<plugin folder>/src/brain.js" check` (problems in note headers) or `learn-show` (learned links).
+- Set `GABRIEL_DEBUG=1`, ask again, then read `<data>/debug.log` (`~/.gabriel` by default). It lists each caught error. Unset `GABRIEL_DEBUG` after.
 - Open an issue in the project repository with the output of `/gabriel:status` and the Node version. Remove any private text first.

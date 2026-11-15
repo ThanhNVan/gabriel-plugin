@@ -52,7 +52,6 @@ flowchart TD
 
 ## Rules and states
 
-- Node version, packages and the model: no rule of its own. Setup stops at the first failure (steps 1, 2 and 7).
 - Model download and network: [R30](../02-business-rules.md#r30-nothing-leaves-the-machine-after-setup).
 - Copy of old data: [R32](../02-business-rules.md#r32-old-data-is-copied-never-deleted).
 - Map states after build: [03-state-machines.md](../03-state-machines.md#doc-set-map).

@@ -1,8 +1,6 @@
 # Architecture
 
-gabriel is a Node.js plugin (Node 22.5 or newer). For each prompt, it adds a few matching rules and doc sections to the model's context. It runs on your machine. It has no server.
-
-It has two parts:
+gabriel is a Node.js plugin (Node 22.5 or newer), with no server. For each prompt, it adds a few matching items to the model's context from two parts:
 
 - **Rules graph.** Short rules and memory notes from the host's rules folder.
 - **Project map.** Doc sections and code names from your doc sets (called projects).
@@ -78,15 +76,15 @@ Doc sets are read from `docs/<name>/` in the data folder, or from the folder set
 
 ## Key decisions
 
-- **Local only.** The hook never downloads. It loads the model with `local_files_only` (`getEmbedder(false)` in `src/embed.js`). The `brain.js` header says only the build step may use the network, for the model download. Why: a prompt must not wait on a network call.
-- **`node:sqlite`, not a native package.** It ships with Node 22.5 and up (`engines` in `package.json`). `mk.js` and `graphdb.js` load it inside a function, so a missing module never breaks the hook. Why: no build step on the user's machine. The only runtime dependency is `@huggingface/transformers`. `pdfjs-dist` is optional.
-- **Never block a prompt.** Every hook step catches its errors and prints nothing. Time limits: the map search is skipped after 11 s (`MK_BUDGET_MS` in `brain.js`), the meaning step gives up at 9 s (`EMBED_TIMEOUT`), and the hook timeout is 60 s (`hooks/hooks.json`). Without the model, the rules still work on words and synonyms.
-- **Rebuild in the background, with locks.** The hook never rebuilds a map inline. It starts a detached `brain.js refresh` or `build-mk` and returns. Locks stop a second run: `refresh.lock` (2 min), `mk.lock` and `docs-add.lock` (10 min each). The old map serves until the new one is ready. Why: a rebuild takes about a minute.
-- **Atomic writes.** `writeAtomic` in `rules.js` writes a temp file and renames it. `mk.js` builds into a temp file and moves the rows into `mk.db` in one transaction. Why: a reader never sees half a file.
+- **Local only** ([R30](../business/02-business-rules.md#r30-nothing-leaves-the-machine-after-setup)). The hook loads the model with `local_files_only` (`getEmbedder(false)` in `src/embed.js`). Only the build step may download it (the `brain.js` header). Why: a prompt must not wait on the network.
+- **`node:sqlite`, not a native package.** It ships with Node 22.5 and up (`engines` in `package.json`). `mk.js` and `graphdb.js` load it inside a function, so a missing module never breaks the hook. Why: no build step on the user's machine. The only runtime dependency is `@huggingface/transformers`; `pdfjs-dist` is optional.
+- **Never block a prompt** ([R01](../business/02-business-rules.md#r01-hook-never-blocks-a-prompt), with the time limits). Every hook step catches its errors and prints nothing. Without the model, the rules still match on words and synonyms.
+- **Rebuild in the background, with locks.** The hook starts a detached `brain.js refresh` or `build-mk` and returns. Locks: `refresh.lock` (2 min), `mk.lock` and `docs-add.lock` (10 min each). The old map serves meanwhile ([R17](../business/02-business-rules.md#r17-the-old-map-serves-until-the-new-one-is-ready)). Why: a rebuild takes about a minute.
+- **Atomic writes.** `writeAtomic` in `rules.js` writes a temp file, then renames it. `mk.js` builds into a temp file and moves the rows into `mk.db` in one transaction. Why: a reader never sees half a file.
 - **Vectors keyed by text hash.** Only new or changed text is embedded again (`embedNodes`). Why: a rebuild stays fast.
-- **One engine, many hosts.** Each adapter in `src/hosts/` reads and writes one host's format. Each host has its own graph file, so two hosts never overwrite each other (`graphName` in `rules.js`).
-- **A tuned model wins only on scores.** `decide()` in `src/tune/tune.js` keeps a new model only when the held-out total rises, no project drops by more than 1, and the full and quiet totals do not fall. The real data is not changed until then.
-- **Session dedupe.** An item is not sent twice in one session. The state is saved only after the output is written (`dedupe` in `brain.js`). Why: a crash must not mark unsent items as sent.
+- **One engine, many hosts.** Each adapter in `src/hosts/` handles one host's format. Each host has its own graph file (`graphName` in `rules.js`), so hosts never overwrite each other.
+- **A tuned model wins only on scores** ([R27](../business/02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins)). `decide()` in `src/tune/tune.js` judges. The real data does not change until it says keep.
+- **Session dedupe** ([R07](../business/02-business-rules.md#r07-an-item-is-not-sent-twice-in-one-session)). The state is saved only after the output is written (`dedupe` in `brain.js`). Why: a crash must not mark unsent items as sent.
 
 ## One prompt, step by step
 

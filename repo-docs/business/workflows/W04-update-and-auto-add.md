@@ -27,7 +27,7 @@ With `--stack`, the skill first fetches the stack docs again. It lists the sourc
 
 1. `refreshMapInBackground()` checks at most once a minute (a stamp file). It does nothing when a build lock is younger than 10 minutes.
 2. `registerNewDocFolders()` looks for a new doc folder. If it finds one, it starts `setup.js --update` in the background and stops here (the update builds the new map).
-3. Otherwise, `src/mk.js` `stale()` checks each doc set in turn and picks the first stale one. A set whose graph file is missing is skipped. When one is stale, `brain.js build-mk` starts in the background, with a lock file `mk.lock`. The lock file holds the set name. A build removes the lock when it is the default set or the named set.
+3. Otherwise, `src/mk.js` `stale()` picks the first stale doc set, and `brain.js build-mk` starts in the background under `mk.lock` ([R18](../02-business-rules.md#r18-background-builds-one-at-a-time-checked-each-minute)).
 4. The old map keeps serving until the new one is ready (see [R17](../02-business-rules.md#r17-the-old-map-serves-until-the-new-one-is-ready)).
 
 ## Diagram

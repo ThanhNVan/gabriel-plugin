@@ -45,7 +45,7 @@ Over-detailed docs go stale fast and hide the one fact the reader needs. Every l
 
 Check a folder with `node tools/check-docs.js <docs folder> [--code <repo>] [--no-size]`. It reports size, long code blocks, line numbers, placeholders, broken links and (with `--code`) missing code paths, then `check-docs: <n> hits`.
 
-- **One fact, one place.** Write it once and link to it. Repeated facts drift apart.
+- **One fact, one place.** Write it once and link to it. Repeated facts drift apart. When you edit or shrink a doc, replace each repeat with a link to the rule or section that owns it, for example a link to rule R26's heading. First check that the owner has the whole fact, and fix it there if not.
 - **Name the code, do not copy it.** Give the file path and the class or function name. No code blocks longer than 5 lines. No line numbers: they change with every edit.
 - **No per-method or per-field docs.** The code and its types say that. Document the job, the flow and the why.
 - **No guesses.** Write only what you checked in the code. Put open points in `findings.md`.

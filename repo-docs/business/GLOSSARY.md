@@ -36,7 +36,7 @@ Terms in the order a reader meets them.
 - **Meaning model**: a small local model (`Xenova/all-MiniLM-L6-v2`) that turns text into numbers. Used for meaning search.
 - **Vector**: the numbers the meaning model gives for one text. Kept in `vectors.json` or `mk.db`.
 - **Words and synonyms**: the search without the meaning model. Synonyms come from `src/thesaurus.json` and the user's private thesaurus.
-- **Data folder**: the folder with all gabriel state. Set by `GABRIEL_DATA`, or `~/.gabriel` by default.
+- **Data folder**: the folder with all gabriel state. `~/.gabriel` by default; the full order is in [01-architecture](../technical/01-architecture.md#data-flow).
 - **Host**: the tool that runs gabriel: `claude`, `codex`, `gemini`, `copilot` or `generic`.
 - **Host adapter**: the code in `src/hosts/` that reads a host's input and writes its output.
 - **Rules home**: the host's rules folder, for example `~/.claude`.
@@ -48,6 +48,6 @@ Terms in the order a reader meets them.
 - **Quiet score**: the count of unrelated questions that show no map block.
 - **Held-out cases**: eval cases kept back from training. Used to judge a tuned model.
 - **Rank weights** (`rank.json`): the ranking settings of one doc set, trained by retrain.
-- **Retrain**: trains new rank weights and keeps them only when the strict score does not fall (`--force` keeps them anyway). See [W06](workflows/W06-eval-and-retrain.md).
+- **Retrain**: trains new rank weights and keeps them only when the strict score does not fall. See [W06](workflows/W06-eval-and-retrain.md).
 - **Tune**: optional fine-tune of the meaning model on the user's eval cases. Kept only when it wins.
 - **Stack docs**: public docs for the user's languages and frameworks, saved under `docs/stack/`. Background reading.

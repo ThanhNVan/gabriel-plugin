@@ -44,7 +44,7 @@ flowchart TD
 
 ## 2. One prompt
 
-On each prompt, the host runs `brain.js hook`. Short prompts and slash commands get no context. Other prompts get rule notes, a map block, and similar earlier prompts. Items this session already got are removed.
+Each prompt runs `brain.js hook`. Short prompts and slash commands get no context. Other prompts get rule notes, a map block and similar earlier prompts, minus items already sent this session.
 
 Code: `hook()`, `gather()`, `dedupe()` and `searchFull()` in `src/brain.js`. `readInput` and `writeOutput` in `src/hosts/*.js`. `searchAll()`, `search()` and `format()` in `src/mk.js`.
 
@@ -63,7 +63,7 @@ sequenceDiagram
     B->>B: Save or clear the pin in data/seen/<session>.pin
     B-->>H: One-line note only
   else Slash command, under 4 words, or automated message
-    B-->>H: Setup hint only, or empty output
+    B-->>H: Hint line only (setup, warning or tip), or empty output
   else Normal prompt
     B->>R: searchFull: words, synonyms, meaning if the model is on disk
     R-->>B: Best rule notes, at most 6, and up to 2 similar earlier prompts
@@ -85,7 +85,7 @@ sequenceDiagram
 
 ## 3. Learning from use
 
-When a map is shown, gabriel saves the prompt's strongest seeds for the session. If a file is read or edited soon after, gabriel links those seeds to the file's main types. Links fade and never start a search. Code: `remember()`, `touched()`, `learnShow()` and `learnReset()` in `src/mk.js`. `touchedHook()` in `src/brain.js`. `readTouched` in `src/hosts/*.js`. The hook matchers are in `hooks/hooks.json`.
+When a map is shown, gabriel saves the prompt's strongest seeds. A file read or edited soon after links those seeds to its main types. Links fade and never start a search. A touched file the map does not know goes to `seen/<session>.miss`. Code: `remember()`, `touched()`, `learnShow()` and `learnReset()` in `src/mk.js`. `touchedHook()` and `noteMiss()` in `src/brain.js`. `readTouched` in `src/hosts/*.js`. The hook matchers are in `hooks/hooks.json`.
 
 ```mermaid
 flowchart TD
@@ -96,12 +96,13 @@ flowchart TD
   D1 -- "yes" --> R["host.readTouched gives the file path"]
   R --> D2{"A map was shown for this session in the last 45 minutes?"}
   D2 -- "no" --> N2["Ignored: no recent map"]
-  D2 -- "yes" --> D3{"File is in this project map and not counted yet?"}
-  D3 -- "no" --> N3["Ignored: not in map, or already counted"]
-  D3 -- "yes" --> T["Targets: up to 3 code types in the file, with 600 links or fewer"]
+  D2 -- "yes" --> D3{"File is in this project map?"}
+  D3 -- "no" --> N3["Ignored: not in map. Name saved to seen/session.miss"]
+  D3 -- "yes" --> D4{"Already counted for this map?"}
+  D4 -- "yes" --> N4["Ignored: already counted"]
+  D4 -- "no" --> T["Targets: up to 3 named code types in the file, 600 links or fewer. None: ignored"]
   T --> SD["Seeds: up to 8 seeds that are not in this file"]
-  SD --> L["learn row in mk.db: weight grows by 0.2 times the seed strength, capped at 1"]
-  L --> C["Count the file in the done list, so it counts once per map"]
+  SD --> L["learn row in mk.db: weight grows by 0.2 times the seed strength, capped at 1. File counted once per map"]
   L --> U["Use at search time only when seen 2 or more times and weight is 0.02 or more"]
   U --> CAP["Learned light is capped at 45 percent of the strongest unlearned activation"]
   L --> F["Fade: half-life 45 days"]
@@ -110,7 +111,7 @@ flowchart TD
 
 ## 4. Building a map
 
-A build reads one doc set and its optional `graph.json`. It splits the docs into chunks and reads the code names. It writes a temp file, then copies only that doc set's rows into `mk.db`, in one transaction. The old map serves until then. Code: `build()`, `chunkDoc()` and `integrate()` in `src/mk.js`. `extractText()` in `src/extract.js`. `build-mk` mode in `src/brain.js`. The question index is built by `embedAll()` in `src/dq.js`.
+A build reads one doc set and its optional `graph.json`, then writes a temp file. It copies only that set's rows into `mk.db` in one transaction. The old map serves until then. Code: `build()`, `chunkDoc()` and `integrate()` in `src/mk.js`. `extractText()` in `src/extract.js`. `build-mk` mode in `src/brain.js`. The question index is built by `embedAll()` in `src/dq.js`.
 
 ```mermaid
 flowchart TD
@@ -141,7 +142,7 @@ flowchart TD
 
 ## 5. Add docs later
 
-You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions. You often do not need to run it: the hook starts the same update in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`, at most once every 10 minutes). After code changes, `/gabriel:refresh-docs` updates the graph and the docs, then runs this update and asks whether to retrain. Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`.
+You add or change doc files. Then you run `/gabriel:update`. It registers new folders, rebuilds stale maps, and suggests test questions for new sections. It never changes your saved questions. The hook often runs it for you in the background when it sees a new doc folder with files (`registerNewDocFolders()` in `src/brain.js`). After code changes, `/gabriel:refresh-docs` updates the graph and docs, runs this update, asks about retraining, and last runs `brain.js docs-checked <name>` (writes `docs-checked.json`; see [ARCHITECTURE](ARCHITECTURE.md)). Code: `update()` in `src/setup.js`. `newSuggestions()` in `eval/suggest-cases.js`. `stale()` and `hasMap()` in `src/mk.js`. `docs-checked` mode in `src/brain.js`.
 
 ```mermaid
 flowchart TD
@@ -164,7 +165,7 @@ flowchart TD
 
 ## 6. Measure and retrain
 
-Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. No name means the default doc set. It keeps the new weights only when the strict pass count does not fall. `--force` keeps them anyway. The old file is saved as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
+Your saved questions measure the map. `retrain` trains new ranking weights from them. No name means the default doc set. It keeps the new weights only if the strict pass count does not fall (`--force` keeps them anyway). The old file goes to `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD
@@ -185,7 +186,7 @@ flowchart TD
 
 ## 7. Fine-tune the meaning model (optional)
 
-You train a copy of the meaning model on your own questions. Then you score the copy and the current model on a copy of your data. The copy becomes the meaning model only when the keep rule passes. `--rollback` removes the setting.
+You train a copy of the meaning model on your questions and score it against the current model. The copy is kept only if the keep rule passes. `--rollback` removes the setting.
 
 Code: `runTune()` in `src/setup.js`. `src/tune/tune.js` holds `stage()`, `measure()`, `decide()`, `keepModel()` and `rollBackModel()`. `src/tune/export-pairs.js`, `src/tune/train.py` and `src/tune/export_onnx.py` do the other steps.
 
@@ -212,8 +213,7 @@ flowchart TD
 
 ## 8. Other agent hosts
 
-Codex CLI and Gemini CLI get gabriel through their own hook file. `--host` shows the change. `--apply` writes it, after a backup. Other tools call `brain.js context`. Removing a host deletes only gabriel's hooks.
-
+Codex CLI and Gemini CLI get gabriel through their own hook file. `--host` shows the change. `--apply` writes it, after a backup. Other tools call `brain.js context`.
 Code: `hostSetup()`, `addGabriel()` and `removeGabriel()` in `src/setup.js`. Host adapters in `src/hosts/codex.js`, `src/hosts/gemini.js`, `src/hosts/generic.js` and `src/hosts/claude.js`.
 
 ```mermaid
@@ -270,7 +270,7 @@ flowchart LR
 
 ## 10. Owner migration from the old brain folder
 
-`migrate-data.js` copies data from the old brain folder into the data folder. It never deletes or changes the source. It hashes every file. A second run finishes what is left. Code: `migrate()` and `MOVES` in `src/migrate-data.js`. Step 6 in `run()` in `src/setup.js` plans the copy. It copies only with `--yes`.
+`migrate-data.js` copies data from the old brain folder. It never changes the source, hashes every file, and a second run finishes what is left. Code: `migrate()` and `MOVES` in `src/migrate-data.js`. Step 6 in `run()` in `src/setup.js` plans the copy. It copies only with `--yes`.
 
 ```mermaid
 flowchart TD
