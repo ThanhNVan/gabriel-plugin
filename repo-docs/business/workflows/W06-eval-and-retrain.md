@@ -19,6 +19,10 @@ In `src/retrain.js`:
 
 Optional tune, in `src/tune/tune.js`: it scores the current and the tuned meaning model on a copy of the data folder, and keeps the tuned model only when `decide()` passes ([R27](../02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins)). `--rollback` removes the tuned model setting from `projects.json`.
 
+## Diagram
+
+Caption: the retrain steps: check the cases, rebuild the map, score, train, and keep new weights only if the score holds.
+
 ```mermaid
 flowchart TD
   A["/gabriel:retrain name: retrain.js"] --> B{"eval-cases.json exists?"}

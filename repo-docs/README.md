@@ -20,6 +20,8 @@ Checked against commit: 9380b0f2
 
 ## How the docs connect
 
+Caption: how the repo docs link to each other, and how they link to the code and the graph.
+
 ```mermaid
 flowchart LR
   IDX["repo-docs/README.md"] --> BIZ["business/: rules, states, workflows"]

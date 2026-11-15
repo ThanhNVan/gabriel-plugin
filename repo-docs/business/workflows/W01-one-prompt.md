@@ -19,13 +19,17 @@ The user sends a prompt in a host with the gabriel hook. In Claude Code: `UserPr
 11. A tip or the setup hint is added once per session: `src/tips.js` `tipFor()`, `src/brain.js` `setupHint()`. See [R28](../02-business-rules.md#r28-one-tip-per-session) and [R29](../02-business-rules.md#r29-setup-hint-until-setup-is-done).
 12. `writeOutput()` sends the text to the model (`additionalContext`) and a short view to the user (`systemMessage`, from `humanize()`). The pin line, when set, starts every user note ([R35](../02-business-rules.md#r35-session-pin)). Then `dedupe()`'s `save()` runs.
 
+## Diagram
+
+Caption: the steps one prompt takes, from the hook to the text the model and the user get.
+
 ```mermaid
 flowchart TD
   A["UserPromptSubmit: brain.js hook"] --> B["readInput: hosts/claude.js"]
   B --> P{"pin command?"}
-  P -- yes --> Q["pinNote: note only"]
+  P -- yes --> Q["brain.js pinNote: note only"]
   P -- no --> C{"slash, under 4 words, or harness message?"}
-  C -- yes --> H["setupHint or tipFor"]
+  C -- yes --> H["brain.js setupHint or tips.js tipFor"]
   C -- no --> D["gather: brain.js"]
   D --> E["searchFull: rules.js wordScores"]
   E --> F["embed.js getEmbedder (local only)"]

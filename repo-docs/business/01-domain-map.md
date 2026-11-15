@@ -2,6 +2,8 @@
 
 gabriel's main parts are below. Each has one owner file in `src/`. Most feed the prompt hook; the rest set up, teach or score it.
 
+Caption: the main parts of gabriel and the data each part passes to the next.
+
 ```mermaid
 flowchart TD
   prompt["User prompt"] --> hook["brain.js hook"]

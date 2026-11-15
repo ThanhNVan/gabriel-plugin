@@ -20,13 +20,17 @@ Two events in order:
 
 Other commands: `brain.js learn-show` lists the strongest links. `brain.js learn-reset [name]` forgets all of them, or one doc set's with a name. `brain.js touched-files <file>` learns from files a Codex step changed. It uses the newest map of any session in the last 45 minutes.
 
+## Diagram
+
+Caption: how a map block and a later file touch teach the learned links that the next prompt uses.
+
 ```mermaid
 sequenceDiagram
-  participant W as Prompt hook
+  participant W as "brain.js hook"
   participant MK as mk.js
   participant DB as mk.db last and learn tables
-  participant T as PostToolUse touched
-  participant S as Next prompt search
+  participant T as "brain.js touchedHook"
+  participant S as "mk.js search"
   W->>MK: remember(session, seeds)
   MK->>DB: INSERT last (done = empty)
   T->>MK: touched(session, file)

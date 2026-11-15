@@ -13,6 +13,8 @@ A doc set is a project in `projects.json`. Its map lives in `mk.db`, one set of 
 | Ready | Rows match the current docs, graph, format and model. | `mk-status` says "ok". |
 | Stale | Rows exist, but a source changed. The old rows still serve. | `mk-status` says "STALE". |
 
+Caption: the states of a doc set's map, from Missing to Ready, and what turns it Stale.
+
 ```mermaid
 stateDiagram-v2
   [*] --> Missing
@@ -43,6 +45,8 @@ A learned link joins a doc or code neuron to a code neuron. It is made when a fi
 | Confirmed | Confirmed at least twice. Its weight halves every 45 days (R23). | Yes, only to spread (R24). |
 | Faded | Weight under 0.02. | No. Removed at the next map build (R23). |
 | Removed | Gone from `learn`. | Not stored. |
+
+Caption: the states of a learned link, from New to Confirmed, then Faded and Removed.
 
 ```mermaid
 stateDiagram-v2

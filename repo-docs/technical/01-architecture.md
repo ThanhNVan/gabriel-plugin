@@ -96,12 +96,12 @@ Caption: the calls for one `UserPromptSubmit` hook. The `touched` hook runs on i
 sequenceDiagram
   participant Host as "Host (Claude Code)"
   participant B as "brain.js hook"
-  participant Ad as "hosts adapter"
+  participant Ad as "hosts/claude.js"
   participant R as "rules.js"
   participant E as "embed.js"
   participant HI as "history.js"
   participant M as "mk.js"
-  participant BG as "detached child process"
+  participant BG as "brain.js child (detached)"
   Host->>B: prompt JSON on stdin
   B->>Ad: readInput(raw)
   Note over B: pin command: note only, no search

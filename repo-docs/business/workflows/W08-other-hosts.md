@@ -17,6 +17,10 @@ The user runs `node src/setup.js --host <name>` to see what gabriel adds for a t
 
 For Codex and Gemini the data folder is passed on the command line (`--data`), because those tools do not see Claude Code's settings.
 
+## Diagram
+
+Caption: how `setup.js --host` picks an adapter, and writes a host's hook file only with `--apply`.
+
 ```mermaid
 flowchart TD
   A["setup.js --host name"] --> B["hosts/index.js get(name)"]

@@ -33,6 +33,8 @@ Data stays on the user's PC. After setup, gabriel's own code makes no network ca
 - [W07 refresh docs](workflows/W07-refresh-docs.md): after code changes, update the docs.
 - [W08 other hosts](workflows/W08-other-hosts.md): Codex, Gemini CLI, Copilot, generic tools.
 
+Caption: how the business docs link to each other and to the workflows.
+
 ```mermaid
 flowchart LR
   readme["README.md"] --> domain["01-domain-map.md"]

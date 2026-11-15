@@ -15,9 +15,13 @@ The skill finds the folders from `projects.json`: the set's `repo` is the code f
 5. **Run the update.** `/gabriel:update` rebuilds the changed maps. See [W04](W04-update-and-auto-add.md).
 6. **Ask about retrain.** The user picks one of three: skip; `/gabriel:retrain <name>` (keep the new weights only if the strict score does not fall); or retrain and replace anyway (`node src/retrain.js <name> --force`). Do what the user picks. If the update made new suggested cases, the user must save them first. Skip the optional model tune. See [W06](W06-eval-and-retrain.md).
 
+## Diagram
+
+Caption: the refresh-docs steps, from the graph update to the docs the user picks, the map update and the retrain choice.
+
 ```mermaid
 flowchart TD
-  A["/gabriel:refresh-docs skill"] --> B["graphify update: code folder"]
+  A["skills/refresh-docs/SKILL.md"] --> B["graphify update: code folder"]
   B --> C{"fewer nodes?"}
   C -- yes --> C2["Ask user before --force"]
   C -- no --> D["git diff --name-only: changed files"]
@@ -28,7 +32,7 @@ flowchart TD
   H --> I["Shrink: key-idea list, N/N kept"]
   I --> J["/gabriel:update: setup.js --update"]
   J --> K{"User picks retrain option"}
-  K -- "skip" --> L["Report: counts, lines, key ideas"]
+  K -- "skip" --> L["skills/refresh-docs/SKILL.md: report"]
   K -- "retrain" --> M["retrain.js: keep if strict not lower"]
   K -- "retrain --force" --> N["retrain.js --force: keep anyway"]
   M --> L

@@ -18,11 +18,15 @@ In `src/setup.js` `addDocs()`:
 8. **Write `projects.json`.** If the file does not exist yet, it starts from the folders under `docs/` that hold files (`src/projects.js` `hasFiles()`). Then it adds the new entry with its folder, its graph and its alias.
 9. **Build the map.** `src/brain.js build-mk <name>` runs `src/mk.js` `build()` in a child process. It runs after the write, so the child reads the new entry. The build prints a `warning:` line when almost no doc section links to the code.
 
-## Relink (`--relink`)
+### Relink (`--relink`)
 
 1. Check the set exists in `projects.json` (`unknown doc set` if not), and that `--code` is given.
 2. Check `<repo>/graphify-out/graph.json` (same rule as step 6).
 3. Write only that set's `graph` entry, then rebuild its map. Nothing else in the entry changes.
+
+## Diagram
+
+Caption: the calls for adding a doc set, from the skill to the map build that writes mk.db.
 
 ```mermaid
 sequenceDiagram

@@ -26,11 +26,15 @@ Onboarding, in `skills/setup/SKILL.md` (Claude asks each question with AskUserQu
 3. **Docs from the graph.** Optional technical, business, architecture and workflow docs in `<name>-code-docs/docs/`, in the layout of `docs/DOC-LAYOUT.md`. Then `/gabriel:add-docs` with `--code` and `--repo` (see [W03](W03-add-docs.md)).
 4. **Stack docs.** Optional public docs for the user's languages and frameworks, fetched after the user approves the list. Saved under `docs/stack/`.
 
+## Diagram
+
+Caption: the setup script steps, then the onboarding steps that wait for the user to pick each one.
+
 ```mermaid
 flowchart TD
-  A["/gabriel:setup skill"] --> B{"projects.json has doc sets?"}
-  B -- "yes, no --onboard" --> Z["Report setup summary only"]
-  B -- "no, or --onboard" --> O1["Onboarding: helper tools"]
+  A["skills/setup/SKILL.md"] --> B{"projects.json has doc sets?"}
+  B -- "yes, no --onboard" --> Z["setup.js run: summary only"]
+  B -- "no, or --onboard" --> O1["skills/setup/SKILL.md: 1. helper tools"]
   A --> S1["setup.js run: node version"]
   S1 --> S2["npm ci --omit=dev"]
   S2 --> S3["Create data folders: paths.js"]
@@ -41,9 +45,9 @@ flowchart TD
   S7 --> S8["brain.js build-mk: mk.js build per doc set"]
   S8 --> S9["npm test"]
   S9 --> S10["Summary"]
-  O1 --> O2["Onboarding: graph a project, move graph to name-code-docs"]
-  O2 --> O3["Onboarding: docs in name-code-docs/docs, then add-docs --code --repo"]
-  O3 --> O4["Onboarding: stack docs, after approval"]
+  O1 --> O2["skills/setup/SKILL.md: 2. graph a project"]
+  O2 --> O3["skills/setup/SKILL.md: 3. docs, then add-docs"]
+  O3 --> O4["skills/setup/SKILL.md: 4. stack docs, after approval"]
 ```
 
 ## Rules and states

@@ -30,6 +30,10 @@ With `--stack`, the skill first fetches the stack docs again. It lists the sourc
 3. Otherwise, `src/mk.js` `stale()` checks each doc set in turn and picks the first stale one. A set whose graph file is missing is skipped. When one is stale, `brain.js build-mk` starts in the background, with a lock file `mk.lock`. The lock file holds the set name. A build removes the lock when it is the default set or the named set.
 4. The old map keeps serving until the new one is ready (see [R17](../02-business-rules.md#r17-the-old-map-serves-until-the-new-one-is-ready)).
 
+## Diagram
+
+Caption: the user run of update and the background run from the prompt hook, both rebuilding stale maps.
+
 ```mermaid
 sequenceDiagram
   participant U as User
