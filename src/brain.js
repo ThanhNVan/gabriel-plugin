@@ -87,8 +87,8 @@ function isRepoCodeFile(project, file) {
   try {
     const P = getProject(project);
     if (!P || !P.repo) return false;
-    const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
-    const rel = path.relative(norm(P.repo), norm(file));
+    const { pathKey } = require('./paths.js');
+    const rel = path.relative(pathKey(P.repo), pathKey(file));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
     const ext = path.extname(file).toLowerCase(), { SUPPORTED, OPT_IN } = require('./extract.js');
     if (SUPPORTED.includes(ext) || OPT_IN.includes(ext)) return false;   // doc and data files: graphify can list them, but they are not code
@@ -472,7 +472,7 @@ const MODES = {
       for (const w of g.graph.warnings || []) console.log('WARNING ' + w);
       const embed = await getEmbedder(true);
       if (!embed) {
-        console.log('embeddings: not available (run setup.ps1 to install the model). Words and synonyms only.');
+        console.log('embeddings: not available (run /gabriel:setup, or node src/setup.js, to install the model). Words and synonyms only.');
         if (process.argv.includes('--require-embeddings')) process.exitCode = 3;
       } else {
         const r = await embedNodes(home, g, embed);

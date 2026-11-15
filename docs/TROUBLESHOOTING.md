@@ -112,6 +112,7 @@ Each error leaves `projects.json` unchanged:
 - `folder not found: <folder>`: check the path.
 - `code folder not found: <folder>`: check the `--code` path.
 - `no graphify-out/graph.json in <repo>: run /graphify <repo> first, or leave out --code`: see [No code graph in the repo](#no-code-graph-in-the-repo).
+- `refused: <path> is inside the plugin cache, which a plugin update replaces. Use <folder>.`: the docs or `--code` folder is inside the plugin cache (`.claude/plugins/cache`). Move it to the folder the line names, then add it again. `--relink` gives the same error. `--copy` from the cache works: it copies the docs out, without the graph.
 - `project <name> already exists`: pick another name, or remove the old entry from `projects.json`.
 - `bad project name: <name>`: use lowercase letters, digits, `-` and `_`, up to 40 characters, starting with a letter or digit.
 

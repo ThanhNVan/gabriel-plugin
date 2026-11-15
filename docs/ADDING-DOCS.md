@@ -66,7 +66,7 @@ For a code repo, first make a graph. Run this in Claude in the repo:
 /graphify <repo>
 ```
 
-This makes `graphify-out/graph.json` in the repo. Move it out: `<name>-code-docs/graphify-out/` next to the repo. `/gabriel:setup` does this for you, so the code repo stays clean. Gabriel reads that file to link docs to code.
+This makes `graphify-out/graph.json` in the repo. Move it out to `<home>/graphify-out/` (`<home>`: see [DOC-LAYOUT](DOC-LAYOUT.md)). `/gabriel:setup` does this for you, so the code repo stays clean. Gabriel reads that file to link docs to code.
 
 **No docs for the code yet? Write them first.** They help gabriel the most. Ask Claude to read `graphify-out/` and the code, and write (for example with `/engineering:documentation`):
 
@@ -77,10 +77,10 @@ This makes `graphify-out/graph.json` in the repo. Move it out: `<name>-code-docs
 
 Check each doc against the code. A wrong doc misleads gabriel. See the README section "Best results".
 
-Then add the set. The docs go in `<name>-code-docs/docs/`, and the graph folder is `<name>-code-docs`:
+Then add the set. The docs go in `<home>/docs/`, and the graph folder is `<home>`:
 
 ```
-/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <repo>
+/gabriel:add-docs <name> <home>/docs --code <home> --repo <repo>
 ```
 
 Expected line: `code graph found: linking docs to code`

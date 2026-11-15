@@ -150,6 +150,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 
 ## Requirements
 
+- Windows, macOS or Linux. CI tests all three.
 - Node.js 22.5 or newer. gabriel uses the built-in `node:sqlite` module.
 - npm.
 - One host: Claude Code with plugin support, Codex CLI, Gemini CLI or GitHub Copilot. Any other tool can call `gabriel context`. See [docs/HOSTS.md](docs/HOSTS.md).
@@ -171,13 +172,13 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 
 > **Read this first if you use gabriel on a code base.** gabriel can only find what is written down. Good docs about your code help it more than anything else.
 
-The docs and the graph live in their own folder, `<name>-code-docs`, next to the code. The code repo stays clean. `/gabriel:setup` makes this folder for you.
+The docs and the graph live in their own folder, `<home>`: by default `~/.gabriel/this-machine-repo-docs/<name>`, safe on plugin updates ([where it goes](docs/DOC-LAYOUT.md)). The code repo stays clean. `/gabriel:setup` makes this folder for you.
 
-1. **Graph the code.** Install the graphify skill and run `/graphify <repo>`. Setup moves the graph to `<name>-code-docs/graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
-2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. They go in `<name>-code-docs/docs/`. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
+1. **Graph the code.** Install the graphify skill and run `/graphify <repo>`. Setup moves the graph to `<home>/graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
+2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. They go in `<home>/docs/`. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
    - **Business** (`docs/business/`): what the system is for, its rules, its states, a glossary, and one page per main workflow, from trigger to result.
    - **Technical** (`docs/technical/`): architecture, modules, how to build, test and add a feature, known bugs.
-3. **Add them:** `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <repo>`. `--code` is the folder that holds `graphify-out/graph.json`. `--repo` is the real code, checked against the graph. If the docs name almost no code, the command warns. Then use `--relink`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+3. **Add them:** `/gabriel:add-docs <name> <home>/docs --code <home> --repo <repo>`. `--code` is the folder that holds `graphify-out/graph.json`. `--repo` is the real code, checked against the graph. If the docs name almost no code, the command warns. Then use `--relink`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 4. **Keep them current:** after code changes, run `/gabriel:refresh-docs <name>`.
 
 Docs that name real files, classes and steps give gabriel the most to link. Keep them lean: one fact in one place, no copied code. Check them against the code: a wrong doc misleads gabriel too.

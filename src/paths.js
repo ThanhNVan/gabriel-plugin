@@ -25,4 +25,12 @@ const modelsDir = () => path.join(dataDir(), 'models');
 const projectsFile = () => path.join(dataDir(), 'projects.json');
 const docsDir = (n) => path.join(dataDir(), 'docs', checkName(n));
 const privateDir = (n) => path.join(dataDir(), 'private', checkName(n));
-module.exports = { pluginRoot, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, hostAdapter, defaultRuleFiles, contextFile };
+// True for a path a plugin update can replace: inside any .claude/plugins/cache folder (Claude Code's installed copy).
+// A git clone of the plugin (dev repo, Codex or Gemini install) is not: git pull keeps untracked folders.
+// A resolved path to compare with another: lower case where the file system ignores case (Windows, macOS by default).
+const pathKey = (x) => { const r = path.resolve(x); return process.platform === 'win32' || process.platform === 'darwin' ? r.toLowerCase() : r; };
+const insidePluginCache = (p) => {
+  const parts = pathKey(p).split(/[\\/]+/);
+  return parts.some((s, i) => s === '.claude' && parts[i + 1] === 'plugins' && parts[i + 2] === 'cache');
+};
+module.exports = { pluginRoot, pathKey, insidePluginCache, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, hostAdapter, defaultRuleFiles, contextFile };

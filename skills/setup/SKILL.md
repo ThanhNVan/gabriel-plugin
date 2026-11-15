@@ -67,13 +67,19 @@ Skip this step if graphify is not installed. Ask: "Run graphify on a project now
 
 Then ask for a project name `<name>`. Default: the folder's name in lower case. The name uses only lower-case letters, digits, `_` and `-`, starts with a letter or digit, and has 40 characters or less (the rule add-docs uses).
 
-Make the docs folder next to the code: `<parent>/<name>-code-docs/`, where `<parent>` is the parent folder of `<code folder>`. Ask before you create it. If it already exists, ask whether to reuse it. Run `git init` in it (ask first). Never write into the code repo.
+Ask where the graph and docs live (one AskUserQuestion). Call the pick `<home>`:
+
+1. `<data>/this-machine-repo-docs/<name>` (Recommended): all of gabriel's files in one place, safe on plugin updates. `<data>` is the folder `dataDir()` prints (see step 4).
+2. Next to the code: `<parent>/<name>-code-docs`, where `<parent>` is the parent folder of `<code folder>`.
+3. Other: a full path the user types.
+
+Refuse a path inside `<code folder>`, under `<data>/docs/` (it would become a doc set by itself), or inside the plugin cache (`.claude/plugins/cache`) (a plugin update replaces it). Say why in one line and ask again. Ask before you create `<home>`. If it already exists, ask whether to reuse it. Run `git init` in it (ask first). Never write into the code repo.
 
 On a pick, run `/graphify <code folder>` and wait for it to finish. It writes `<code folder>/graphify-out/`. Then:
 
-1. Move that folder to `<name>-code-docs/graphify-out/`.
-2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone. Delete `graph.html` and any dated backup folder (`graphify-out/<YYYY-MM-DD>/`) in `<name>-code-docs/graphify-out/`: they are not used, and `graph.html` can trip a privacy scan.
-3. Check the graph matches the code: `node "${CLAUDE_PLUGIN_ROOT}/tools/graph-stats.js" "<name>-code-docs/graphify-out/graph.json" --repo "<code folder>"`. Never read `graph.json` into the chat. It must print `graph-stats: 0 hits`. On `commit mismatch`, show the line and ask before you go on.
+1. Move that folder to `<home>/graphify-out/`.
+2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone. Delete `graph.html` and any dated backup folder (`graphify-out/<YYYY-MM-DD>/`) in `<home>/graphify-out/`: they are not used, and `graph.html` can trip a privacy scan.
+3. Check the graph matches the code: `node "${CLAUDE_PLUGIN_ROOT}/tools/graph-stats.js" "<home>/graphify-out/graph.json" --repo "<code folder>"`. Never read `graph.json` into the chat. It must print `graph-stats: 0 hits`. On `commit mismatch`, show the line and ask before you go on.
 
 Save `graph` as `<code folder>`.
 
@@ -86,7 +92,7 @@ Only after a graph was made in step 2. Ask (multi-select): "Write docs for <code
 - Architecture (parts, layers, how they connect)
 - Workflows with Mermaid diagrams
 
-For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `<name>-code-docs/graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<name>-code-docs/docs/` in the layout and lean rules of `${CLAUDE_PLUGIN_ROOT}/docs/DOC-LAYOUT.md`: read it first. Business and workflow picks go in `docs/business/`, technical and architecture picks in `docs/technical/`, plus the index `docs/README.md`. Make only the files that have real content, in short plain words. Do not over-detail: no per-method docs, no copied code, no line numbers, no empty or "planned" sections.
+For the picked ones, use the `engineering:documentation` skill when it is installed; otherwise write them yourself. Read `<home>/graphify-out/GRAPH_REPORT.md` and query the graph; never read `graph.json` whole. Confirm each claim in the code. Write to `<home>/docs/` in the layout and lean rules of `${CLAUDE_PLUGIN_ROOT}/docs/DOC-LAYOUT.md`: read it first. Business and workflow picks go in `docs/business/`, technical and architecture picks in `docs/technical/`, plus the index `docs/README.md`. Make only the files that have real content, in short plain words. Do not over-detail: no per-method docs, no copied code, no line numbers, no empty or "planned" sections.
 
 Add Mermaid diagrams to every doc, not only the workflow one: a picture is read faster than words. Build each diagram from the graph and the code, never from memory. Fit the kind to the doc:
 
@@ -97,15 +103,15 @@ Add Mermaid diagrams to every doc, not only the workflow one: a picture is read 
 
 Keep each diagram to one screen (about 15 nodes). Split a bigger one. Put a one-line caption above it, and real file or class names on its nodes so gabriel can map them. Check each block renders (balanced brackets, no unquoted special characters in labels).
 
-Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <name>-code-docs/docs --code <code folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`. Then `node "${CLAUDE_PLUGIN_ROOT}/tools/check-claims.js" <name>-code-docs/docs --code <code folder>` until `check-claims: 0 hits` (every backticked name must exist in the code).
+Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <home>/docs --code <code folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`. Then `node "${CLAUDE_PLUGIN_ROOT}/tools/check-claims.js" <home>/docs --code <code folder>` until `check-claims: 0 hits` (every backticked name must exist in the code).
 
-Register the project now, without asking (write every folder as a full path, so it works from any working folder): `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <code folder>`. `--code` is the folder that holds `graphify-out`. `--repo` is the real code, which add-docs checks against the graph. Then run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all`. The `<name>` line must say `ok` and show `repo <path>`. If add-docs prints `repo refused: ...`, show that line and stop. Then record that the new docs match the code, so the drift warning starts from here: `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" docs-checked <name>`.
+Register the project now, without asking (write every folder as a full path, so it works from any working folder): `/gabriel:add-docs <name> <home>/docs --code <home> --repo <code folder>`. `--code` is the folder that holds `graphify-out`. `--repo` is the real code, which add-docs checks against the graph. Then run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all`. The `<name>` line must say `ok` and show `repo <path>`. If add-docs prints `repo refused: ...`, show that line and stop. Then record that the new docs match the code, so the drift warning starts from here: `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" docs-checked <name>`.
 
-Save `docs` as `<name>-code-docs/docs`.
+Save `docs` as `<home>/docs`.
 
-Tell the user: after code changes, run `/gabriel:refresh-docs <name>`. It updates the graph in `<name>-code-docs/graphify-out/` and keeps the code repo clean.
+Tell the user: after code changes, run `/gabriel:refresh-docs <name>`. It updates the graph in `<home>/graphify-out/` and keeps the code repo clean.
 
-If the user picked no docs: still do the graph steps above. Save `docs` as `skipped`. Register with the docs folder `<name>-code-docs` itself: `/gabriel:add-docs <name> <name>-code-docs --code <name>-code-docs --repo <code folder>`. Then the mk-status check and the note above.
+If the user picked no docs: still do the graph steps above. Save `docs` as `skipped`. Register with the docs folder `<home>` itself: `/gabriel:add-docs <name> <home> --code <home> --repo <code folder>`. Then the mk-status check and the note above.
 
 ### 4. Docs for your stack
 

@@ -2,7 +2,7 @@
 
 The layout `/gabriel:setup` writes and `/gabriel:refresh-docs` keeps. It is for developers. Docs are a lead: the code is the proof.
 
-The docs folder is not in the code repo. Setup makes `<name>-code-docs/` next to the code. It holds `docs/` (this layout) and `graphify-out/` (the graph). The code repo stays clean.
+The docs folder is not in the code repo. Setup asks where it goes, called `<home>`: `<data>/this-machine-repo-docs/<name>/` by default (`<data>` is gabriel's data folder, normally `~/.gabriel`), `<name>-code-docs/` next to the code, or a folder you pick. It holds `docs/` (this layout) and `graphify-out/` (the graph). The code repo stays clean. A plugin update never touches it: add-docs refuses a folder inside the plugin cache (`.claude/plugins/cache`).
 
 ## Folders
 

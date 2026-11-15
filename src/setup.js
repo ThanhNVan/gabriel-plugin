@@ -176,8 +176,15 @@ function checkRepoArg(name, repoArg, graphFile) {
 }
 
 // Adds one doc set. Prints its lines. Returns the exit code. Every check runs before any write, so an error leaves projects.json unchanged.
+// A docs or graph folder inside the plugin cache is lost on the next plugin update: refuse it before any write.
+function pluginPathRefusal(dir, name) {
+  const { insidePluginCache, dataDir } = require('./paths.js');
+  if (!insidePluginCache(dir)) return null;
+  return `refused: ${dir} is inside the plugin cache, which a plugin update replaces. Use ${path.join(dataDir(), 'this-machine-repo-docs', name)}.`;
+}
+
 async function addDocs(argv) {
-  const { checkName, dataDir, docsDir, projectsFile } = require('./paths.js');
+  const { checkName, dataDir, docsDir, projectsFile, insidePluginCache } = require('./paths.js');
   const { loadProjects } = require('./projects.js');
   const fail = (msg) => { console.error(msg); return 1; };
   const opt = { copy: false, code: null, repo: null, yes: false, relink: false }, pos = [];
@@ -215,12 +222,17 @@ async function addDocs(argv) {
   if (opt.copy && fs.existsSync(dest)) return fail(`folder already exists: ${dest}. Remove it or pick another name.`);
   const codeDir = opt.code ? path.resolve(expandHome(opt.code)) : folder;
   if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+  // --copy moves the docs out to <data>/docs/<name>, so a source in the cache is fine; a graph left in the cache is not linked
+  const folderInCache = insidePluginCache(folder);
+  const refused = (!opt.copy && pluginPathRefusal(folder, name)) || (opt.code && pluginPathRefusal(codeDir, name));
+  if (refused) return fail(refused);
   // with --code, the graph must be in that repo (no fallback to the docs folder)
   if (opt.code && !fs.existsSync(path.join(codeDir, 'graphify-out', 'graph.json'))) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
 
   // code graph: the --code repo first, then the docs folder
   const root = opt.copy ? dest : folder;
-  const graphFile = [path.join(codeDir, 'graphify-out', 'graph.json'), path.join(folder, 'graphify-out', 'graph.json')].find((f) => fs.existsSync(f));
+  const graphFile = folderInCache && !opt.code ? null : [path.join(codeDir, 'graphify-out', 'graph.json'), path.join(folder, 'graphify-out', 'graph.json')].find((f) => fs.existsSync(f));
+  if (folderInCache && !opt.code) console.log('the source is in the plugin cache: its code graph is not linked. Add one later with --code <folder> --relink.');
   let graph = null;
   if (graphFile) {
     graph = graphRel(root, graphFile);
@@ -289,6 +301,8 @@ function relinkDocs(name, opt) {
   }
   const codeDir = path.resolve(expandHome(opt.code));
   if (!fs.existsSync(codeDir)) return fail(`code folder not found: ${opt.code}`);
+  const refused = pluginPathRefusal(codeDir, name);
+  if (refused) return fail(refused);
   const graphFile = path.join(codeDir, 'graphify-out', 'graph.json');
   if (!fs.existsSync(graphFile)) return fail(`no graphify-out/graph.json in ${codeDir}: run /graphify ${codeDir} first, or leave out --code`);
   const graph = graphRel(P.root, graphFile);   // relative to the doc set's root, as add-docs stores it

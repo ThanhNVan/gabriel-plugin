@@ -220,3 +220,8 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - `docs-checked <name>` (run last by /gabriel:refresh-docs) clears the miss lists, so the count starts again.
 - `"tips": false` does not turn it off.
 - Where: `src/brain.js` `touchedHook()`, `isRepoCodeFile()`, `noteMiss()`, `missNote()`. Tests: `test/test-brain.js`.
+
+### R39 No doc set inside the plugin cache
+- A plugin update replaces the installed copy in `.claude/plugins/cache`, so a docs or graph folder there would be lost. `add-docs` and `--relink` refuse a docs or `--code` folder inside any `.claude/plugins/cache` folder (a git clone of the plugin is allowed), before any write. With `--copy`, a docs folder in the cache is allowed (the copy goes to `<data>/docs/<name>`), but a graph left there is not linked. The message names the safe folder: `<data>/this-machine-repo-docs/<name>`.
+- Setup offers that folder as the default home ([DOC-LAYOUT](../../docs/DOC-LAYOUT.md)).
+- Where: `src/paths.js` `insidePluginCache()`; `src/setup.js` `pluginPathRefusal()`, `addDocs()`, `relinkDocs()`. Tests: `test/test-add-docs.js`, `test/test-plugin-cache.js`.

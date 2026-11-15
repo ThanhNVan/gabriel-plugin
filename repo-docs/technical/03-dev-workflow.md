@@ -1,6 +1,6 @@
 # Dev workflow
 
-How to install, test, and change gabriel. Commands run from the repo root in PowerShell.
+How to install, test, and change gabriel. Commands run from the repo root, in any shell (Windows, macOS or Linux). CI tests all three.
 
 ## Install
 

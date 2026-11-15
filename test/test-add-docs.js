@@ -21,6 +21,17 @@ const writeFiles = (dir, files) => {
   return dir;
 };
 
+// 0: insidePluginCache: any .claude/plugins/cache is a refused home; a git clone of the plugin and siblings are not
+{
+  const { insidePluginCache } = require('../src/paths.js');
+  assert.strictEqual(insidePluginCache(path.join(ROOT, 'repo-docs')), false, 'a git clone of the plugin (dev repo, Codex or Gemini install) is not replaced on update');
+  assert.strictEqual(insidePluginCache(path.join(os.homedir(), '.claude', 'plugins', 'cache', 'gabriel', '0.3.0', 'd')), true);
+  assert.strictEqual(insidePluginCache(path.join(os.homedir(), '.claude', 'plugins', 'cache-old', 'd')), false);
+  assert.strictEqual(insidePluginCache(ROOT + '-docs'), false);
+  assert.strictEqual(insidePluginCache(path.join(os.homedir(), '.gabriel', 'this-machine-repo-docs', 'x')), false);
+  if (process.platform === 'win32') assert.strictEqual(insidePluginCache('C:\\USERS\\X\\.Claude\\Plugins\\Cache\\g\\1\\d'), true);
+}
+
 // fixtures
 const words = ['gate', 'river', 'token', 'report', 'budget', 'frame', 'signal', 'matrix', 'ledger', 'harbor', 'vector', 'cabin', 'orbit'];
 const filler = ['# Filler', ''];
@@ -227,6 +238,28 @@ const graphJson = {
   assert.strictEqual(r2.status, 0, text(r2));
   assert.deepStrictEqual(entry('gitsub').cwdHints, ['git-root'], 'a code folder inside a git repo uses the git repo root name');
   console.log('  cwdHints: --code repo name (lower case); git repo root name for a folder inside it');
+}
+
+// 7b: a docs or --code folder inside the plugin cache is refused (an update replaces it); projects.json is unchanged
+{
+  const inPlugin = path.join(tmp, '.claude', 'plugins', 'cache', 'gabriel', '0.3.0', 'docs');
+  fs.mkdirSync(inPlugin, { recursive: true });
+  try {
+    writeFiles(inPlugin, { 'bikes.md': bikes, 'graphify-out/graph.json': JSON.stringify(graphJson) });
+    const before = hashProjects();
+    let r = run(['incache', inPlugin]);
+    assert.notStrictEqual(r.status, 0, text(r));
+    assert.match(text(r), /refused: .* is inside the plugin cache, which a plugin update replaces/);
+    assert.strictEqual(hashProjects(), before);
+    r = run(['outside', fixture, '--code', inPlugin]);
+    assert.notStrictEqual(r.status, 0, text(r));
+    assert.match(text(r), /inside the plugin cache/);
+    r = run(['recipes', '--code', inPlugin, '--relink']);
+    assert.notStrictEqual(r.status, 0, text(r));
+    assert.match(text(r), /inside the plugin cache/);
+    assert.strictEqual(hashProjects(), before);
+    console.log('  plugin-cache paths refused by add-docs and --relink, projects.json unchanged');
+  } finally { fs.rmSync(inPlugin, { recursive: true, force: true }); }
 }
 
 // 8: no half-written files are left in the data folder
