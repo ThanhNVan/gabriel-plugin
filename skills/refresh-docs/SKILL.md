@@ -24,7 +24,7 @@ Work in four steps. Show % progress after each. Never commit or push: the user d
 1. Check `graphify --help` works. If not, stop and suggest `/gabriel:setup --onboard` (it installs graphify).
 2. Note the old commit and counts: `node "${CLAUDE_PLUGIN_ROOT}/tools/graph-stats.js" "<graph folder>/graphify-out/graph.json"`. Never read the file into the chat: it can be 90 MB.
 3. Run `graphify update "<code folder>"`. It re-extracts code only and needs no model. It can take minutes: run it in the background and wait. When the graph folder is not the code folder, keep the code repo clean:
-   - If the `update` part of `graphify --help` lists `--graph` (0.9.109 and newer do; `graphify update --help` prints no flags), add `--graph "<graph folder>/graphify-out/graph.json"`.
+   - If the `update <path>` lines of `graphify --help` list `--graph` (none up to 0.9.109 do; a `--graph` under `cluster-only` does not count), add `--graph "<graph folder>/graphify-out/graph.json"`.
    - If not (graphify 0.9.49 has no `--graph`), use the copy route: copy `<graph folder>/graphify-out` to `<code folder>/graphify-out`, run `graphify update "<code folder>"`, copy the folder back, then delete `<code folder>/graphify-out`.
 
    Then:

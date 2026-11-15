@@ -10,7 +10,8 @@ const BIN_CHECK_BYTES = 8192;
 
 // Built-in patterns. Regex escapes keep this file itself free of matches.
 const PATTERNS = [
-  { kind: 'email', re: /[\w.+-]+@[\w-]+\.[\w.]+/g, ok: (m) => !m.toLowerCase().startsWith('noreply@') },
+  // email: the last domain part has letters, so an npm pin (pkg@3.4.2) is not an email
+  { kind: 'email', re: /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b/g, ok: (m) => !m.toLowerCase().startsWith('noreply@') },
   { kind: 'ip', re: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g, ok: (m) => m !== '127.0.0.1' && m !== '0.0.0.0' },
   { kind: 'secret', re: /api[_-]?key\s*[:=]\s*\S{8,}/gi },
   { kind: 'secret', re: /password\s*[:=]\s*\S+/gi },

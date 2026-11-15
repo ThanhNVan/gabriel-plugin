@@ -23,4 +23,5 @@ privacy-words.txt
 # graphify writes local machine paths here
 repo-docs/graphify-out/.graphify_root
 repo-docs/graphify-out/.graphify_python
+repo-docs/graphify-out/.graphify_build_state.json
 docs\superpowers

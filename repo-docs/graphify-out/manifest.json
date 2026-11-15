@@ -114,10 +114,10 @@
     "semantic_hash": "10fc141d7b1bcc867367340f1e488b6c"
   },
   "src/history.js": {
-    "mtime": 1794561947.1348164,
-    "seen": 1794637267.7772152,
-    "ast_hash": "1b257a298e2cc2ac08ac4fc10e67ef7e",
-    "semantic_hash": "1b257a298e2cc2ac08ac4fc10e67ef7e"
+    "mtime": 1794733124.635303,
+    "seen": 1794733842.6659868,
+    "ast_hash": "1e16b98edb0801692af8737510f78183",
+    "semantic_hash": ""
   },
   "src/hosts/claude.js": {
     "mtime": 1794575537.4505353,
@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "src/paths.js": {
-    "mtime": 1794731772.6591184,
-    "seen": 1794732941.3318741,
-    "ast_hash": "57115b56aeba6f3847298bd89d7b519d",
+    "mtime": 1794733123.4739425,
+    "seen": 1794733842.6660042,
+    "ast_hash": "de691e6caad6149c0f892b345aaa4077",
     "semantic_hash": ""
   },
   "src/pin.js": {
@@ -204,15 +204,15 @@
     "semantic_hash": "d057d992687bfac31294596a86fe6e67"
   },
   "src/rules.js": {
-    "mtime": 1794581096.905859,
-    "seen": 1794637267.7772288,
-    "ast_hash": "8538054362ede78d9b4d0e0002c7d194",
-    "semantic_hash": "8538054362ede78d9b4d0e0002c7d194"
+    "mtime": 1794733124.1669738,
+    "seen": 1794733842.6660118,
+    "ast_hash": "2c2216b08c5931b0b593c295a4e951c0",
+    "semantic_hash": ""
   },
   "src/setup.js": {
-    "mtime": 1794732255.8684318,
-    "seen": 1794732941.3318803,
-    "ast_hash": "a2d26a7ef4afbf8d8c9c5d25c8ce73d7",
+    "mtime": 1794733123.7271094,
+    "seen": 1794733842.6660132,
+    "ast_hash": "d5b4bdaf20a4c6645a10bb2b1f6c8e84",
     "semantic_hash": ""
   },
   "src/thesaurus.json": {
@@ -270,9 +270,9 @@
     "semantic_hash": "74c824312e167ae1c521e6b49194158b"
   },
   "test/test-add-docs.js": {
-    "mtime": 1794731806.7423253,
-    "seen": 1794732941.331891,
-    "ast_hash": "037a1322f4c8d43871e8a4d032914fe6",
+    "mtime": 1794733112.1241183,
+    "seen": 1794733842.6660287,
+    "ast_hash": "eb347e9ab926d6a00529d9675ffe8974",
     "semantic_hash": ""
   },
   "test/test-brain.js": {
@@ -468,9 +468,9 @@
     "semantic_hash": "57b4a763cec5020ac30c3d70d016479b"
   },
   "CHANGELOG.md": {
-    "mtime": 1794731798.07074,
-    "seen": 1794732941.3319278,
-    "ast_hash": "33e04005e4fde6f718e7f0c7136f7f07",
+    "mtime": 1794733142.5256052,
+    "seen": 1794733842.6660893,
+    "ast_hash": "bc80c0a9d75a7d227662c31d3aa25c5b",
     "semantic_hash": ""
   },
   "README.md": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "repo-docs/README.md": {
-    "mtime": 1794728883.538786,
-    "seen": 1794732941.3319387,
-    "ast_hash": "ee4570c805248d016f828389fca67029",
+    "mtime": 1794732961.8071983,
+    "seen": 1794733842.6661084,
+    "ast_hash": "7b2e541a2bc5aa86dc7a25da7f7ce25e",
     "semantic_hash": ""
   },
   "repo-docs/business/01-domain-map.md": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "repo-docs/technical/02-modules.md": {
-    "mtime": 1794731725.1362894,
-    "seen": 1794732941.3319511,
-    "ast_hash": "4babd9c009e7c5b68330a3a2c9a310db",
+    "mtime": 1794733142.5250993,
+    "seen": 1794733842.6661298,
+    "ast_hash": "e309ef64e9beb30dc863a1309b9ed57c",
     "semantic_hash": ""
   },
   "repo-docs/technical/03-dev-workflow.md": {
@@ -666,9 +666,9 @@
     "semantic_hash": "a3c8921e6dd0a12bf044ee5dae044d9b"
   },
   "skills/refresh-docs/SKILL.md": {
-    "mtime": 1794728436.486172,
-    "seen": 1794728781.183084,
-    "ast_hash": "3966f362f2b9e49d1dbb4a0c30a97bf9",
+    "mtime": 1794733824.2750666,
+    "seen": 1794733842.666138,
+    "ast_hash": "9185a8b33085ef9e2c640526a4433b3c",
     "semantic_hash": ""
   },
   "skills/retrain/SKILL.md": {
@@ -792,15 +792,21 @@
     "semantic_hash": ""
   },
   "docs/AGENT-GUIDE.md": {
-    "mtime": 1794731798.065316,
-    "seen": 1794732941.3319314,
-    "ast_hash": "20c4d412ecd49686d7664511cf7541fa",
+    "mtime": 1794733824.2788281,
+    "seen": 1794733842.666095,
+    "ast_hash": "696ec187e8a4bf7692b4ab69501e523b",
     "semantic_hash": ""
   },
   "test/test-plugin-cache.js": {
     "mtime": 1794732305.50833,
     "seen": 1794732941.3319092,
     "ast_hash": "f72eb25a67587708c700a75a1236462c",
+    "semantic_hash": ""
+  },
+  "package-lock.json": {
+    "mtime": 1794717505.1331906,
+    "seen": 1794733842.666149,
+    "ast_hash": "5f715f0ca9e2db6853911cf69d2ced56",
     "semantic_hash": ""
   }
 }

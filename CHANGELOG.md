@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Privacy scan: an npm version pin such as `pkg@3.4.2` is no longer reported as an email. graphify 0.9.109 puts `package.json` dependencies in the graph.
+
 - Saving a file no longer fails on Windows when antivirus or the indexer locks it for a moment: the rename is retried for about 1 s (paths.js moveIntoPlace(), used by setup, rules and history).
 
 - macOS joins the CI matrix (with Windows and Linux). Path checks ignore case on macOS too (`paths.js` `pathKey()`). The "no embeddings" message points to `/gabriel:setup`, not the Windows-only `setup.ps1`.

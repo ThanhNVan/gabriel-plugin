@@ -64,6 +64,10 @@ function main() {
   r = scan(makeTree({ 'b.md': J('noreply', '@github.com') + '\n' }));
   assert.strictEqual(r.status, 0, r.out);
 
+  // an npm version pin is not an email: the domain needs a letter top-level part
+  r = scan(makeTree({ 'p.md': '@huggingface/transformers@3.4.2 and eslint@^9.17.0\n' }));
+  assert.strictEqual(r.status, 0, r.out);
+
   // IPv4; loopback and any-address are allowed
   const ip = ['10', '20', '30', '40'].join('.');
   r = scan(makeTree({ 'c.txt': ip + '\n' }));
