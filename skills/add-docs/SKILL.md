@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: <name: doc set name> <folder: docs path> [--code <repo with graphify-out/graph.json>] [--copy: copy into data folder] [--yes: allow huge folder] [--relink: change only the code graph of an existing set]
 ---
 
+Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.
+
 If the user gave no `--code`, ask once before you run anything: "Is there a code repo for these docs? Give its folder, or say no."
 
 - If they give a folder: check that `<folder>\graphify-out\graph.json` exists. If it does, add `--code <folder>` to the command. If it does not, offer `/graphify <folder>` first, and wait.

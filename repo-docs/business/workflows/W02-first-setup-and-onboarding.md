@@ -23,7 +23,7 @@ Onboarding, in `skills/setup/SKILL.md` (Claude asks each question with AskUserQu
 
 1. **Helper tools.** Optional installs: graphify, superpowers, ponytail.
 2. **Graph a project.** Optional. Asks for the code folder and a name. Makes `<name>-code-docs/` next to the code, runs `/graphify <code folder>`, moves `graphify-out/` into that folder and checks its commit against the code's `HEAD`.
-3. **Docs from the graph.** Optional technical, business, architecture and workflow docs in `<name>-code-docs/docs/`, in the layout of `docs/DOC-LAYOUT.md`. Then `/gabriel:add-docs` with `--code` and `--repo` (see [W03](W03-add-docs.md)).
+3. **Docs from the graph.** Optional technical, business, architecture and workflow docs in `<name>-code-docs/docs/`, in the layout of `docs/DOC-LAYOUT.md`. Then `/gabriel:add-docs` with `--code` and `--repo` (see [W03](W03-add-docs.md)), then `docs-checked <name>` so the drift warning starts from here ([R37](../02-business-rules.md#r37-drift-warning)).
 4. **Stack docs.** Optional public docs for the user's languages and frameworks, fetched after the user approves the list. Saved under `docs/stack/`.
 
 ## Diagram

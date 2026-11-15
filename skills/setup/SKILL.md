@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: [--onboard: rerun first-run steps] [--dry-run: show only] [--skip-model] [--skip-test] [--yes: copy old brain data]
 ---
 
+Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.
+
 Run this command and wait for it to finish:
 
 ```
@@ -69,7 +71,7 @@ Make the docs folder next to the code: `<parent>/<name>-code-docs/`, where `<par
 On a pick, run `/graphify <code folder>` and wait for it to finish. It writes `<code folder>/graphify-out/`. Then:
 
 1. Move that folder to `<name>-code-docs/graphify-out/`.
-2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone.
+2. Check that no `graphify-out/` is left in `<code folder>`. If the code folder's `.gitignore` lacks `graphify-out`, do not edit it. Only make sure the folder is gone. Delete `graph.html` and any dated backup folder (`graphify-out/<YYYY-MM-DD>/`) in `<name>-code-docs/graphify-out/`: they are not used, and `graph.html` can trip a privacy scan.
 3. Check the graph matches the code. Run these two one-line commands. Never read `graph.json` into the chat:
 
    ```
@@ -101,13 +103,13 @@ Add Mermaid diagrams to every doc, not only the workflow one: a picture is read 
 
 Keep each diagram to one screen (about 15 nodes). Split a bigger one. Put a one-line caption above it, and real file or class names on its nodes so gabriel can map them. Check each block renders (balanced brackets, no unquoted special characters in labels).
 
-Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <name>-code-docs/docs --code <code folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`.
+Check the docs: `node "${CLAUDE_PLUGIN_ROOT}/tools/check-docs.js" <name>-code-docs/docs --code <code folder>`. Fix every hit and run it again until it prints `check-docs: 0 hits`. Then `node "${CLAUDE_PLUGIN_ROOT}/tools/check-claims.js" <name>-code-docs/docs --code <code folder>` until `check-claims: 0 hits` (every backticked name must exist in the code).
 
-Register the project now, without asking (write every folder as a full path, so it works from any working folder): `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <code folder>`. `--code` is the folder that holds `graphify-out`. `--repo` is the real code, which add-docs checks against the graph. Then run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all`. The `<name>` line must say `ok` and show `repo <path>`. If add-docs prints `repo refused: ...`, show that line and stop.
+Register the project now, without asking (write every folder as a full path, so it works from any working folder): `/gabriel:add-docs <name> <name>-code-docs/docs --code <name>-code-docs --repo <code folder>`. `--code` is the folder that holds `graphify-out`. `--repo` is the real code, which add-docs checks against the graph. Then run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all`. The `<name>` line must say `ok` and show `repo <path>`. If add-docs prints `repo refused: ...`, show that line and stop. Then record that the new docs match the code, so the drift warning starts from here: `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" docs-checked <name>`.
 
 Save `docs` as `<name>-code-docs/docs`.
 
-Tell the user: after code changes, run `/gabriel:refresh-docs <name>`. Graph updates keep the graph out of the code repo: `graphify update <code folder> --graph <name>-code-docs/graphify-out/graph.json`.
+Tell the user: after code changes, run `/gabriel:refresh-docs <name>`. It updates the graph in `<name>-code-docs/graphify-out/` and keeps the code repo clean.
 
 If the user picked no docs: still do the graph steps above. Save `docs` as `skipped`. Register with the docs folder `<name>-code-docs` itself: `/gabriel:add-docs <name> <name>-code-docs --code <name>-code-docs --repo <code folder>`. Then the mk-status check and the note above.
 

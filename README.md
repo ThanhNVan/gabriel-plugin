@@ -104,6 +104,17 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 | `/gabriel:why "<prompt>"` | Says why no map was shown for a prompt: one line per doc set, with the next step. Writes nothing. |
 | `/gabriel:retrain [name]` | Retrains the ranking on your test questions. No name means the default doc set. Keeps the new weights only if they score no worse. `--force` keeps them anyway. The old file is saved as `rank.prev.json`. |
 | `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
+
+### For AI agents that run these skills
+
+Your AI agent runs the skills for you. Point it to **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)**. The step skills already tell it to read the guide first. In short:
+
+- Never commit or push. Never read `graph.json` whole. Leave nothing in the code repo.
+- Ask before each choice. Update the graph (`graphify update`); do not rebuild it.
+- Let the check scripts find problems (`check-docs`, `check-claims`, `key-ideas`, `graph-stats`), and read only the lines they flag. This saves tokens.
+- Finish with the checklist: checks at 0 hits, the set `ok` in `mk-status all`, then a report of what was and was not checked.
+
+The guide has a table per skill (when to run it, what to be careful about, when it is done) and the known errors with their fixes. It works for Codex CLI, Gemini CLI and Copilot agents too.
 ## What you see
 
 This is a made-up example from a doc set named `notes`:
@@ -150,6 +161,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/HOSTS.md](docs/HOSTS.md): Claude Code, Codex CLI, Gemini CLI, GitHub Copilot and other tools. Install, remove, limits.
 - [docs/PRIVACY.md](docs/PRIVACY.md): what is stored, where, and how to delete it.
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): common problems and fixes.
+- [docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md): for your AI agent. How to run each skill, the rules, the checks and the known errors.
 - [docs/ADDING-DOCS.md](docs/ADDING-DOCS.md): how to add doc sets.
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
 - [docs/TUNING.md](docs/TUNING.md): the optional fine-tune of the meaning model.

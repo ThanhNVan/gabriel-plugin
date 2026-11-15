@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: [name: doc set; none = default set] [--force: keep the new weights even if the score falls]
 ---
 
+Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.
+
 Run this command with the argument the user gave, if any:
 
 ```

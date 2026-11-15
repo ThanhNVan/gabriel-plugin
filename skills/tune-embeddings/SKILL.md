@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: [--venv <dir: tune venv, default <data>/tune-venv>] [--yes: start without the prompt] | --rollback: back to the default model
 ---
 
+Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.
+
 Run this command with the arguments the user gave:
 
 ```

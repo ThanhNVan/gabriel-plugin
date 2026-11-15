@@ -104,6 +104,9 @@ Graph communities: [Public Check Script].
 |------|-----|--------------|-----------|
 | `tools/check-public.js` | Privacy scan of publishable files: emails, IP addresses, secrets, user paths, owner words. Prints file, line and kind only. | script | `npm run privacy`, `npm run prepack` (`--release`), `test/run-all.js` |
 | `tools/check-docs.js` | Checks a docs folder: size, long code blocks, line numbers, placeholders, broken links and, with `--code`, code paths. Prints file and line per hit. Rules: [DOC-LAYOUT](../../docs/DOC-LAYOUT.md). | script | `skills/setup`, `skills/refresh-docs`; run by hand |
+| `tools/check-claims.js` | Checks that each backticked path, `name()`, constant and `--flag` in a docs folder exists in the code. A short path matches a repo file that ends with it; home and data-folder paths are skipped; `--ignore` skips named paths. | script | `skills/setup`, `skills/refresh-docs` |
+| `tools/key-ideas.js` | Compares a doc copy before a rewrite with the docs after. Lists each code name, link or number that is in no doc after. A removed doc is checked too. | script | `skills/refresh-docs` |
+| `tools/graph-stats.js` | Prints a graph's node, link and community counts and `built_at_commit`. Flags dangling links, nodes from excluded folders and, with `--repo`, a commit that is not `HEAD`. | script | `skills/refresh-docs` |
 
 ## Plugin manifests and skills
 
@@ -113,3 +116,42 @@ Graph communities: [Public Check Script].
 | `.claude-plugin/plugin.json` | Plugin name and version. The version must match `package.json`. |
 | `.claude-plugin/marketplace.json` | Marketplace entry. Has no version field. |
 | `skills/*/SKILL.md` | Slash commands: `setup`, `update`, `add-docs`, `status`, `map`, `refresh-docs`, `retrain`, `tune-embeddings`, `why`. Each runs one script. The `map` skill only explains the block. |
+
+## How the skills connect
+
+Caption: which skill calls or sends the user to which, and the shared steps they run. An arrow means "runs or points to".
+
+```mermaid
+flowchart LR
+  setup["skills/setup"] --> adddocs["skills/add-docs"]
+  setup --> refresh["skills/refresh-docs"]
+  setup --> update["skills/update"]
+  refresh --> update
+  refresh --> retrain["skills/retrain"]
+  refresh --> adddocs
+  update --> retrain
+  why["skills/why"] --> setup
+  why --> update
+  refresh -.-> tune["skills/tune-embeddings"]
+  status["skills/status"]
+  map["skills/map"]
+  setup --> S1["graphify run and cleanup"]
+  refresh --> S1
+  setup --> S2["DOC-LAYOUT.md and check-docs.js"]
+  refresh --> S2
+  setup --> S3["brain.js docs-checked"]
+  refresh --> S3
+```
+
+When you change a shared step, update every skill that runs it:
+
+| Shared step | Skills | Also update |
+|---|---|---|
+| graphify run (update, not rebuild), graph folder outside the code repo, cleanup of `graph.html` and dated backups | `setup`, `refresh-docs`; `update` gives the advice | `docs/AGENT-GUIDE.md` rule 5, W02, W07 |
+| Doc checks: `tools/check-docs.js`, `tools/check-claims.js`, `tools/key-ideas.js`, `tools/graph-stats.js` | `setup`, `refresh-docs` | `docs/DOC-LAYOUT.md`, `docs/AGENT-GUIDE.md`, W07 |
+| `brain.js docs-checked` (drift warning) | `setup`, `refresh-docs` | [R37](../business/02-business-rules.md#r37-drift-warning), W02, W07 |
+| Retrain choice and keep rule | `refresh-docs`, `update`, `retrain` | [R26](../business/02-business-rules.md#r26-retrain-keeps-new-weights-only-when-the-strict-score-does-not-fall), W06 |
+| `add-docs` options (`--code`, `--repo`, `--relink`) | `add-docs`, `setup`, `refresh-docs` | W03 |
+| Agent rules, how to run each skill, finish checklist, known errors | `setup`, `add-docs`, `refresh-docs`, `update`, `retrain`, `tune-embeddings` (each points to it) | `docs/AGENT-GUIDE.md` (its "Run each skill" table: one row per skill), README "For AI agents" |
+
+The dotted arrow: `refresh-docs` names `tune-embeddings` only to say it is not run.

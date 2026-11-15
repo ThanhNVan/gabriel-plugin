@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Token-saving checks for agents: `tools/check-claims.js` (backticked names in docs exist in the code), `tools/key-ideas.js` (no code name, link or number lost in a rewrite) and `tools/graph-stats.js` (graph counts, commit, dangling links). The `refresh-docs` and `setup` skills run them, so the agent reads only flagged lines.
+- `docs/AGENT-GUIDE.md`: rules, known errors and a finish checklist for the AI agent that runs a gabriel step. The step skills point to it.
+- `refresh-docs` and `setup` keep the code repo clean when graphify has no `--graph` flag (copy route), and delete `graph.html` and dated backups. `setup` runs `docs-checked` after it registers a new set. `update` advises `graphify update` over a full rebuild.
+
 - `graphDrift()` in `src/repo.js` counts how far a doc set's code graph is behind its repo HEAD. A new `drift` mode in `src/brain.js` writes `drift.json`, started at most once an hour in the background. `mk-status all` shows a `drift` line.
 - Hook warnings (not tips; they ignore `"tips": false`): a drift note at 10 or more changed code files, a docs note when the docs were last checked more than 7 days before the latest code commit, and a miss note at 3 or more touched files the code graph does not know. The drift and docs note shows on every 2nd prompt while the drift lasts; the miss note once per session.
 - New mode `docs-checked <name>` records the repo HEAD the docs match, in `docs-checked.json`. The refresh-docs skill runs it last. The `drift` job reads it; a set never checked gets a note only with a graph drift of 10+ files.
