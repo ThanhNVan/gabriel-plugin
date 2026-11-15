@@ -141,7 +141,7 @@ function graphRel(root, graphFile) {
 function writeJsonAtomic(file, obj) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
-  try { fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n'); fs.renameSync(tmp, file); }
+  try { fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n'); require('./paths.js').moveIntoPlace(tmp, file); }
   catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
 }
 

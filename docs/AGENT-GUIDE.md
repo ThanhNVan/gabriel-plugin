@@ -58,7 +58,7 @@ Save each step's key in `onboarding.json` (`done`, the folder, or `skipped`) rig
 
 | You see | Cause | Fix |
 |---|---|---|
-| `error: unknown update option: --graph` | This graphify version has no `--graph`. | Copy route: copy `<graph folder>/graphify-out` into the code folder, run `graphify update "<code folder>"`, copy it back, delete the copy in the code folder. |
+| `error: unknown update option: --graph` | This graphify version has no `--graph` (0.9.109 and newer have it). | Suggest `pip install -U graphifyy`. Until then, copy route: copy `<graph folder>/graphify-out` into the code folder, run `graphify update "<code folder>"`, copy it back, delete the copy in the code folder. |
 | A privacy hit in `graph.html`, or a dated folder in `graphify-out/` | graphify writes them. | Delete `graph.html` and `graphify-out/<YYYY-MM-DD>/`. They are not used. |
 | `built_at_commit` is not the code repo's `HEAD` | The graph is from an older commit. | Run `graphify update` again on the code folder, then `graph-stats.js --repo <code folder>` (it compares with the code repo's `HEAD`, not the docs repo's). |
 | `graph not found: <path>` | The set's `graph` entry points to a missing file. | If the graph file is gone, run `/graphify <code folder>` first. Then `/gabriel:add-docs <name> --code <folder with graphify-out> --relink`. |

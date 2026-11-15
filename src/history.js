@@ -18,7 +18,7 @@ function writeAtomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, text);
-  try { fs.renameSync(tmp, file); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  require('./paths.js').moveIntoPlace(tmp, file);
 }
 
 function redact(text) {

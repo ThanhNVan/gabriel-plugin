@@ -19,7 +19,7 @@ function writeAtomic(file, text) { // write to a temp name, then rename: a reade
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, text);
-  try { fs.renameSync(tmp, file); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  paths.moveIntoPlace(tmp, file);
 }
 const stem = (w) => (w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
 

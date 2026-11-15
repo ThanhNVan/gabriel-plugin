@@ -33,4 +33,14 @@ const insidePluginCache = (p) => {
   const parts = pathKey(p).split(/[\\/]+/);
   return parts.some((s, i) => s === '.claude' && parts[i + 1] === 'plugins' && parts[i + 2] === 'cache');
 };
-module.exports = { pluginRoot, pathKey, insidePluginCache, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, hostAdapter, defaultRuleFiles, contextFile };
+// Renames a finished temp file over the real one. Windows can refuse for a moment while antivirus or the indexer holds
+// the file (EPERM, EACCES, EBUSY): retry for about 1 s. On failure the temp file is removed and the error thrown.
+const moveIntoPlace = (tmp, file) => {
+  for (let i = 0; ; i++) {
+    try { return fs.renameSync(tmp, file); } catch (e) {
+      if (i >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) { fs.rmSync(tmp, { force: true }); throw e; }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+};
+module.exports = { pluginRoot, pathKey, moveIntoPlace, insidePluginCache, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, hostAdapter, defaultRuleFiles, contextFile };

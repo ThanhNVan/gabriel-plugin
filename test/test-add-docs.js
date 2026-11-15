@@ -32,6 +32,26 @@ const writeFiles = (dir, files) => {
   if (process.platform === 'win32') assert.strictEqual(insidePluginCache('C:\\USERS\\X\\.Claude\\Plugins\\Cache\\g\\1\\d'), true);
 }
 
+// 0b: moveIntoPlace retries a rename that Windows refuses for a moment (antivirus or indexer lock), then gives up cleanly
+{
+  const { moveIntoPlace } = require('../src/paths.js');
+  const real = fs.renameSync;
+  const dst = path.join(tmp, 'locked.json'), src = dst + '.tmp';
+  let calls = 0;
+  try {
+    fs.writeFileSync(src, '{"ok":1}');
+    fs.renameSync = (a, b) => { if (++calls < 3) throw Object.assign(new Error('locked'), { code: 'EPERM' }); return real(a, b); };
+    moveIntoPlace(src, dst);
+    assert.strictEqual(fs.readFileSync(dst, 'utf8'), '{"ok":1}');
+    assert.strictEqual(calls, 3, 'two refused renames, then success');
+    fs.writeFileSync(src, '{"ok":2}');
+    fs.renameSync = () => { throw Object.assign(new Error('locked'), { code: 'EPERM' }); };
+    assert.throws(() => moveIntoPlace(src, dst), /locked/);
+    assert.strictEqual(fs.existsSync(src), false, 'temp file removed after giving up');
+  } finally { fs.renameSync = real; }
+  console.log('  moveIntoPlace: retries a locked rename, removes the temp file when it gives up');
+}
+
 // fixtures
 const words = ['gate', 'river', 'token', 'report', 'budget', 'frame', 'signal', 'matrix', 'ledger', 'harbor', 'vector', 'cabin', 'orbit'];
 const filler = ['# Filler', ''];

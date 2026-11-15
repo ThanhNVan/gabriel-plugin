@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Saving a file no longer fails on Windows when antivirus or the indexer locks it for a moment: the rename is retried for about 1 s (paths.js moveIntoPlace(), used by setup, rules and history).
+
 - macOS joins the CI matrix (with Windows and Linux). Path checks ignore case on macOS too (`paths.js` `pathKey()`). The "no embeddings" message points to `/gabriel:setup`, not the Windows-only `setup.ps1`.
 
 - Setup asks where the graph and docs go. The default is `<data>/this-machine-repo-docs/<name>` (normally `~/.gabriel`), so all of gabriel's files are in one place and a plugin update never touches them. `add-docs` and `--relink` refuse a folder inside the plugin cache (`.claude/plugins/cache`).
