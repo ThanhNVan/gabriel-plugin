@@ -18,6 +18,7 @@ const { homeDir, graphFile, dataDir, tokens, build, fresh, loadThesaurus, wordSc
 const { MODEL, ehash, withTimeout, getEmbedder, readVectors, embedNodes } = require('./embed.js');
 const { getProject } = require('./projects.js');
 const paths = require('./paths.js');
+const { debug } = require('./debuglog.js');
 const hosts = require('./hosts/index.js');
 
 const MAX_CHARS = 2400, NODE_CHARS = 320;
@@ -46,7 +47,7 @@ async function searchFull(home, text, opts = {}) {
           if (s > 0) score.set(n.id, (score.get(n.id) || 0) + s);
         }
       }
-    } catch { /* words and synonyms only */ }
+    } catch (e) { debug('searchFull', e); /* words and synonyms only */ }
   }
   try { // exact rare words (ids, file names) fill the free history slots: meaning search can miss them
     for (const e of require('./graphdb.js').lexical(home, text, tokens, { max: 2, exclude: text.trim() })) if (hist.length < 2 && !hist.some((h) => h.p === e.p)) hist.push(e);
@@ -62,7 +63,7 @@ function mapFor(home, text, pv, started, session, cwd = '') {
     const res = mk.searchAll(home, text, { pv, cwd, session, pin: require('./pin.js').getPin(home, session) || undefined });   // one of the projects in projects.json, or (as a fallback) the general docs
     if (res && session) mk.remember(home, session, res);   // so a file opened soon after can teach the network (see `touched`)
     return mk.format(res);
-  } catch { return ''; }
+  } catch (e) { debug('mapFor', e); return ''; }
 }
 
 // PostToolUse hook: a file was opened or edited. If a map was shown for this session a moment ago, learn from it. JSON on stdin; prints nothing; fails open.
@@ -74,7 +75,7 @@ function touchedHook(host) {
     const files = host.readTouched(raw);
     if (!files.length || !sessionId) return;
     for (const file of files) require('./mk.js').touched(homeDir(), sessionId, file);
-  } catch { /* never block a tool call */ }
+  } catch (e) { debug('touchedHook', e); /* never block a tool call */ }
 }
 
 // When a doc or the code graph changed since the map was built, rebuild it in the background (once per 10 minutes). The old map keeps serving.
@@ -118,7 +119,7 @@ function refreshMapInBackground(home) {
     if (fs.existsSync(lock) && Date.now() - fs.statSync(lock).mtimeMs < MK_LOCK_MS) return;
     fs.writeFileSync(lock, staleSet);   // its age (mtime) is the lock; its text names the set, so that build can clear it
     spawn(process.execPath, ['--max-old-space-size=4096', __filename, 'build-mk', staleSet], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref();
-  } catch { /* never block a prompt */ }
+  } catch (e) { debug('refreshMapInBackground', e); /* never block a prompt */ }
 }
 
 async function search(home, text, opts = {}) { return (await searchFull(home, text, opts)).nodes; }
@@ -286,6 +287,28 @@ function pinNote(cmd, sid) {
   } catch { return ''; }
 }
 
+// Why hook() and contextText() skip a prompt: the reason, or '' when the prompt is searched. Checked in this order.
+function skipReason(prompt) {
+  if (/^\s*\//.test(prompt)) return 'slash command';
+  if (prompt.trim().split(/\s+/).length < 4) return 'under 4 words';
+  if (history.isAutomated(prompt)) return 'automated prompt';
+  return '';
+}
+
+// The note for one prompt, as lines: the pinned line, the view, the skipped count, then at most ONE 💡 line.
+// The setup hint or tip wins over the pin hint. The pin hint shows only with a view, unpinned and with 2+ doc sets.
+// Empty parts are left out; all empty gives ''. skipPrefix goes in front of the skipped count (the no-context note).
+const PIN_HINT = '💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';
+function buildNote({ view, skipped, hint, pinned, manySets, skipPrefix = '' }) {
+  const lines = [];
+  if (pinned) lines.push(`\n📌 pinned: ${pinned}  ("gabriel use auto" to undo)`);
+  if (view) lines.push(view);
+  if (skipped) lines.push(`${skipPrefix}(${skipped} item${skipped > 1 ? 's' : ''} already in context, not repeated)`);
+  const oneHint = hint || (!pinned && manySets && view ? PIN_HINT : '');
+  if (oneHint) lines.push(oneHint);
+  return lines.join('\n');
+}
+
 async function hook(host) {
   try {
     const { prompt, sessionId: sid, cwd, transcriptPath } = host.readInput(fs.readFileSync(0, 'utf8'));
@@ -296,29 +319,26 @@ async function hook(host) {
     };
     const cmd = require('./pin.js').parsePin(prompt);
     if (cmd) return await emit(host.writeOutput({ text: '', note: pinNote(cmd, sid) }));
-    if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return await hintOnly();
+    if (skipReason(prompt)) return await hintOnly();
     const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
     const { text: additionalContext, skipped, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
-    const note = skipped ? `(${skipped} item${skipped > 1 ? 's' : ''} already in context, not repeated)` : '';
     const hint = setupHint(sid) || require('./tips.js').tipFor(sid);   // the setup hint first; after setup, one tip per session
     if (!additionalContext) {
-      const msg = [note ? '🧭 Brain: ' + note : '', hint].filter(Boolean).join('\n');
-      await emit(host.writeOutput({ text: '', note: withPin(msg) }));
+      await emit(host.writeOutput({ text: '', note: buildNote({ view: '', skipped, hint, pinned, manySets: false, skipPrefix: '🧭 Brain: ' }) }));
       save();
       return;
     }
     // additionalContext (full text) goes to the model; note is a short, readable view of the same items for the user.
     const manySets = () => { try { return require('./projects.js').loadProjects().filter((p) => !p.fallback).length > 1; } catch { return false; } };
-    const noPin = pinned || !manySets() ? '' : '\n💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';   // a map note while unpinned suggests the pin
-    await emit(host.writeOutput({ text: additionalContext, note: withPin(humanize(additionalContext) + (note ? '\n' + note : '') + (hint ? '\n' + hint : '') + noPin) }));
+    await emit(host.writeOutput({ text: additionalContext, note: buildNote({ view: humanize(additionalContext), skipped, hint, pinned, manySets: !pinned && manySets() }) }));
     save();
-  } catch { /* fail open: never block a prompt */ }
+  } catch (e) { debug('hook', e); /* fail open: never block a prompt */ }
 }
 
 // For `brain.js context "<prompt>"`: the same items as the hook, as plain text. Short prompts and slash commands give ''.
 async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
-  if (/^\s*\//.test(prompt) || prompt.trim().split(/\s+/).length < 4 || history.isAutomated(prompt)) return '';
+  if (skipReason(prompt)) return '';
   const parts = await gather(prompt, sid, cwd);
   if (!parts.length) return '';
   const { text, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
@@ -326,7 +346,7 @@ async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText };
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
@@ -341,13 +361,11 @@ function contextArgs(argv) {
   return out;
 }
 
-if (require.main === module) {
-  (async () => {
-    const [mode, arg] = process.argv.slice(2);
-    const host = hosts.get(flagValue('--host') || process.env.GABRIEL_HOST || 'claude');
-    paths.setHost(host.name);   // before any path is read: it picks the rules folder and the graph file
-    const home = homeDir();
-    if (mode === 'build') {
+// The CLI modes, in the order usage() lists them. run(ctx) gets { arg, host, home, argv }. Requiring this file runs no mode.
+const MODES = {
+  'build': {
+    args: '[--require-embeddings]',
+    run: async ({ home }) => {
       const g = build();
       console.log(`built ${g.nodes.length} nodes, ${g.links.length} links -> ${graphFile(home)}`);
       for (const w of g.graph.warnings || []) console.log('WARNING ' + w);
@@ -361,32 +379,89 @@ if (require.main === module) {
         const hr = await history.embedHistory(home, embed, MODEL); // prompts pulled from git on a new machine need their numbers too
         console.log(`history: ${hr.total} prompts with meaning numbers (${hr.added} new)`);
       }
-    } else if (mode === 'refresh') {
+    },
+  },
+  'query': {
+    args: '"<text>"',
+    run: async ({ arg, home }) => {
+      console.log(format(await search(home, arg || '')));
+    },
+  },
+  'hook': {
+    args: '[--host <name>]',
+    run: async ({ host }) => {
+      await hook(host);
+    },
+  },
+  // plain text for any tool: node brain.js context "<prompt>" [--host <name>] [--session <id>]
+  'context': {
+    args: '"<prompt>" [--host <name>] [--session <id>]',
+    run: async ({ host }) => {
+      const { prompt, session, cwd } = contextArgs(process.argv);
+      const text = await contextText(prompt, session, host, '', cwd);
+      if (text) process.stdout.write(text.endsWith('\n') ? text : text + '\n');
+    },
+  },
+  'refresh': {
+    args: '',
+    run: async ({ home }) => {
       const embed = await getEmbedder(false);
       if (embed) {
         await embedNodes(home, fresh(home), embed);
         await history.embedHistory(home, embed, MODEL);
       }
       try { require('./graphdb.js').sync(home, tokens); } catch { /* the keyword graph is optional */ }
-    } else if (mode === 'graph') { // rebuild the keyword graph of your prompts if needed, then show the strongest keyword pairs
+    },
+  },
+  'forget': {
+    args: '"<text>"',
+    run: async ({ arg, home }) => {
+      if (!arg) console.log('usage: node brain.js forget "<text>"');
+      else console.log(`forgot ${history.forget(home, arg)} prompt(s)`);
+    },
+  },
+  // rebuild the keyword graph of your prompts if needed, then show the strongest keyword pairs
+  'graph': {
+    args: '',
+    run: async ({ home }) => {
       const gdb = require('./graphdb.js'), r = gdb.sync(home, tokens);
       console.log(`${r.prompts} prompts, ${r.keywords} keywords, ${r.edges} links${r.rebuilt ? ' (rebuilt)' : ''} -> ${gdb.dbFile(home)}`);
       for (const e of gdb.top(home)) console.log(`${String(e.w).padStart(4)}  ${e.x} -- ${e.y}`);
-    } else if (mode === 'related') { // node brain.js related "word": linked keywords and the prompts that hold it
+    },
+  },
+  // node brain.js related "word": linked keywords and the prompts that hold it
+  'related': {
+    args: '"<word>"',
+    run: async ({ arg, home }) => {
       const gdb = require('./graphdb.js');
       gdb.sync(home, tokens);
       const r = gdb.related(home, arg || '', tokens);
       console.log(`${r.word}: in ${r.df} prompt(s)`);
       if (r.neighbours.length) console.log('linked: ' + r.neighbours.map((n) => `${n.word} (${n.w})`).join(', '));
       for (const p of r.prompts) console.log(`- ${p.t.slice(0, 10)} ${p.p.replace(/\s+/g, ' ').slice(0, 140)}`);
-    } else if (mode === 'check') { // problems in note headers (valid-until, supersedes) and notes dropped on purpose
+    },
+  },
+  // problems in note headers (valid-until, supersedes) and notes dropped on purpose
+  'check': {
+    args: '',
+    run: async ({ home }) => {
       const w = build(home).graph.warnings;
       console.log(w.length ? w.map((x) => 'WARNING ' + x).join('\n') : 'no problems in note headers');
       process.exitCode = w.some((x) => !/dropped/.test(x)) ? 1 : 0;
-    } else if (mode === 'build-dq') { // embed the section questions in the project's doc-questions.json into dq.<project>.bin (the question index); about a minute
+    },
+  },
+  // embed the section questions in the project's doc-questions.json into dq.<project>.bin (the question index); about a minute
+  'build-dq': {
+    args: '[--project <name>]',
+    run: async ({ home }) => {
       const bi = process.argv.indexOf('--project'), project = bi >= 0 ? process.argv[bi + 1] : require('./mk.js').defaultProject();   // node brain.js build-dq [--project <name>]
       try { const r = await require('./dq.js').embedAll(home, project); console.log(`question index: ${r.questions} questions for ${r.sections} sections (${project})`); } catch (e) { console.error('build-dq failed: ' + e.message); process.exitCode = 1; }
-    } else if (mode === 'build-mk') { // build a project's map from its docs folder (projects.json); about a minute
+    },
+  },
+  // build a project's map from its docs folder (projects.json); about a minute
+  'build-mk': {
+    args: '[<project name>|all]',
+    run: async ({ arg, home }) => {
       const mk = require('./mk.js'), bad = !!arg && arg !== 'all' && !getProject(arg), list = bad ? [] : arg === 'all' ? mk.projectNames() : [arg || mk.defaultProject()];   // node brain.js build-mk [<project name>|all]
       if (bad) { console.log(`unknown doc set: ${arg}`); process.exitCode = 1; }   // a typo must not build the default set
       for (const [i, project] of list.entries()) {
@@ -397,59 +472,125 @@ if (require.main === module) {
           console.log(`old map merged in: ${r.merged.kept} learned links kept, ${r.merged.dropped} dropped (neuron gone or faded), ${r.merged.sessions} recent session(s) carried over`);
         } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { const lk = path.join(dataDir(home), 'mk.lock'); let held = ''; try { held = fs.readFileSync(lk, 'utf8'); } catch { /* no lock */ } if (held === '' || held === project) fs.rmSync(lk, { force: true }); } catch { /* none */ } }   // the background lock names the doc set it built; an empty (old-style) lock is cleared
       }
-    } else if (mode === 'touched') { // PostToolUse hook (see settings.json): learn from a file that was just opened or edited
-      touchedHook(host);
-    } else if (mode === 'touched-files') { // after a Codex step: node brain.js touched-files <file>... ; learns from the newest map (any session, last 45 min)
-      const mk = require('./mk.js');
-      for (const f of process.argv.slice(3)) { const r = mk.touched(home, '*', path.resolve(f)); console.log(`${f}: ${r.learned ? `learned ${r.learned} (${r.targets.join(', ')})` : r.ignored}`); }
-    } else if (mode === 'learn-show') { // the strongest learned links, with their age-faded weight
-      const r = require('./mk.js').learnShow(home, Number(arg) || 15);
-      console.log(`${r.total} learned link(s)`); for (const l of r.lines) console.log(l);
-    } else if (mode === 'learn-reset') { // forget everything the map learned from use (the docs and graph are untouched)
-      console.log(`forgot ${require('./mk.js').learnReset(home)} learned link(s)`);
-    } else if (mode === 'mk-status' && arg === 'all') { // one line per project: node brain.js mk-status all
-      const mk = require('./mk.js');
-      // the first problem of a set and the one command that fixes it (null when the set is healthy)
-      const fixFor = (p, s, gp) => {
-        if (gp && !fs.existsSync(gp)) return `/gabriel:add-docs ${p} --code ${path.dirname(path.dirname(gp))} --relink`;
-        if (!s.nDoc) return `node src/brain.js build-mk ${p}`;
-        if (s.stale) return '/gabriel:update';
-        if (!getProject(p).fallback && !fs.existsSync(path.join(paths.privateDir(p), 'eval-cases.json'))) return `node eval/suggest-cases.js --project ${p}`;
-        return null;
-      };
-      for (const p of mk.projectNames()) {
-        const s = mk.status(home, p), gp = mk.graphPathOf(p), rp = getProject(p).repo;
-        console.log(`${getProject(p).label.padEnd(9)} ${s.nDoc ? `${s.nCode} code + ${s.nDoc} doc neurons, built ${new Date(s.built).toISOString().slice(0, 16).replace('T', ' ')}${s.mapCommit ? ', @' + s.mapCommit.slice(0, 8) : ''}${s.stale ? '   STALE' : '   ok'}` : 'no map (run: node brain.js build-mk ' + p + ')'}${gp ? `   graph ${gp}${fs.existsSync(gp) ? '' : '   GRAPH MISSING'}` : ''}${rp ? `   repo ${rp}${fs.existsSync(rp) ? '' : '   REPO MISSING'}` : gp ? `   no repo (add-docs ${p} --repo <folder> --relink)` : ''}`);
-        const fix = fixFor(p, s, gp);
-        if (fix) console.log('  fix: ' + fix);
-      }
-    } else if (mode === 'mk-status') { // is the map as new as the graph and the docs?
-      const s = require('./mk.js').status(home);
-      console.log(`map:   ${s.mapCommit ? s.mapCommit.slice(0, 8) : 'none'}${s.built ? ' built ' + new Date(s.built).toISOString().slice(0, 16).replace('T', ' ') : ''}${s.nCode ? `, ${s.nCode} code + ${s.nDoc} doc neurons, ${s.learned} learned link(s)` : ''}`);
-      console.log(`graph: ${s.graphCommit ? s.graphCommit.slice(0, 8) : 'unknown'} (graphify-out/graph.json)   .last_update_commit: ${s.lastUpdateCommit ? s.lastUpdateCommit.slice(0, 8) : 'none'}`);
-      const same = s.mapCommit && s.graphCommit && s.mapCommit === s.graphCommit;
-      console.log(s.stale || !same ? 'STALE: run  node --max-old-space-size=4096 brain.js build-mk' : 'OK: the map matches the graph and the docs');
-      if (s.graphCommit && s.lastUpdateCommit && s.graphCommit !== s.lastUpdateCommit) console.log('NOTE: graph.json commit differs from .last_update_commit (see the Stamp check in the update-docs skill)');
-    } else if (mode === 'mk') { // show a project's map for a text: node brain.js mk "text" [--no-meaning] [--project <name>]
+    },
+  },
+  // show a project's map for a text: node brain.js mk "text" [--no-meaning] [--project <name>]
+  'mk': {
+    args: '"<text>"',
+    run: async ({ arg, home }) => {
       const mk = require('./mk.js');
       let pv = null;
       if (!process.argv.includes('--no-meaning')) { const embed = await getEmbedder(false); if (embed) [pv] = await embed([(arg || '').slice(0, 500)]); }
       const pi = process.argv.indexOf('--project'), t0 = Date.now(), res = mk.search(home, arg || '', { pv, project: pi >= 0 ? process.argv[pi + 1] : mk.defaultProject() });
       console.log(mk.format(res) || '(no map for this text)');
       console.log(`[${Date.now() - t0} ms${res ? `, ${res.seeds} seeds, best ${res.best.toFixed(2)}` : ''}]`);
-    } else if (mode === 'query') {
-      console.log(format(await search(home, arg || '')));
-    } else if (mode === 'forget') {
-      if (!arg) console.log('usage: node brain.js forget "<text>"');
-      else console.log(`forgot ${history.forget(home, arg)} prompt(s)`);
-    } else if (mode === 'hook') {
-      await hook(host);
-    } else if (mode === 'context') { // plain text for any tool: node brain.js context "<prompt>" [--host <name>] [--session <id>]
-      const { prompt, session, cwd } = contextArgs(process.argv);
-      const text = await contextText(prompt, session, host, '', cwd);
-      if (text) process.stdout.write(text.endsWith('\n') ? text : text + '\n');
-    } else {
-      console.log('usage: node brain.js build [--require-embeddings] | query "<text>" | hook [--host <name>] | context "<prompt>" [--host <name>] [--session <id>] | refresh | forget "<text>" | graph | related "<word>" | check | build-mk | mk "<text>" | mk-status | learn-show | learn-reset | touched [--host <name>]');
-    }
+    },
+  },
+  // why a prompt got no map, one line per doc set: node brain.js why "<prompt>" [--session <id>]. Writes nothing: no learning, no session state.
+  'why': {
+    args: '"<prompt>" [--session <id>]',
+    run: async ({ arg, home }) => {
+      const prompt = arg || '', skip = skipReason(prompt);
+      if (skip) return console.log(`gabriel skips this prompt: ${skip}. No search runs.`);
+      const mk = require('./mk.js'), session = flagValue('--session') || '', pin = require('./pin.js').getPin(home, session) || '';
+      let pv = null;
+      const embed = await getEmbedder(false); if (embed) [pv] = await embed([prompt.slice(0, 500)]);
+      const trace = {};
+      const won = (mk.searchAll(home, prompt, { pv, cwd: process.cwd(), session, pin: pin || undefined, learn: false, trace }) || {}).project;   // the hook shows one map: the top set's
+      const label = (name) => (getProject(name) || {}).label || name;
+      const noWord = (L) => `${L}: no map, no word of this prompt is in these docs`;
+      for (const p of require('./projects.js').loadProjects()) {
+        const s = (trace.sets || {})[p.name]; if (!s) continue;
+        const L = label(p.name), b = s.best.toFixed(2), gate = s.gate.toFixed(2);
+        const line = { 'no-map-file': `${L}: no map file yet. Run /gabriel:setup`, 'old-version': `${L}: map format is old. Run /gabriel:update`,
+          'no-words': noWord(L), 'no-seeds': noWord(L), 'below-gate': `${L}: no map, best match ${b} is under the gate ${gate}`, 'nothing-to-show': `${L}: no map, best match ${b} is under the gate ${gate}`,
+          error: `${L}: no map, an error stopped the search. Set GABRIEL_DEBUG=1 and read debug.log`, shown: p.name === won ? `${L}: shown (best ${b})` : `${L}: matched (best ${b}), not shown` + (won ? `: ${label(won)} ranked higher` : '') }[s.reason];
+        if (line) console.log(line);
+      }
+      if (pin) console.log(`pinned: ${pin}. Only that doc set is searched. Type "gabriel use auto" to undo.`);
+      if (trace.sessionGate) console.log(`session gate: a weak match, and this session had no map of ${label(trace.gated)} yet.`);
+    },
+  },
+  // one line per project (mk-status all), or the status of the default map
+  'mk-status': {
+    args: '[all]',
+    run: async ({ arg, home }) => {
+      if (arg === 'all') {
+        const mk = require('./mk.js');
+        // the first problem of a set and the one command that fixes it (null when the set is healthy)
+        const fixFor = (p, s, gp) => {
+          if (gp && !fs.existsSync(gp)) return `/gabriel:add-docs ${p} --code ${path.dirname(path.dirname(gp))} --relink`;
+          if (!s.nDoc) return `node src/brain.js build-mk ${p}`;
+          if (s.stale) return '/gabriel:update';
+          if (!getProject(p).fallback && !fs.existsSync(path.join(paths.privateDir(p), 'eval-cases.json'))) return `node eval/suggest-cases.js --project ${p}`;
+          return null;
+        };
+        const { statusBlock } = require('./statusview.js');
+        const names = mk.projectNames();
+        names.forEach((p, i) => {
+          const s = mk.status(home, p), gp = mk.graphPathOf(p), rp = getProject(p).repo;
+          for (const l of statusBlock({ label: getProject(p).label, name: p, s, graphPath: gp, graphExists: !!gp && fs.existsSync(gp), repo: rp, repoExists: !!rp && fs.existsSync(rp), fix: fixFor(p, s, gp) })) console.log(l);
+          if (i < names.length - 1) console.log('');   // one empty line between doc sets
+        });
+      } else {
+        const s = require('./mk.js').status(home);
+        console.log(`map:   ${s.mapCommit ? s.mapCommit.slice(0, 8) : 'none'}${s.built ? ' built ' + new Date(s.built).toISOString().slice(0, 16).replace('T', ' ') : ''}${s.nCode ? `, ${s.nCode} code + ${s.nDoc} doc neurons, ${s.learned} learned link(s)` : ''}`);
+        console.log(`graph: ${s.graphCommit ? s.graphCommit.slice(0, 8) : 'unknown'} (graphify-out/graph.json)   .last_update_commit: ${s.lastUpdateCommit ? s.lastUpdateCommit.slice(0, 8) : 'none'}`);
+        const same = s.mapCommit && s.graphCommit && s.mapCommit === s.graphCommit;
+        console.log(s.stale || !same ? 'STALE: run  node --max-old-space-size=4096 brain.js build-mk' : 'OK: the map matches the graph and the docs');
+        if (s.graphCommit && s.lastUpdateCommit && s.graphCommit !== s.lastUpdateCommit) console.log('NOTE: graph.json commit differs from .last_update_commit (see the Stamp check in the update-docs skill)');
+      }
+    },
+  },
+  // the strongest learned links, with their age-faded weight
+  'learn-show': {
+    args: '',
+    run: async ({ arg, home }) => {
+      const r = require('./mk.js').learnShow(home, Number(arg) || 15);
+      console.log(`${r.total} learned link(s)`); for (const l of r.lines) console.log(l);
+    },
+  },
+  // node brain.js learn-reset [name]: forget what the map learned from use (the docs and graph are untouched); a name limits it to one doc set
+  'learn-reset': {
+    args: '[name]',
+    run: async ({ arg, home }) => {
+      const mk = require('./mk.js');
+      if (arg && !mk.projectNames().includes(arg)) { console.log(`unknown doc set: ${arg}`); process.exitCode = 1; }
+      else console.log(`forgot ${mk.learnReset(home, arg || undefined)} learned link(s)`);
+    },
+  },
+  // PostToolUse hook (see settings.json): learn from a file that was just opened or edited
+  'touched': {
+    args: '[--host <name>]',
+    run: async ({ host }) => {
+      touchedHook(host);
+    },
+  },
+  // after a Codex step: node brain.js touched-files <file>... ; learns from the newest map (any session, last 45 min)
+  'touched-files': {
+    args: '<file>...',
+    run: async ({ home }) => {
+      const mk = require('./mk.js');
+      for (const f of process.argv.slice(3)) { const r = mk.touched(home, '*', path.resolve(f)); console.log(`${f}: ${r.learned ? `learned ${r.learned} (${r.targets.join(', ')})` : r.ignored}`); }
+    },
+  },
+};
+module.exports.MODES = MODES;
+module.exports.buildNote = buildNote;
+
+// The usage line, built from MODES so it cannot go stale.
+function usage() {
+  return 'usage: node brain.js ' + Object.keys(MODES).map((name) => `${name} ${MODES[name].args}`.trim()).join(' | ');
+}
+
+if (require.main === module) {
+  (async () => {
+    const [mode, arg] = process.argv.slice(2);
+    const host = hosts.get(flagValue('--host') || process.env.GABRIEL_HOST || 'claude');
+    paths.setHost(host.name);   // before any path is read: it picks the rules folder and the graph file
+    const home = homeDir();
+    const entry = Object.prototype.hasOwnProperty.call(MODES, mode) ? MODES[mode] : null;
+    if (entry) await entry.run({ arg, host, home, argv: process.argv });
+    else console.log(usage());
   })().then(() => process.exit()); // onnx keeps threads alive; exit with the code set above
 }

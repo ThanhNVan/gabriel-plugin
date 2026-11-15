@@ -2,8 +2,8 @@
 //   node src/retrain.js [name] [--force]     (default: the default project; --force keeps the new weights even if strict falls)
 // 1. No eval-cases.json yet: write suggested cases (eval/suggest-cases.js) and stop. You review and save them, then run again.
 // 2. Rebuild the project's map (brain.js build-mk), score the current weights (eval-map), train new weights into a temp file (train-rank --out),
-//    score those (eval-map --rank). With a name: copy them to the project's rank file only when the new strict count is not lower.
-//    With no name: always copy them (the owner's choice), after a backup of the old file as rank.prev.json next to it.
+//    score those (eval-map --rank). Copy them to the project's rank file only when the new strict count is not lower (--force: always).
+//    Before a kept file replaces an existing rank file, the old one is saved as rank.prev.json next to it.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -12,15 +12,20 @@ const mk = require('./mk.js');
 const paths = require('./paths.js');
 const { getProject } = require('./projects.js');
 
-// Keep the new weights? A named run keeps them only when the strict count does not fall. A run with no name always keeps them.
-// force (--force): a named run keeps them even when the strict count falls.
-function keepNew(named, oldS, newS, force = false) { return !named || force || !!(oldS && newS && newS.n >= oldS.n); }
+// Keep the new weights? force (--force): keep them even when strict falls. No new score: keep the current weights.
+// No old score: keep the new weights. Otherwise keep them only when the new strict count is not lower.
+function keepNew(oldS, newS, force = false) {
+  if (force) return true;
+  if (!newS) return false;
+  if (!oldS) return true;
+  return newS.n >= oldS.n;
+}
 // Why the current weights were kept: a missing count is named, otherwise the lower count is shown
 function reason(oldS, newS) { return !oldS || !newS ? `no strict count for the ${!oldS ? 'current' : 'new'} weights` : `the new strict count is lower (${newS.n} < ${oldS.n})`; }
 if (require.main !== module) { module.exports = { keepNew, reason }; return; }
 
 const named = !!(process.argv[2] && !process.argv[2].startsWith('--'));
-const force = process.argv.includes('--force');   // named run: replace the weights even when strict falls
+const force = process.argv.includes('--force');   // keep the new weights even when strict falls
 const name = named ? process.argv[2] : mk.defaultProject();
 const P = getProject(name);
 if (!P) throw new Error('unknown project: ' + name);
@@ -63,14 +68,14 @@ const show = (label, s) => (s ? `${label}: strict ${s.n}/${s.t}` : `${label}: no
     if (!after.ok) { console.error(after.out.trim()); process.exitCode = 1; return; }
     const newS = strictOf(after.out);
     console.log(show('new weights', newS));
-    if (keepNew(named, oldS, newS, force)) {
+    if (keepNew(oldS, newS, force)) {
       fs.mkdirSync(path.dirname(P.rank), { recursive: true });
       const prev = path.join(path.dirname(P.rank), 'rank.prev.json');
-      if ((!named || force) && fs.existsSync(P.rank)) { fs.copyFileSync(P.rank, prev); console.log(`old weights saved: ${prev}`); }
+      if (fs.existsSync(P.rank)) { fs.copyFileSync(P.rank, prev); console.log(`old weights saved: ${prev}`); }
       fs.copyFileSync(tmp, P.rank);
       const fell = oldS && newS && newS.n < oldS.n;
-      if (named && force && fell) console.log(`--force: kept the new weights although strict fell ${oldS.n} -> ${newS.n}`);
-      console.log(`kept the new weights: ${P.rank}${named ? '' : ` (no name given: always replaced${fell ? `, although strict fell ${oldS.n} -> ${newS.n}` : ''})`}`);
+      if (force && fell) console.log(`--force: kept the new weights although strict fell ${oldS.n} -> ${newS.n}`);
+      console.log(`kept the new weights: ${P.rank}`);
     } else {
       console.log(`kept the current weights: ${reason(oldS, newS)}`);
     }

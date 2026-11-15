@@ -59,4 +59,4 @@ stateDiagram-v2
 Notes:
 
 - A link that is New or Confirmed is kept only when its neurons still exist (`integrate()`).
-- `brain.js learn-show` lists the strongest links with their faded weight. `brain.js learn-reset` removes all of them.
+- `brain.js learn-show` lists the strongest links with their faded weight. `brain.js learn-reset [name]` removes all of them, or only one doc set's with a name.

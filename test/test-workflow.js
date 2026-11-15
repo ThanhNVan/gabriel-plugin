@@ -266,11 +266,13 @@ try {
     assert.strictEqual(readProjectEntry('notes').repo, REPO, 'projects.json must hold the repo folder');
   });
 
-  step('mk-status all: the notes line shows its repo, and REPO MISSING when the folder is gone', () => {
+  // the whole notes block: its header line and the lines below it, up to the empty line
+  const notesBlock = () => { const ls = (node(BRAIN, ['mk-status', 'all']).stdout || '').split('\n'), i = ls.findIndex((x) => x.startsWith('notes')); if (i < 0) return ''; const out = []; for (let j = i; j < ls.length && ls[j] !== ''; j++) out.push(ls[j]); return out.join('\n'); };
+  step('mk-status all: the notes block shows its repo, and REPO MISSING when the folder is gone', () => {
     const repo = readProjectEntry('notes').repo;
     assert.ok(repo, 'notes has a repo from the step before');
-    const line = () => (node(BRAIN, ['mk-status', 'all']).stdout || '').split('\n').find((l) => l.startsWith('notes')) || '';
-    assert.ok(line().includes(`repo ${repo}`) && !/REPO MISSING/.test(line()), 'repo shown: ' + line());
+    const line = notesBlock;
+    assert.ok(line().includes(`  repo   ${repo}`) && !/REPO MISSING/.test(line()), 'repo shown: ' + line());
     fs.renameSync(repo, repo + '.away');
     try { assert.match(line(), /REPO MISSING/, 'a gone repo folder is flagged'); }
     finally { fs.renameSync(repo + '.away', repo); }
@@ -282,8 +284,8 @@ try {
     delete j.projects.find((p) => p.name === 'notes').repo;
     fs.writeFileSync(pf, JSON.stringify(j));
     try {
-      const l = (node(BRAIN, ['mk-status', 'all']).stdout || '').split('\n').find((x) => x.startsWith('notes')) || '';
-      assert.ok(l.includes('no repo (add-docs notes --repo <folder> --relink)'), 'no repo hint: ' + l);
+      const l = notesBlock();
+      assert.ok(l.includes('repo   none (add-docs notes --repo <folder> --relink)'), 'no repo hint: ' + l);
     } finally { fs.writeFileSync(pf, before); }
   });
 

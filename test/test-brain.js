@@ -10,6 +10,18 @@ const w = (rel, text) => { const p = path.join(home, rel); fs.mkdirSync(path.dir
 
 // rule files come from projects.json in the data folder: write one for this test and point this process at that folder, so the owner's config is never read
 process.env.GABRIEL_DATA = path.join(home, 'brain', 'data');
+// CLI mode table (Task 4): every mode has a run function, and the usage text names every mode
+const { MODES } = require(brainPath);
+for (const m of ['build', 'query', 'hook', 'touched', 'touched-files', 'context', 'refresh', 'graph', 'related', 'check', 'build-dq', 'build-mk', 'learn-show', 'learn-reset', 'mk-status', 'mk', 'why', 'forget'])
+  assert.strictEqual(typeof MODES[m].run, 'function', 'mode ' + m);
+const usageOut = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'brain.js'), 'nonsense'], { encoding: 'utf8' }).stdout;
+for (const m of Object.keys(MODES)) assert.ok(usageOut.includes(m), 'usage names ' + m);
+// Task 5: skipReason() gives the reason hook() skips a prompt, and `why` prints it without a search
+const { skipReason } = require('../src/brain.js');
+assert.strictEqual(skipReason('/gabriel:status'), 'slash command');
+assert.strictEqual(skipReason('fix this bug'), 'under 4 words');
+assert.strictEqual(skipReason('how does the map search work'), '');
+assert.strictEqual(runBrain(tempHome('why-test-'), ['why', 'fix this bug']).stdout, 'gabriel skips this prompt: under 4 words. No search runs.\n', 'why prints the skip line');
 w('brain/data/projects.json', JSON.stringify({ version: 1, ruleFiles: ['CLAUDE.md', 'preferences.md', 'codex-rules.md'] }));
 w('CLAUDE.md', '# Codex\n- Never commit or push anything. The user does.\n');
 w('preferences.md', [
@@ -147,6 +159,18 @@ process.on('exit', () => { if (!finished) { console.error('TEST DID NOT FINISH')
   assert.strictEqual((await brain.searchFull(home, 'open the file changelog-draft.md and fix the heading', o)).hist.some((x) => x.p === 'open the file changelog-draft.md and fix the heading'), false, 'the prompt itself came back');
   assert.strictEqual((await brain.searchFull(home, 'what is the weather like in Paris', o)).hist.length, 0, 'unrelated prompt got history');
 
+  // Task 7: buildNote() gives one 💡 line at most; the setup hint or tip wins over the pin hint
+  {
+    const { buildNote } = require(brainPath);
+    const PIN_HINT = '💡 Working in one project? Type "gabriel use <set>" to search only that doc set this session.';
+    const both = buildNote({ view: '🧭 A map', skipped: 0, hint: '💡 Tip: x', pinned: null, manySets: true });
+    assert.strictEqual((both.match(/💡/g) || []).length, 1, 'one hint line at most');
+    assert.ok(both.includes('💡 Tip: x'), 'the tip wins');
+    assert.ok(buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: null, manySets: true }).endsWith(PIN_HINT));
+    assert.ok(!buildNote({ view: '🧭 A map', skipped: 0, hint: '', pinned: 'alpha', manySets: true }).includes('💡'));
+    assert.ok(buildNote({ view: '', skipped: 2, hint: '', pinned: null, manySets: true }).includes('(2 items already in context, not repeated)'));
+    assert.strictEqual(buildNote({ view: '', skipped: 0, hint: '', pinned: null, manySets: false }), '');
+  }
   finished = true;
   console.log('ALL PASSED');
 })().catch((err) => { console.error(err); process.exit(1); });

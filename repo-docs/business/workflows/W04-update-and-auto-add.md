@@ -66,4 +66,4 @@ sequenceDiagram
 - `mk.db` has fresh rows for each rebuilt doc set.
 - `eval-cases.suggested.json` may get new cases. The user reviews them. `eval-cases.json` is not changed.
 - The summary line shows the counts. Any failed doc set has a retry command.
-- Check: `node src/brain.js mk-status all` prints one line per doc set (`ok` or `STALE`).
+- Check: `node src/brain.js mk-status all` prints one block per doc set (`ok` or `STALE`).

@@ -72,9 +72,9 @@ Run `node src/retrain.js <name>`. It does these steps:
 2. Scores the current weights.
 3. Trains new weights into a temp file.
 4. Scores the new weights.
-5. Keeps the new weights only when the strict count is not lower. With no name (the default project), it always keeps the new weights, and saves the old file as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`. If either strict count is missing, a named run keeps the current weights.
+5. Keeps the new weights only when the strict count is not lower. No name means the default doc set. The old file is saved as `rank.prev.json` next to it. To go back, copy `rank.prev.json` over `rank.json`. If the new strict count is missing, the current weights stay. If only the old count is missing, the new weights are kept.
 
-With `--force` (`node src/retrain.js <name> --force`), a named run keeps the new weights even when the strict count falls. It prints a line saying so, and saves the old file as `rank.prev.json`.
+With `--force` (`node src/retrain.js <name> --force`), the run keeps the new weights even when the strict count falls. It prints a line saying so, and saves the old file as `rank.prev.json`.
 
 It prints both scores. If there are no cases yet, it writes suggestions and stops.
 

@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { homeDir, dataDir, tokens, loadThesaurus } = require('./rules.js');
 const paths = require('./paths.js');
+const { debug } = require('./debuglog.js');
 const { extSet, isDocName, extractText } = require('./extract.js');
 
 const DB_VERSION = 5;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index
@@ -175,9 +176,9 @@ async function build(home = homeDir(), opts = {}) {
   if (graphPath && !fs.existsSync(graphPath)) throw new Error(`graph not found: ${graphPath}; run /graphify on the code repo, or fix "graph" for ${project} in projects.json`);   // before any write: the old map stays
   const g = graphPath && fs.existsSync(graphPath) ? JSON.parse(fs.readFileSync(graphPath, 'utf8')) : { nodes: [], links: [], built_at_commit: '' };
   const files = listDocs(root, P.layout, P.skipDirs, extSet(P.extensions));
-  const tmp = dbFile(home, project) + '.' + process.pid + '.tmp';
+  const tmp = dbFile(home) + '.' + process.pid + '.tmp';
   fs.mkdirSync(path.dirname(tmp), { recursive: true });
-  for (const f of fs.readdirSync(path.dirname(tmp))) if (f.startsWith(path.basename(dbFile(home, project)) + '.') && f.endsWith('.tmp')) { try { fs.rmSync(path.join(path.dirname(tmp), f), { force: true }); } catch { /* still in use by a build that is running */ } }
+  for (const f of fs.readdirSync(path.dirname(tmp))) if (f.startsWith(path.basename(dbFile(home)) + '.') && f.endsWith('.tmp')) { try { fs.rmSync(path.join(path.dirname(tmp), f), { force: true }); } catch { /* still in use by a build that is running */ } }
   const db = new (sqlite())(tmp);
   db.exec(`CREATE TABLE nodes(id INTEGER PRIMARY KEY, kind TEXT, label TEXT, file TEXT, loc TEXT, section TEXT, text TEXT, comm INTEGER, deg INTEGER, nkw INTEGER, key TEXT);
     CREATE TABLE learn(ka TEXT, kb TEXT, w REAL, n INTEGER, t INTEGER, PRIMARY KEY(ka, kb));
@@ -210,17 +211,18 @@ async function build(home = homeDir(), opts = {}) {
   for (const [id, c] of comms) addComm.run(id, c.name, c.size);
   log(`code neurons ${g.nodes.length}, communities ${comms.size}`);
   // 2. code synapses (one row per direction; the strongest relation of a pair wins)
+  const M = g.nodes.length + 1;   // code ids are 1..nodes, so M is above every id; the pair key is a * M + b (safe while M * M < 2^53)
   const pair = new Map();
   for (const e of g.links) {
     const a = codeId.get(e.source), b = codeId.get(e.target);
     if (!a || !b || a === b) continue;
     const w = (REL[e.relation] ?? 0.3) * (e.confidence_score ?? 1);
-    const k = a < b ? a * 1e6 + b : b * 1e6 + a;
+    const k = a < b ? a * M + b : b * M + a;
     if ((pair.get(k) || 0) < w) pair.set(k, w);
   }
   const deg = new Map();
   for (const [k, w] of pair) {
-    const a = Math.floor(k / 1e6), b = k % 1e6;
+    const a = Math.floor(k / M), b = k % M;
     addEdge.run(a, b, w); addEdge.run(b, a, w);
     deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1);
   }
@@ -403,9 +405,10 @@ function integrate(home, tmp, project) {
       db.prepare('INSERT INTO comm SELECT id, name, size, ? FROM t.comm').run(project);
       db.prepare('INSERT INTO meta SELECT k, v, ? FROM t.meta').run(project);
       if (learns) {   // learning: drop links whose neurons are gone or have faded
+        const delLink = db.prepare('DELETE FROM learn WHERE ka = ? AND kb = ?');
         const before = db.prepare('SELECT COUNT(*) AS c FROM learn').get().c, now = Date.now();
         db.exec('DELETE FROM learn WHERE ka NOT IN (SELECT key FROM nodes) OR kb NOT IN (SELECT key FROM nodes)');
-        for (const r of db.prepare('SELECT ka, kb, w, t FROM learn').all()) if (effective(r.w, r.t, now) < LEARN_PRUNE) db.prepare('DELETE FROM learn WHERE ka = ? AND kb = ?').run(r.ka, r.kb);
+        for (const r of db.prepare('SELECT ka, kb, w, t FROM learn').all()) if (effective(r.w, r.t, now) < LEARN_PRUNE) delLink.run(r.ka, r.kb);
         out.kept = db.prepare('SELECT COUNT(*) AS c FROM learn').get().c; out.dropped = before - out.kept;
         out.sessions = db.prepare('SELECT COUNT(*) AS c FROM last').get().c;
       }
@@ -475,7 +478,7 @@ function touched(home, session, file, opts = {}) {
     db.prepare('UPDATE last SET done = ? WHERE session = ?').run(JSON.stringify(done), row.session);
     db.exec('COMMIT');
     return { learned, file: rel, targets: targets.map((t) => t.label) };
-  } catch { try { db.exec('ROLLBACK'); } catch { /* none */ } return { ignored: 'error' }; } finally { try { db.close(); } catch { /* closed */ } }
+  } catch (e) { debug('touched', e); try { db.exec('ROLLBACK'); } catch { /* none */ } return { ignored: 'error' }; } finally { try { db.close(); } catch { /* closed */ } }
 }
 
 function learnShow(home, limit = 15, now = Date.now()) {
@@ -488,19 +491,26 @@ function learnShow(home, limit = 15, now = Date.now()) {
   } finally { db.close(); }
 }
 
-function learnReset(home) {
+// Forget learned links. With no project: all of them. With a project: only the links whose from-neuron belongs to that doc set. Returns the number of learn rows deleted.
+function learnReset(home, project) {
   const db = openRw(home);
-  try { const n = db.prepare('SELECT COUNT(*) AS c FROM learn').get().c; db.exec('DELETE FROM learn; DELETE FROM last;'); return n; } finally { db.close(); }
+  try {
+    if (!project) { const n = db.prepare('SELECT COUNT(*) AS c FROM learn').get().c; db.exec('DELETE FROM learn; DELETE FROM last;'); return n; }
+    const own = 'ka IN (SELECT key FROM nodes WHERE project = ?)';   // old learn rows have no project column: a link belongs to the set that owns its from-neuron
+    const n = db.prepare('SELECT COUNT(*) AS c FROM learn WHERE ' + own).get(project).c;
+    db.prepare('DELETE FROM learn WHERE ' + own).run(project); db.prepare('DELETE FROM last WHERE project = ?').run(project);
+    return n;
+  } finally { db.close(); }
 }
 
 // Is the map as new as the graph and the docs? Reads only the last bytes of graph.json (that is where built_at_commit is).
 function status(home = homeDir(), project = defaultProject()) {
   const root = docsRoot(project), P = getProject(project) || {}, out = { stale: stale(home, project), root };
   try {
-    const db = new (sqlite())(dbFile(home, project), { readOnly: true });
+    const db = new (sqlite())(dbFile(home), { readOnly: true });
     try {
       const m = Object.fromEntries(db.prepare('SELECT k, v FROM meta WHERE project = ?').all(project).map((r) => [r.k, r.v]));
-      Object.assign(out, { mapCommit: m.commit, built: Number(m.built), nCode: Number(m.nCode), nDoc: Number(m.nDoc), learned: db.prepare('SELECT COUNT(*) AS c FROM learn').get().c });
+      Object.assign(out, { mapCommit: m.commit, built: Number(m.built), nCode: Number(m.nCode), nDoc: Number(m.nDoc), learned: db.prepare('SELECT COUNT(*) AS c FROM learn WHERE ka IN (SELECT key FROM nodes WHERE project = ?)').get(project).c });
     } finally { db.close(); }
   } catch { out.mapCommit = null; }
   out.graphCommit = null;
@@ -523,7 +533,7 @@ function sources(root, project) {
 const graphOnDisk = (project) => { const P = getProject(project) || {}; return project === defaultProject() && !!P.graph && fs.existsSync(path.join(docsRoot(project), P.graph)); };
 function stale(home = homeDir(), project = defaultProject()) { // true when there is no map, or a doc or the graph changed since it was built
   try {
-    const db = new (sqlite())(dbFile(home, project), { readOnly: true });
+    const db = new (sqlite())(dbFile(home), { readOnly: true });
     try {
       const m = Object.fromEntries(db.prepare('SELECT k, v FROM meta WHERE project = ?').all(project).map((r) => [r.k, r.v]));
       if (!m.root) return graphOnDisk(project);   // this project has no rows yet
@@ -535,7 +545,7 @@ function stale(home = homeDir(), project = defaultProject()) { // true when ther
 // True when the project has a map in mk.db. stale() is false for a new non-default project with no rows (built on request), so --update checks this too.
 function hasMap(home = homeDir(), project = defaultProject()) {
   try {
-    const db = new (sqlite())(dbFile(home, project), { readOnly: true });
+    const db = new (sqlite())(dbFile(home), { readOnly: true });
     try { return !!db.prepare("SELECT 1 FROM meta WHERE project = ? AND k = 'root'").get(project); } finally { db.close(); }
   } catch { return false; }
 }
@@ -547,278 +557,351 @@ function expand(q, groups) {
   return m;
 }
 
+// search() step 1: seeds by words (the moved code keeps its comments).
+function seedByWords(S) {
+  const { db, project, N, qw } = S;
+  // 1. seeds by words: every query word fires the neurons that hold it
+  const score = new Map(), hit = new Map(), strong = new Set(), kindOf = new Map(), hscore = new Map(), simOf = new Map(), hsimOf = new Map();
+  const dfq = db.prepare('SELECT kind, n FROM df WHERE word = ? AND project = ?'), post = db.prepare('SELECT k.node AS node, n.kind AS kind, n.nkw AS nkw, n.deg AS deg, n.label AS label FROM kw k JOIN nodes n ON n.id = k.node WHERE k.word = ? AND k.project = ?');
+  for (const [w, wt] of qw) {
+    const dfs = Object.fromEntries(dfq.all(w, project).map((r) => [r.kind, r.n]));
+    if (!Object.keys(dfs).length) continue;
+    for (const r of post.all(w, project)) {
+      const idf = Math.log(1 + N[r.kind] / (dfs[r.kind] || 1));
+      kindOf.set(r.node, [r.kind, r.nkw, r.deg]);
+      score.set(r.node, (score.get(r.node) || 0) + idf * wt);
+      if (w[0] === '#') { hscore.set(r.node, (hscore.get(r.node) || 0) + idf * wt); continue; }   // a heading hit only adds score: it is the same word again, so it is not a second word and never "strong"
+      hit.set(r.node, (hit.get(r.node) || 0) + 1);
+      if (wt === 1 && w.length >= 8 && idf >= 3.5) strong.add(r.node);
+      else if (wt === 1 && r.kind === 'code' && r.label.toLowerCase() === w && /^[A-Z]/.test(r.label) && w.length >= 5 && idf >= 3.2) strong.add(r.node); // the question names a class exactly (Ticket): one word is enough
+    }
+  }
+  const seeds = new Map();
+  for (const [id, s] of score) {
+    const [kind, nkw, deg] = kindOf.get(id);
+    if (kind === 'code' && deg > SEED_HUB) continue;
+    if (!((hit.get(id) >= 2 && s >= MIN_SCORE) || strong.has(id))) continue;
+    seeds.set(id, { kind, s: s / WORD_SCALE / Math.sqrt(Math.max(nkw, 8) / 8) });
+  }
+  Object.assign(S, { score, kindOf, hscore, simOf, hsimOf, dfq, seeds });
+}
+
+// search() step 2: seeds by meaning, heading meaning and the question index.
+function seedByMeaning(S) {
+  const { db, project, opts, home, seeds, simOf, hsimOf } = S;
+  // 2. seeds by meaning: doc chunks that are close in meaning to the prompt
+  if (opts.pv) {
+    const floor = opts.simFloor ?? SIM_FLOOR, span = opts.simSpan ?? SIM_SPAN, simGate = opts.simGate ?? SIM_GATE;   // opts only for experiments with other models (see eval-model.js)
+    for (const r of db.prepare('SELECT node, v FROM vec WHERE project = ?').all(project)) {
+      const v = f32(r.v);
+      if (v.length !== opts.pv.length) break;
+      let sim = 0; for (let i = 0; i < v.length; i++) sim += v[i] * opts.pv[i];
+      simOf.set(r.node, sim);
+      if (sim < simGate && !seeds.has(r.node)) continue;
+      const s = Math.min(Math.max((sim - floor) / span, 0), 1);
+      if (s > 0) { const o = seeds.get(r.node) || { kind: 'doc', s: 0 }; o.s += s; seeds.set(r.node, o); }
+    }
+  }
+  // 2b. a question that closely matches a section title is enough on its own (unrelated questions never come close: the highest measured was 0.47)
+  if (opts.pv && !isFallback(project)) {   // not for the general docs: reading every heading number of 85,000 chunks costs a second; their candidates get their heading number further down
+    try {
+      const rescue = Math.max(0, ...[...seeds.values()].map((o) => o.s)) < (opts.gate ?? GATE);   // only when the gate would say no: otherwise these seeds would only disturb a good ranking
+      for (const r of db.prepare('SELECT node, v FROM vech WHERE project = ?').all(project)) {
+        const v = f32(r.v); if (v.length !== opts.pv.length) break;
+        let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
+        hsimOf.set(r.node, s);
+        if (rescue && s >= (opts.headGate ?? HEAD_GATE)) { const o = seeds.get(r.node) || { kind: 'doc', s: 0 }; o.s += Math.min(1, (s - SIM_FLOOR) / SIM_SPAN); seeds.set(r.node, o); }
+      }
+    } catch { /* a map without heading numbers */ }
+  }
+  // 2c. the question index (dq.js): the best-matching of the few questions written for each section (a map without the index works as before)
+  const qsimOf = new Map();
+  S.qsimOf = qsimOf;
+  if (opts.pv && !opts.noDq) {   // only a project with a built index (dq.<project>.bin) gets it
+    try {
+      const Q = require('./dq.js').load(home, project);
+      if (Q && Q.dim === opts.pv.length) {
+        const idOfKey = new Map(db.prepare("SELECT id, key FROM nodes WHERE kind = 'doc' AND project = ?").all(project).map((r) => [r.key, r.id]));
+        for (let i = 0; i < Q.keys.length; i++) {
+          const id = idOfKey.get(Q.keys[i]); if (!id) continue;
+          let s = 0; const o = i * Q.dim; for (let j = 0; j < Q.dim; j++) s += Q.vecs[o + j] * opts.pv[j];
+          if (s > (qsimOf.get(id) ?? -1)) qsimOf.set(id, s);
+        }
+        const rescue = Math.max(0, ...[...seeds.values()].map((o) => o.s)) < (opts.gate ?? GATE);
+        if (rescue) for (const [id, s] of qsimOf) if (s >= (opts.qGate ?? Q_GATE)) { const o = seeds.get(id) || { kind: 'doc', s: 0 }; o.s += Math.min(1, (s - SIM_FLOOR) / SIM_SPAN); seeds.set(id, o); }
+      }
+    } catch { /* no question index */ }
+  }
+}
+
+// search() step 3: the gate, act and seedKeys. Returns giveUp() (null) to stop the search.
+function gateAndNormalize(S) {
+  const { db, opts, trace, seeds, giveUp } = S;
+  if (!seeds.size) return giveUp('no-seeds');
+  // the best seed must be clearly matched, or the prompt is not about this system
+  const best = Math.max(0, ...[...seeds.values()].map((o) => o.s));
+  if (trace) { trace.best = best; trace.gate = opts.gate ?? GATE; }
+  if (best < (opts.gate ?? GATE)) return giveUp('below-gate');     // the owner's eval (private, ~160 questions): project questions score 0.55 to over 2, unrelated ones 0 to 0.7; a missing map costs more than an extra one
+  const act = new Map();
+  for (const kind of ['doc', 'code']) {
+    const t = [...seeds].filter(([, o]) => o.kind === kind).sort((a, b) => b[1].s - a[1].s).slice(0, kind === 'doc' ? SEED_DOCS : SEED_CODE);
+    const max = t.length ? t[0][1].s : 1;
+    for (const [id, o] of t) act.set(id, o.s / max);
+  }
+  const nSeeds = act.size;
+  // what to remember for learning: this prompt's strongest seeds, by stable key
+  const now = opts.now ?? Date.now(), keyOf = db.prepare('SELECT key FROM nodes WHERE id = ?');
+  const seedKeys = [...act].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, a]) => [keyOf.get(id).key, Math.round(a * 100) / 100]);
+  S.best = best; S.act = act; S.nSeeds = nSeeds; S.now = now; S.seedKeys = seedKeys;
+}
+
+// search() step 4: learned links, both directions.
+function loadLearned(S) {
+  const { db, project, opts, now } = S;
+  // learned links, both directions, already faded by age; they only help to spread, never to start a search
+  const learned = new Map();
+  if (opts.learn !== false) {
+    try {
+      const add = (a, b, w) => (learned.get(a) || learned.set(a, []).get(a)).push([b, w]);
+      const hasProject = db.prepare('PRAGMA table_info(learn)').all().some((c) => c.name === 'project');   // an old map file has no tag yet: all its rows belong to the legacy project
+      const sql = 'SELECT a.id AS a, b.id AS b, l.w AS w, l.t AS t FROM learn l CROSS JOIN nodes a ON a.key = l.ka AND a.project = ? CROSS JOIN nodes b ON b.key = l.kb AND b.project = ? WHERE l.n >= ?' + (hasProject ? ' AND l.project = ?' : '');
+      for (const r of db.prepare(sql).all(project, project, LEARN_MIN_N, ...(hasProject ? [project] : []))) { // one stray file open is a coincidence, not yet a habit
+        const w = effective(r.w, r.t, now);
+        if (w >= LEARN_PRUNE) { add(r.a, r.b, w); add(r.b, r.a, w); }
+      }
+    } catch { /* a map from before learning existed: no learned links */ }
+  }
+  S.learned = learned;
+}
+
+// search() step 5: spreading in a few rounds (act is changed in place).
+function spread(S) {
+  const { db, act, learned } = S;
+  // 3. spreading: a few steps; hubs receive little and do not pass it on; each step keeps only the strongest neurons
+  const degOf = db.prepare('SELECT deg FROM nodes WHERE id = ?'), out = db.prepare('SELECT b, w FROM edges WHERE a = ?');
+  const degCache = new Map();
+  const dg = (id) => { if (!degCache.has(id)) degCache.set(id, degOf.get(id)?.deg ?? 0); return degCache.get(id); };
+  const learnedIn = new Map();
+  for (let r = 0; r < ROUNDS; r++) {
+    const front = [...act].filter(([id]) => dg(id) <= HUB).sort((a, b) => b[1] - a[1]).slice(0, FRONTIER);
+    const inflow = new Map(), viaLearned = new Map();
+    for (const [u, au] of front) {
+      for (const e of out.all(u)) inflow.set(e.b, (inflow.get(e.b) || 0) + au * e.w * DECAY / Math.sqrt(1 + dg(e.b)));
+      for (const [b, w] of learned.get(u) || []) viaLearned.set(b, (viaLearned.get(b) || 0) + au * w * LEARN_GAIN / Math.sqrt(1 + dg(b)));
+    }
+    // learned light is capped per neuron (45% of the strongest unlearned activation): many seeds pointing at one learned file must never outshine what words and meaning found
+    let topFree = 0;                                   // the strongest activation that did not come from learning
+    for (const [id, a] of act) topFree = Math.max(topFree, a - (learnedIn.get(id) || 0));
+    for (const [b, f] of viaLearned) {
+      const room = LEARN_CAP * topFree - (learnedIn.get(b) || 0), add = Math.min(f, room);
+      if (add > 0) { learnedIn.set(b, (learnedIn.get(b) || 0) + add); inflow.set(b, (inflow.get(b) || 0) + add); }
+    }
+    for (const [id, f] of inflow) act.set(id, (act.get(id) || 0) + f);
+    if (act.size > FRONTIER * 4) { const keep = [...act].sort((a, b) => b[1] - a[1]).slice(0, FRONTIER * 4); act.clear(); for (const [id, a] of keep) act.set(id, a); }
+  }
+}
+
+// search() step 6: first lists of docs and code.
+function pickResults(S) {
+  const { db, act, opts } = S;
+  // 4. read the strongest neurons of each layer
+  const info = db.prepare('SELECT * FROM nodes WHERE id = ?');
+  const ranked = [...act].sort((a, b) => b[1] - a[1]);
+  // code: one type per file first (a class, interface or record), methods and file nodes only when too few types fire
+  let docs = [], seen = new Map(), types = [], extra = [], files = new Set();
+  const shown = new Set();
+  for (const [id, a] of ranked) {
+    const n = info.get(id); if (!n) continue;
+    if (n.kind === 'doc') {
+      if (docs.length >= MAX_DOCS || (seen.get(n.file) || 0) >= 2 || (docs.length && a < docs[0].a * 0.3)) continue;
+      seen.set(n.file, (seen.get(n.file) || 0) + 1); docs.push({ a, n });
+    } else {
+      if (n.deg > HUB || !n.file || n.label.length < 4 || GENERIC.has(n.label) || shown.has(n.label)) continue; // framework names say nothing; one result per name (the graph keeps a stub node per referencing file)
+      shown.add(n.label);
+      const isFile = n.label.toLowerCase() === path.basename(n.file).toLowerCase(), isMethod = n.label.startsWith('.');
+      if (isFile || isMethod) { if (extra.length < MAX_CODE) extra.push({ a, n }); continue; }
+      if (files.has(n.file) || types.length >= MAX_CODE || (types.length && a < types[0].a * 0.3)) continue;
+      files.add(n.file); types.push({ a, n });
+    }
+  }
+  // padding with file and method nodes keeps the same 0.3 cut as the types (a weak padding line is noise)
+  const padCut = opts.padCut === false || !types.length ? 0 : types[0].a * 0.3;
+  let code = types.length >= 3 ? types : types.concat(extra.filter((e) => !files.has(e.n.file) && e.a >= padCut).slice(0, 3 - types.length));
+  S.info = info; S.ranked = ranked; S.docs = docs; S.code = code;
+}
+
+// search() step 7: code-name pass and class-name meaning.
+function addNamedCode(S) {
+  const { db, project, text, opts, N, info } = S;
+  let code = S.code;
+  // code-name pass: a type whose name families cover (nearly) every known word of the question. It only adds to the code list; it never starts or feeds the spreading above.
+  {
+    const fam = [...families(text, CODE_FILLER)], idf2 = new Map(), nCode = N.code;
+    const d2 = db.prepare('SELECT n FROM df2 WHERE word = ? AND project = ?');
+    for (const f of fam) { const r = d2.get(f, project); if (r) idf2.set(f, Math.log(1 + nCode / r.n)); }
+    const total = [...idf2.values()].reduce((s, v) => s + v, 0);
+    if (idf2.size >= 2 && total > 0) {
+      const per = new Map(), post2 = db.prepare('SELECT k.node AS node, n.label AS label, n.file AS file, n.deg AS deg, n.nkw AS nkw FROM kw2 k JOIN nodes n ON n.id = k.node WHERE k.word = ? AND k.project = ?');
+      for (const [f, idf] of idf2) for (const r of post2.all(f, project)) { const o = per.get(r.node) || per.set(r.node, { r, n: 0, s: 0 }).get(r.node); o.n++; o.s += idf; }
+      const pickF = new Set(), extraCode = [];
+      const named = [...per.values()].filter((o) => o.n >= 2 && o.s / total >= 0.6 && o.r.file && o.r.deg <= SEED_HUB && o.r.label.length >= 4 && !GENERIC.has(o.r.label) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(o.r.label) && o.r.label.toLowerCase() !== path.basename(o.r.file).toLowerCase())
+        .sort((a, b) => (b.s / total) - (a.s / total) || b.s / Math.sqrt(b.r.nkw) - a.s / Math.sqrt(a.r.nkw));
+      for (const o of named) {
+        if (pickF.has(o.r.file) || extraCode.some((e) => e.n.label === o.r.label)) continue;
+        if (extraCode.length >= 3) break;
+        pickF.add(o.r.file);
+        const old = code.find((c) => c.n.id === o.r.node || (c.n.label === o.r.label && c.n.file === o.r.file));
+        const n = old ? old.n : info.get(Number(o.r.node));
+        if (n) extraCode.push({ a: old ? old.a : 0, n });   // a result the search already had keeps its place at the front; it is moved up, not dropped
+      }
+      const front = new Set(extraCode.map((e) => e.n.id));
+      code = [...extraCode, ...code.filter((c) => !front.has(c.n.id))].slice(0, MAX_CODE);
+    }
+    // meaning of class names: names read as words that are close to the question (only the one or two clearly closest)
+    if (opts.pv) {
+      const T = opts.codeSim ?? CODE_SIM, near = [];
+      try {
+        for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
+          const v = f32(r.v); if (v.length !== opts.pv.length) break;
+          let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
+          if (s >= T) near.push([r.label, s]);
+        }
+      } catch { /* a map without class-name numbers */ }
+      near.sort((a, b) => b[1] - a[1]);
+      const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg DESC LIMIT 1");
+      const add = [];
+      for (const [label, s] of near.slice(0, 2)) {
+        if (s < near[0][1] - 0.05) continue;
+        const row = byLabel.get(label, project), n = row && info.get(row.id);
+        if (n && n.deg <= SEED_HUB) add.push({ a: s, n });
+      }
+      if (add.length) { const front2 = new Set(add.map((e) => e.n.id)); const keep = code.filter((c) => !front2.has(c.n.id)); code = [...keep.slice(0, 1), ...add, ...keep.slice(1)].slice(0, MAX_CODE); }
+    }
+  }
+  S.code = code;
+}
+
+// search() step 8: trained doc ranking; stops when nothing was found.
+function rankDocRows(S) {
+  const { db, project, opts, text, N, qw, info, ranked, act, score, kindOf, hscore, simOf, hsimOf, qsimOf, dfq, giveUp } = S;
+  // doc ranking: a few signals per candidate section, combined with weights learned from written-down questions (rank.json, made by train-rank.js)
+  S.why = null;   // why: the candidates in rank order (only for opts.why, see eval-map.js --why)
+  const W = opts.rankW === undefined ? loadRank(project) : opts.rankW;
+  if (opts.pv && (W || opts.feat)) {
+    try {
+      const isDoc = (id) => (info.get(id) || {}).kind === 'doc';
+      const topIds = (m, k, f = (x) => x) => [...m].sort((a, b) => f(b[1]) - f(a[1])).slice(0, k).map(([id]) => id);
+      const wOnly = new Map(); for (const [id, s] of score) if ((kindOf.get(id) || [])[0] === 'doc') wOnly.set(id, s - (hscore.get(id) || 0));
+      const pool = new Set([...ranked.filter(([id]) => isDoc(id)).slice(0, 40).map(([id]) => id), ...topIds(wOnly, 15), ...topIds(simOf, 15), ...topIds(hsimOf, 10), ...topIds(qsimOf, 15)]);
+      if (isFallback(project)) {   // heading meaning for the candidates only
+        const one = db.prepare('SELECT v FROM vech WHERE node = ?');
+        for (const id of pool) { const r = one.get(id); if (r) { const v = f32(r.v); let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i]; hsimOf.set(id, s); } }
+      }
+      const plain = [...qw].filter(([w, wt]) => w[0] !== '#' && wt === 1).map(([w]) => w), idfD = new Map();
+      for (const w of plain) { const r = dfq.all(w, project).find((x) => x.kind === 'doc'); if (r) idfD.set(w, Math.log(1 + N.doc / r.n)); }
+      const total = [...idfD.values()].reduce((s, v) => s + v, 0) || 1;
+      const kwOf = db.prepare('SELECT word FROM kw WHERE node = ?'), fileOf = db.prepare("SELECT MIN(id) AS m, COUNT(*) AS c FROM nodes WHERE file = ? AND kind = 'doc' AND project = ?"), fcache = new Map();
+      const metaQ = [...families(text)].some((f) => META_Q.has(f));   // the question is about problems, drift or gaps: the findings and backlog docs are the place
+      const rows = [...pool].map((id) => {
+        const n = info.get(id), ws = new Set(kwOf.all(id).map((r) => r.word));
+        let cov = 0, hcov = 0, mc = 0; for (const [w, idf] of idfD) { if (ws.has(w)) { cov += idf; mc++; } if (ws.has('#' + w)) hcov += idf; }
+        const fi = fcache.get(n.file) || fcache.set(n.file, fileOf.get(n.file, project)).get(n.file);
+        const meta = /\/(10-findings|19-known-unfixed-bugs|20-improvement-suggestions|09-repo-metrics)\.md$/.test(n.file) ? 1 : 0, nonDev = /for-non-dev\//.test(n.file) || /\/README\.md$/.test(n.file) ? 1 : 0;
+        return { id, n, f: [act.get(id) || 0, wOnly.get(id) || 0, hscore.get(id) || 0, (simOf.get(id) ?? 0.3) - 0.3, (hsimOf.get(id) ?? 0.3) - 0.3, cov / total, hcov / total, Math.log(1 + fi.c) / 5, id === fi.m ? 1 : 0, (n.section || '').split(' > ').length / 4, 0, 0, 0, meta, nonDev, 0, mc / Math.sqrt(Math.max(ws.size, 4)) * 3, 0, 0, metaQ && meta ? 1 : 0, (coreDoc(project)?.test(n.file) ? 1 : 0), (qsimOf.get(id) ?? 0.3) - 0.3, 0] };
+      });
+      const mx = [0, 1, 2].map((k) => Math.max(1e-9, ...rows.map((r) => r.f[k])));
+      for (const r of rows) for (const k of [0, 1, 2]) r.f[k] /= mx[k];
+      const top = (k) => Math.max(...rows.map((r) => r.f[k])), tS = top(3), tH = top(4), tC = top(5), secMax = new Map();
+      for (const r of rows) { const key = r.n.file + '::' + r.n.section; secMax.set(key, Math.max(secMax.get(key) ?? -1, r.f[3])); }
+      const fileSim = new Map(), fileWord = new Map();   // file-level evidence: the best meaning and the total word score of the file's candidate chunks
+      for (const r of rows) { fileSim.set(r.n.file, Math.max(fileSim.get(r.n.file) ?? -1, r.f[3])); fileWord.set(r.n.file, (fileWord.get(r.n.file) || 0) + r.f[1]); }
+      const fwMax = Math.max(1e-9, ...fileWord.values()), fsMax = Math.max(...fileSim.values());
+      for (const r of rows) { r.f[17] = fileSim.get(r.n.file) - fsMax; r.f[18] = fileWord.get(r.n.file) / fwMax; }
+      const tQ = Math.max(...rows.map((r) => r.f[21])); for (const r of rows) r.f[22] = r.f[21] - tQ;   // question meaning vs the best
+      for (const r of rows) { r.f[10] = r.f[3] - tS; r.f[11] = r.f[4] - tH; r.f[12] = r.f[5] - tC; r.f[15] = secMax.get(r.n.file + '::' + r.n.section); }
+      if (opts.feat) S.feat = rows.map((r) => ({ n: r.n, f: r.f }));
+      if (W) {
+        const picked = rankDocs(rows, W).map((r) => ({ a: r.z, n: r.n }));
+        if (picked.length) S.docs = picked;
+        if (opts.why) S.why = rows.map((r) => ({ r, z: r.f.reduce((s, v, i) => s + v * (W[i] || 0), 0) })).sort((a, b) => b.z - a.z).slice(0, 40).map(({ r }) => ({ file: r.n.file, sec: r.n.section || '' }));
+      }
+    } catch { /* keep the plain ranking */ }
+  }
+  if (!S.docs.length && !S.code.length) return giveUp('nothing-to-show');
+}
+
+// search() step 9: one-hop and two-hop code neighbours.
+function addNeighbours(S) {
+  const { db, info, code, project, opts } = S;
+  // One hop out from the top code hits: strong graph links only (calls/implements/inherits = 1, method = 0.7, defines = 0.6; see REL).
+  try {
+    const nb = db.prepare("SELECT n.label, n.file, n.loc, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
+    for (const c of code.slice(0, NB_CODE)) c.nb = nb.all(c.n.id, NB_PER);
+  } catch { /* neighbors are optional */ }
+  // Two hops out: code types that share the name stem of the top code hits, reached by two strong links (seeds, max and stem: see CHAIN_DEFAULT).
+  try {
+    const pc = (getProject(project) || {}).chain || {}, oc = opts.chain || {};   // a bad value falls back one level: opts -> the project's setting -> CHAIN_DEFAULT
+    const pick = (k, lo, hi) => chainNum(oc[k], chainNum(pc[k], CHAIN_DEFAULT[k], lo, hi), lo, hi);
+    const seeds = pick('seeds', 0, 10), max = pick('max', 0, 10), stemN = pick('stem', 1, 6);
+    const stemOf = (label) => { let p = label.match(/[A-Z][a-z0-9]*/g) || []; if (CHAIN_VERBS.has(p[0])) p = p.slice(1); return p.length >= stemN ? p.slice(0, stemN).join('') : null; };   // a leading verb is not the stem (SetIhmEventTask... -> IhmEventTask); fewer name parts = too generic, no chain
+    const twoHop = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND e1.w >= 0.6 AND e2.w >= 0.6 AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.id != ? AND n.label LIKE ? GROUP BY n.id ORDER BY MAX(e1.w + e2.w) DESC, n.deg DESC LIMIT 10");
+    const have = new Set(code.map((c) => c.n.id)), listed = new Set(code.flatMap((c) => (c.nb || []).map((x) => x.label + '|' + x.file)));
+    let added = 0;
+    for (const c of code.slice(0, seeds)) {
+      const stem = stemOf(c.n.label);
+      if (!stem) continue;
+      for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) {
+        if (added >= max) break;
+        const n = info.get(r.id);
+        if (!n || have.has(n.id) || listed.has(n.label + '|' + n.file) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) continue;
+        have.add(n.id); code.push({ a: 0, n, chain: true }); added++;
+      }
+    }
+  } catch { /* chain is optional */ }
+}
+
+// search() step 10: exact lines from the repo folder.
+function addExactLines(S) {
+  const { project, opts, code } = S;
+  // Exact lines: with the set's repo folder, each code name and its neighbours get the line on disk now (src/repo.js). Fails open: the graph's lines stay.
+  try {
+    const P = getProject(project) || {};
+    if (P.repo && fs.existsSync(P.repo) && !opts.noRepo) require('./repo.js').exactLines(P.repo, [...code, ...code.flatMap((c) => c.nb || [])], P.repoBase || '');
+  } catch { /* the graph's lines stay */ }
+}
+
 // Returns { docs, code, comms, commit, built } or null. `pv` is the prompt's meaning vector (optional).
 function search(home, text, opts = {}) {
   let db;
   const project = opts.project || defaultProject();
-  try { db = new (sqlite())(dbFile(home, project), { readOnly: true }); } catch { return null; }
+  const trace = opts.trace && typeof opts.trace === 'object' ? opts.trace : null, giveUp = (reason) => { if (trace) trace.reason = reason; return null; };   // opts.trace (a caller's object) gets why the search gave no map
+  if (trace) trace.best = 0;
+  try { db = new (sqlite())(dbFile(home), { readOnly: true }); } catch (e) { debug('search open', e); return giveUp('no-map-file'); }
   try {
     const meta = Object.fromEntries(db.prepare('SELECT k, v FROM meta WHERE project = ?').all(project).map((r) => [r.k, r.v]));
-    if (Number(meta.version) !== DB_VERSION) return null;
+    if (Number(meta.version) !== DB_VERSION) return giveUp('old-version');
     const q = words(text);
-    if (!q.size) return null;
+    if (!q.size) return giveUp('no-words');
     const qw = expand(q, opts.thesaurus || loadThesaurus().concat(mkSynonyms()));
     for (const [w, wt] of [...qw]) qw.set('#' + w, wt);            // every question word also looks at section headings
     const N = { doc: Number(meta.nDoc), code: Number(meta.nCode) };
-    // 1. seeds by words: every query word fires the neurons that hold it
-    const score = new Map(), hit = new Map(), strong = new Set(), kindOf = new Map(), hscore = new Map(), simOf = new Map(), hsimOf = new Map();
-    const dfq = db.prepare('SELECT kind, n FROM df WHERE word = ? AND project = ?'), post = db.prepare('SELECT k.node AS node, n.kind AS kind, n.nkw AS nkw, n.deg AS deg, n.label AS label FROM kw k JOIN nodes n ON n.id = k.node WHERE k.word = ? AND k.project = ?');
-    for (const [w, wt] of qw) {
-      const dfs = Object.fromEntries(dfq.all(w, project).map((r) => [r.kind, r.n]));
-      if (!Object.keys(dfs).length) continue;
-      for (const r of post.all(w, project)) {
-        const idf = Math.log(1 + N[r.kind] / (dfs[r.kind] || 1));
-        kindOf.set(r.node, [r.kind, r.nkw, r.deg]);
-        score.set(r.node, (score.get(r.node) || 0) + idf * wt);
-        if (w[0] === '#') { hscore.set(r.node, (hscore.get(r.node) || 0) + idf * wt); continue; }   // a heading hit only adds score: it is the same word again, so it is not a second word and never "strong"
-        hit.set(r.node, (hit.get(r.node) || 0) + 1);
-        if (wt === 1 && w.length >= 8 && idf >= 3.5) strong.add(r.node);
-        else if (wt === 1 && r.kind === 'code' && r.label.toLowerCase() === w && /^[A-Z]/.test(r.label) && w.length >= 5 && idf >= 3.2) strong.add(r.node); // the question names a class exactly (Ticket): one word is enough
-      }
-    }
-    const seeds = new Map();
-    for (const [id, s] of score) {
-      const [kind, nkw, deg] = kindOf.get(id);
-      if (kind === 'code' && deg > SEED_HUB) continue;
-      if (!((hit.get(id) >= 2 && s >= MIN_SCORE) || strong.has(id))) continue;
-      seeds.set(id, { kind, s: s / WORD_SCALE / Math.sqrt(Math.max(nkw, 8) / 8) });
-    }
-    // 2. seeds by meaning: doc chunks that are close in meaning to the prompt
-    if (opts.pv) {
-      const floor = opts.simFloor ?? SIM_FLOOR, span = opts.simSpan ?? SIM_SPAN, simGate = opts.simGate ?? SIM_GATE;   // opts only for experiments with other models (see eval-model.js)
-      for (const r of db.prepare('SELECT node, v FROM vec WHERE project = ?').all(project)) {
-        const v = f32(r.v);
-        if (v.length !== opts.pv.length) break;
-        let sim = 0; for (let i = 0; i < v.length; i++) sim += v[i] * opts.pv[i];
-        simOf.set(r.node, sim);
-        if (sim < simGate && !seeds.has(r.node)) continue;
-        const s = Math.min(Math.max((sim - floor) / span, 0), 1);
-        if (s > 0) { const o = seeds.get(r.node) || { kind: 'doc', s: 0 }; o.s += s; seeds.set(r.node, o); }
-      }
-    }
-    // 2b. a question that closely matches a section title is enough on its own (unrelated questions never come close: the highest measured was 0.47)
-    if (opts.pv && !isFallback(project)) {   // not for the general docs: reading every heading number of 85,000 chunks costs a second; their candidates get their heading number further down
-      try {
-        const rescue = Math.max(0, ...[...seeds.values()].map((o) => o.s)) < (opts.gate ?? GATE);   // only when the gate would say no: otherwise these seeds would only disturb a good ranking
-        for (const r of db.prepare('SELECT node, v FROM vech WHERE project = ?').all(project)) {
-          const v = f32(r.v); if (v.length !== opts.pv.length) break;
-          let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
-          hsimOf.set(r.node, s);
-          if (rescue && s >= (opts.headGate ?? HEAD_GATE)) { const o = seeds.get(r.node) || { kind: 'doc', s: 0 }; o.s += Math.min(1, (s - SIM_FLOOR) / SIM_SPAN); seeds.set(r.node, o); }
-        }
-      } catch { /* a map without heading numbers */ }
-    }
-    // 2c. the question index (dq.js): the best-matching of the few questions written for each section (a map without the index works as before)
-    const qsimOf = new Map();
-    if (opts.pv && !opts.noDq) {   // only a project with a built index (dq.<project>.bin) gets it
-      try {
-        const Q = require('./dq.js').load(home, project);
-        if (Q && Q.dim === opts.pv.length) {
-          const idOfKey = new Map(db.prepare("SELECT id, key FROM nodes WHERE kind = 'doc' AND project = ?").all(project).map((r) => [r.key, r.id]));
-          for (let i = 0; i < Q.keys.length; i++) {
-            const id = idOfKey.get(Q.keys[i]); if (!id) continue;
-            let s = 0; const o = i * Q.dim; for (let j = 0; j < Q.dim; j++) s += Q.vecs[o + j] * opts.pv[j];
-            if (s > (qsimOf.get(id) ?? -1)) qsimOf.set(id, s);
-          }
-          const rescue = Math.max(0, ...[...seeds.values()].map((o) => o.s)) < (opts.gate ?? GATE);
-          if (rescue) for (const [id, s] of qsimOf) if (s >= (opts.qGate ?? Q_GATE)) { const o = seeds.get(id) || { kind: 'doc', s: 0 }; o.s += Math.min(1, (s - SIM_FLOOR) / SIM_SPAN); seeds.set(id, o); }
-        }
-      } catch { /* no question index */ }
-    }
-    if (!seeds.size) return null;
-    // the best seed must be clearly matched, or the prompt is not about this system
-    const best = Math.max(0, ...[...seeds.values()].map((o) => o.s));
-    if (best < (opts.gate ?? GATE)) return null;     // the owner's eval (private, ~160 questions): project questions score 0.55 to over 2, unrelated ones 0 to 0.7; a missing map costs more than an extra one
-    const act = new Map();
-    for (const kind of ['doc', 'code']) {
-      const t = [...seeds].filter(([, o]) => o.kind === kind).sort((a, b) => b[1].s - a[1].s).slice(0, kind === 'doc' ? SEED_DOCS : SEED_CODE);
-      const max = t.length ? t[0][1].s : 1;
-      for (const [id, o] of t) act.set(id, o.s / max);
-    }
-    const nSeeds = act.size;
-    // what to remember for learning: this prompt's strongest seeds, by stable key
-    const now = opts.now ?? Date.now(), keyOf = db.prepare('SELECT key FROM nodes WHERE id = ?');
-    const seedKeys = [...act].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, a]) => [keyOf.get(id).key, Math.round(a * 100) / 100]);
-    // learned links, both directions, already faded by age; they only help to spread, never to start a search
-    const learned = new Map();
-    if (opts.learn !== false) {
-      try {
-        const add = (a, b, w) => (learned.get(a) || learned.set(a, []).get(a)).push([b, w]);
-        const hasProject = db.prepare('PRAGMA table_info(learn)').all().some((c) => c.name === 'project');   // an old map file has no tag yet: all its rows belong to the legacy project
-        const sql = 'SELECT a.id AS a, b.id AS b, l.w AS w, l.t AS t FROM learn l CROSS JOIN nodes a ON a.key = l.ka AND a.project = ? CROSS JOIN nodes b ON b.key = l.kb AND b.project = ? WHERE l.n >= ?' + (hasProject ? ' AND l.project = ?' : '');
-        for (const r of db.prepare(sql).all(project, project, LEARN_MIN_N, ...(hasProject ? [project] : []))) { // one stray file open is a coincidence, not yet a habit
-          const w = effective(r.w, r.t, now);
-          if (w >= LEARN_PRUNE) { add(r.a, r.b, w); add(r.b, r.a, w); }
-        }
-      } catch { /* a map from before learning existed: no learned links */ }
-    }
-    // 3. spreading: a few steps; hubs receive little and do not pass it on; each step keeps only the strongest neurons
-    const degOf = db.prepare('SELECT deg FROM nodes WHERE id = ?'), out = db.prepare('SELECT b, w FROM edges WHERE a = ?');
-    const degCache = new Map();
-    const dg = (id) => { if (!degCache.has(id)) degCache.set(id, degOf.get(id)?.deg ?? 0); return degCache.get(id); };
-    const learnedIn = new Map();
-    for (let r = 0; r < ROUNDS; r++) {
-      const front = [...act].filter(([id]) => dg(id) <= HUB).sort((a, b) => b[1] - a[1]).slice(0, FRONTIER);
-      const inflow = new Map(), viaLearned = new Map();
-      for (const [u, au] of front) {
-        for (const e of out.all(u)) inflow.set(e.b, (inflow.get(e.b) || 0) + au * e.w * DECAY / Math.sqrt(1 + dg(e.b)));
-        for (const [b, w] of learned.get(u) || []) viaLearned.set(b, (viaLearned.get(b) || 0) + au * w * LEARN_GAIN / Math.sqrt(1 + dg(b)));
-      }
-      // learned light is capped per neuron (45% of the strongest unlearned activation): many seeds pointing at one learned file must never outshine what words and meaning found
-      let topFree = 0;                                   // the strongest activation that did not come from learning
-      for (const [id, a] of act) topFree = Math.max(topFree, a - (learnedIn.get(id) || 0));
-      for (const [b, f] of viaLearned) {
-        const room = LEARN_CAP * topFree - (learnedIn.get(b) || 0), add = Math.min(f, room);
-        if (add > 0) { learnedIn.set(b, (learnedIn.get(b) || 0) + add); inflow.set(b, (inflow.get(b) || 0) + add); }
-      }
-      for (const [id, f] of inflow) act.set(id, (act.get(id) || 0) + f);
-      if (act.size > FRONTIER * 4) { const keep = [...act].sort((a, b) => b[1] - a[1]).slice(0, FRONTIER * 4); act.clear(); for (const [id, a] of keep) act.set(id, a); }
-    }
-    // 4. read the strongest neurons of each layer
-    const info = db.prepare('SELECT * FROM nodes WHERE id = ?');
-    const ranked = [...act].sort((a, b) => b[1] - a[1]);
-    // code: one type per file first (a class, interface or record), methods and file nodes only when too few types fire
-    let docs = [], seen = new Map(), types = [], extra = [], files = new Set();
-    const shown = new Set();
-    for (const [id, a] of ranked) {
-      const n = info.get(id); if (!n) continue;
-      if (n.kind === 'doc') {
-        if (docs.length >= MAX_DOCS || (seen.get(n.file) || 0) >= 2 || (docs.length && a < docs[0].a * 0.3)) continue;
-        seen.set(n.file, (seen.get(n.file) || 0) + 1); docs.push({ a, n });
-      } else {
-        if (n.deg > HUB || !n.file || n.label.length < 4 || GENERIC.has(n.label) || shown.has(n.label)) continue; // framework names say nothing; one result per name (the graph keeps a stub node per referencing file)
-        shown.add(n.label);
-        const isFile = n.label.toLowerCase() === path.basename(n.file).toLowerCase(), isMethod = n.label.startsWith('.');
-        if (isFile || isMethod) { if (extra.length < MAX_CODE) extra.push({ a, n }); continue; }
-        if (files.has(n.file) || types.length >= MAX_CODE || (types.length && a < types[0].a * 0.3)) continue;
-        files.add(n.file); types.push({ a, n });
-      }
-    }
-    // padding with file and method nodes keeps the same 0.3 cut as the types (a weak padding line is noise)
-    const padCut = opts.padCut === false || !types.length ? 0 : types[0].a * 0.3;
-    let code = types.length >= 3 ? types : types.concat(extra.filter((e) => !files.has(e.n.file) && e.a >= padCut).slice(0, 3 - types.length));
-    // code-name pass: a type whose name families cover (nearly) every known word of the question. It only adds to the code list; it never starts or feeds the spreading above.
-    {
-      const fam = [...families(text, CODE_FILLER)], idf2 = new Map(), nCode = N.code;
-      const d2 = db.prepare('SELECT n FROM df2 WHERE word = ? AND project = ?');
-      for (const f of fam) { const r = d2.get(f, project); if (r) idf2.set(f, Math.log(1 + nCode / r.n)); }
-      const total = [...idf2.values()].reduce((s, v) => s + v, 0);
-      if (idf2.size >= 2 && total > 0) {
-        const per = new Map(), post2 = db.prepare('SELECT k.node AS node, n.label AS label, n.file AS file, n.deg AS deg, n.nkw AS nkw FROM kw2 k JOIN nodes n ON n.id = k.node WHERE k.word = ? AND k.project = ?');
-        for (const [f, idf] of idf2) for (const r of post2.all(f, project)) { const o = per.get(r.node) || per.set(r.node, { r, n: 0, s: 0 }).get(r.node); o.n++; o.s += idf; }
-        const pickF = new Set(), extraCode = [];
-        const named = [...per.values()].filter((o) => o.n >= 2 && o.s / total >= 0.6 && o.r.file && o.r.deg <= SEED_HUB && o.r.label.length >= 4 && !GENERIC.has(o.r.label) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(o.r.label) && o.r.label.toLowerCase() !== path.basename(o.r.file).toLowerCase())
-          .sort((a, b) => (b.s / total) - (a.s / total) || b.s / Math.sqrt(b.r.nkw) - a.s / Math.sqrt(a.r.nkw));
-        for (const o of named) {
-          if (pickF.has(o.r.file) || extraCode.some((e) => e.n.label === o.r.label)) continue;
-          if (extraCode.length >= 3) break;
-          pickF.add(o.r.file);
-          const old = code.find((c) => c.n.id === o.r.node || (c.n.label === o.r.label && c.n.file === o.r.file));
-          const n = old ? old.n : info.get(Number(o.r.node));
-          if (n) extraCode.push({ a: old ? old.a : 0, n });   // a result the search already had keeps its place at the front; it is moved up, not dropped
-        }
-        const front = new Set(extraCode.map((e) => e.n.id));
-        code = [...extraCode, ...code.filter((c) => !front.has(c.n.id))].slice(0, MAX_CODE);
-      }
-      // meaning of class names: names read as words that are close to the question (only the one or two clearly closest)
-      if (opts.pv) {
-        const T = opts.codeSim ?? CODE_SIM, near = [];
-        try {
-          for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
-            const v = f32(r.v); if (v.length !== opts.pv.length) break;
-            let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
-            if (s >= T) near.push([r.label, s]);
-          }
-        } catch { /* a map without class-name numbers */ }
-        near.sort((a, b) => b[1] - a[1]);
-        const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg DESC LIMIT 1");
-        const add = [];
-        for (const [label, s] of near.slice(0, 2)) {
-          if (s < near[0][1] - 0.05) continue;
-          const row = byLabel.get(label, project), n = row && info.get(row.id);
-          if (n && n.deg <= SEED_HUB) add.push({ a: s, n });
-        }
-        if (add.length) { const front2 = new Set(add.map((e) => e.n.id)); const keep = code.filter((c) => !front2.has(c.n.id)); code = [...keep.slice(0, 1), ...add, ...keep.slice(1)].slice(0, MAX_CODE); }
-      }
-    }
-    // doc ranking: a few signals per candidate section, combined with weights learned from written-down questions (rank.json, made by train-rank.js)
-    let feat, why = null;   // why: the candidates in rank order (only for opts.why, see eval-map.js --why)
-    const W = opts.rankW === undefined ? loadRank(project) : opts.rankW;
-    if (opts.pv && (W || opts.feat)) {
-      try {
-        const isDoc = (id) => (info.get(id) || {}).kind === 'doc';
-        const topIds = (m, k, f = (x) => x) => [...m].sort((a, b) => f(b[1]) - f(a[1])).slice(0, k).map(([id]) => id);
-        const wOnly = new Map(); for (const [id, s] of score) if ((kindOf.get(id) || [])[0] === 'doc') wOnly.set(id, s - (hscore.get(id) || 0));
-        const pool = new Set([...ranked.filter(([id]) => isDoc(id)).slice(0, 40).map(([id]) => id), ...topIds(wOnly, 15), ...topIds(simOf, 15), ...topIds(hsimOf, 10), ...topIds(qsimOf, 15)]);
-        if (isFallback(project)) {   // heading meaning for the candidates only
-          const one = db.prepare('SELECT v FROM vech WHERE node = ?');
-          for (const id of pool) { const r = one.get(id); if (r) { const v = f32(r.v); let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i]; hsimOf.set(id, s); } }
-        }
-        const plain = [...qw].filter(([w, wt]) => w[0] !== '#' && wt === 1).map(([w]) => w), idfD = new Map();
-        for (const w of plain) { const r = dfq.all(w, project).find((x) => x.kind === 'doc'); if (r) idfD.set(w, Math.log(1 + N.doc / r.n)); }
-        const total = [...idfD.values()].reduce((s, v) => s + v, 0) || 1;
-        const kwOf = db.prepare('SELECT word FROM kw WHERE node = ?'), fileOf = db.prepare("SELECT MIN(id) AS m, COUNT(*) AS c FROM nodes WHERE file = ? AND kind = 'doc' AND project = ?"), fcache = new Map();
-        const metaQ = [...families(text)].some((f) => META_Q.has(f));   // the question is about problems, drift or gaps: the findings and backlog docs are the place
-        const rows = [...pool].map((id) => {
-          const n = info.get(id), ws = new Set(kwOf.all(id).map((r) => r.word));
-          let cov = 0, hcov = 0, mc = 0; for (const [w, idf] of idfD) { if (ws.has(w)) { cov += idf; mc++; } if (ws.has('#' + w)) hcov += idf; }
-          const fi = fcache.get(n.file) || fcache.set(n.file, fileOf.get(n.file, project)).get(n.file);
-          const meta = /\/(10-findings|19-known-unfixed-bugs|20-improvement-suggestions|09-repo-metrics)\.md$/.test(n.file) ? 1 : 0, nonDev = /for-non-dev\//.test(n.file) || /\/README\.md$/.test(n.file) ? 1 : 0;
-          return { id, n, f: [act.get(id) || 0, wOnly.get(id) || 0, hscore.get(id) || 0, (simOf.get(id) ?? 0.3) - 0.3, (hsimOf.get(id) ?? 0.3) - 0.3, cov / total, hcov / total, Math.log(1 + fi.c) / 5, id === fi.m ? 1 : 0, (n.section || '').split(' > ').length / 4, 0, 0, 0, meta, nonDev, 0, mc / Math.sqrt(Math.max(ws.size, 4)) * 3, 0, 0, metaQ && meta ? 1 : 0, (coreDoc(project)?.test(n.file) ? 1 : 0), (qsimOf.get(id) ?? 0.3) - 0.3, 0] };
-        });
-        const mx = [0, 1, 2].map((k) => Math.max(1e-9, ...rows.map((r) => r.f[k])));
-        for (const r of rows) for (const k of [0, 1, 2]) r.f[k] /= mx[k];
-        const top = (k) => Math.max(...rows.map((r) => r.f[k])), tS = top(3), tH = top(4), tC = top(5), secMax = new Map();
-        for (const r of rows) { const key = r.n.file + '::' + r.n.section; secMax.set(key, Math.max(secMax.get(key) ?? -1, r.f[3])); }
-        const fileSim = new Map(), fileWord = new Map();   // file-level evidence: the best meaning and the total word score of the file's candidate chunks
-        for (const r of rows) { fileSim.set(r.n.file, Math.max(fileSim.get(r.n.file) ?? -1, r.f[3])); fileWord.set(r.n.file, (fileWord.get(r.n.file) || 0) + r.f[1]); }
-        const fwMax = Math.max(1e-9, ...fileWord.values()), fsMax = Math.max(...fileSim.values());
-        for (const r of rows) { r.f[17] = fileSim.get(r.n.file) - fsMax; r.f[18] = fileWord.get(r.n.file) / fwMax; }
-        const tQ = Math.max(...rows.map((r) => r.f[21])); for (const r of rows) r.f[22] = r.f[21] - tQ;   // question meaning vs the best
-        for (const r of rows) { r.f[10] = r.f[3] - tS; r.f[11] = r.f[4] - tH; r.f[12] = r.f[5] - tC; r.f[15] = secMax.get(r.n.file + '::' + r.n.section); }
-        if (opts.feat) feat = rows.map((r) => ({ n: r.n, f: r.f }));
-        if (W) {
-          const picked = rankDocs(rows, W).map((r) => ({ a: r.z, n: r.n }));
-          if (picked.length) docs = picked;
-          if (opts.why) why = rows.map((r) => ({ r, z: r.f.reduce((s, v, i) => s + v * (W[i] || 0), 0) })).sort((a, b) => b.z - a.z).slice(0, 40).map(({ r }) => ({ file: r.n.file, sec: r.n.section || '' }));
-        }
-      } catch { /* keep the plain ranking */ }
-    }
-    if (!docs.length && !code.length) return null;
-    // One hop out from the top code hits: strong graph links only (calls/implements/inherits = 1, method = 0.7, defines = 0.6; see REL).
-    try {
-      const nb = db.prepare("SELECT n.label, n.file, n.loc, e.w FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND e.w >= 0.6 AND n.kind = 'code' ORDER BY e.w DESC, n.deg DESC LIMIT ?");
-      for (const c of code.slice(0, NB_CODE)) c.nb = nb.all(c.n.id, NB_PER);
-    } catch { /* neighbors are optional */ }
-    // Two hops out: code types that share the name stem of the top code hits, reached by two strong links (seeds, max and stem: see CHAIN_DEFAULT).
-    try {
-      const pc = (getProject(project) || {}).chain || {}, oc = opts.chain || {};   // a bad value falls back one level: opts -> the project's setting -> CHAIN_DEFAULT
-      const pick = (k, lo, hi) => chainNum(oc[k], chainNum(pc[k], CHAIN_DEFAULT[k], lo, hi), lo, hi);
-      const seeds = pick('seeds', 0, 10), max = pick('max', 0, 10), stemN = pick('stem', 1, 6);
-      const stemOf = (label) => { let p = label.match(/[A-Z][a-z0-9]*/g) || []; if (CHAIN_VERBS.has(p[0])) p = p.slice(1); return p.length >= stemN ? p.slice(0, stemN).join('') : null; };   // a leading verb is not the stem (SetIhmEventTask... -> IhmEventTask); fewer name parts = too generic, no chain
-      const twoHop = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND e1.w >= 0.6 AND e2.w >= 0.6 AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.id != ? AND n.label LIKE ? GROUP BY n.id ORDER BY MAX(e1.w + e2.w) DESC, n.deg DESC LIMIT 10");
-      const have = new Set(code.map((c) => c.n.id)), listed = new Set(code.flatMap((c) => (c.nb || []).map((x) => x.label + '|' + x.file)));
-      let added = 0;
-      for (const c of code.slice(0, seeds)) {
-        const stem = stemOf(c.n.label);
-        if (!stem) continue;
-        for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) {
-          if (added >= max) break;
-          const n = info.get(r.id);
-          if (!n || have.has(n.id) || listed.has(n.label + '|' + n.file) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) continue;
-          have.add(n.id); code.push({ a: 0, n, chain: true }); added++;
-        }
-      }
-    } catch { /* chain is optional */ }
-    // Exact lines: with the set's repo folder, each code name and its neighbours get the line on disk now (src/repo.js). Fails open: the graph's lines stay.
-    try {
-      const P = getProject(project) || {};
-      if (P.repo && fs.existsSync(P.repo) && !opts.noRepo) require('./repo.js').exactLines(P.repo, [...code, ...code.flatMap((c) => c.nb || [])], P.repoBase || '');
-    } catch { /* the graph's lines stay */ }
+    const S = { db, project, opts, trace, giveUp, home, text, qw, N, why: null };
+    seedByWords(S);
+    seedByMeaning(S);
+    if (gateAndNormalize(S) !== undefined) return null;   // giveUp() returns null: the search stops here
+    loadLearned(S);
+    spread(S);
+    pickResults(S);
+    addNamedCode(S);
+    if (rankDocRows(S) !== undefined) return null;   // the nothing-to-show stop
+    addNeighbours(S);
+    addExactLines(S);
+    const { docs, code, feat, why, ranked, info, best, nSeeds, seedKeys, learned } = S;
     // --why only: the candidate sections in rank order (the ranked list when no rank file is used)
     const cands = opts.why ? (why || ranked.filter(([id]) => info.get(id)?.kind === 'doc').slice(0, 40).map(([id]) => ({ file: info.get(id).file, sec: info.get(id).section || '' }))) : undefined;
+    if (trace) trace.reason = 'shown';
     return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands };
-  } catch { return null; } finally { try { db.close(); } catch { /* already closed */ } }
+  } catch (e) { debug('search', e); return giveUp('error'); } finally { try { db.close(); } catch { /* already closed */ } }
 }
 
 // Which project does a prompt belong to? Every main project is asked; score = best match + the project's routing prior (projects.json "prior"; the default project has one, because the other projects copy its layout and generic prompts match both)
@@ -839,28 +922,32 @@ function namedProjects(projects, lc) {
 }
 function searchAll(home, text, opts = {}) {
   const lc = String(text || '').toLowerCase(), cwd = String(opts.cwd || '').toLowerCase();
+  const outTrace = opts.trace && typeof opts.trace === 'object' ? opts.trace : null, record = (name, t) => { if (outTrace) (outTrace.sets ||= {})[name] = { reason: t.reason, best: t.best || 0, gate: t.gate ?? GATE }; };   // opts.trace: per doc set, why it gave no map (search() fills a fresh object for each set)
   const ps = loadProjects(), fb = ps.find((p) => p.fallback);
   let main = ps.filter((p) => !p.fallback);
   if (opts.pin && main.some((p) => p.name === opts.pin)) main = main.filter((p) => p.name === opts.pin);   // a session pinned with "gabriel use <name>" (src/pin.js): only that set
   const named = namedProjects(main, lc);
   const hits = [];
   for (const p of main) {   // file order; a tie keeps the earlier project
-    const r = search(home, text, { ...opts, project: p.name, learn: p.learn ? opts.learn : false });
+    const tr = outTrace ? {} : undefined, r = search(home, text, { ...opts, project: p.name, learn: p.learn ? opts.learn : false, trace: tr });
+    if (tr) record(p.name, tr);
     if (r) hits.push({ r, score: r.best + p.prior + (named.includes(p.name) ? ROUTE_NAMED : 0) + ([p.name, ...(p.cwdHints || [])].some((h) => cwd.includes(h.toLowerCase())) ? 0.3 : 0) });
   }
   hits.sort((a, b) => b.score - a.score);
   // Session gate: off-topic prompts (job tips, questions about this brain) scored 0.68-1.40 here while real unnamed questions have a median of 1.68
   // (2026-11-09 measurement). So a weak, unnamed match outside the repo folder shows a map only when this session already had one for that project.
   // Opt-in per project (projects.json "sessionGate": true). Off by default.
-  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) hits.length = 0;
+  if (hits[0] && (getProject(hits[0].r.project) || {}).sessionGate && !named.includes(hits[0].r.project) && !cwd.includes(hits[0].r.project) && hits[0].r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, hits[0].r.project)) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated = hits[0].r.project; } hits.length = 0; }
   const top = hits[0], also = [];
   if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
   // The fallback project (general docs): the answer when no project answers, and a short extra block when the project's own answer is weak and the general docs are clearly stronger.
   // A words-only look costs 0.3 s; the meaning scan of the fallback chunks about 1 s, so it only runs when the project is weak and the words already match something.
   if (fb && (!top || top.r.best < FALLBACK_IF_WEAKER_THAN)) {
-    const probe = search(home, text, { ...opts, pv: null, gate: 0, project: fb.name, learn: false });
+    const ptr = outTrace ? {} : undefined, probe = search(home, text, { ...opts, pv: null, gate: 0, project: fb.name, learn: false, trace: ptr });
+    if (ptr) record(fb.name, ptr);
     if (probe && probe.best >= (top ? FALLBACK_PROBE_WITH_PROJECT : FALLBACK_PROBE_ALONE)) {
-      const t = search(home, text, { ...opts, gate: FALLBACK_GATE, project: fb.name, learn: false });
+      const ttr = outTrace ? {} : undefined, t = search(home, text, { ...opts, gate: FALLBACK_GATE, project: fb.name, learn: false, trace: ttr });
+      if (ttr) record(fb.name, ttr);
       if (t && !top) { t.also = []; return t; }
       if (t && t.best >= top.r.best + FALLBACK_FIRST) { t.also = [top.r, ...also]; return t; }   // the general docs are far stronger than a weak project match: they lead
       if (t && t.best >= top.r.best + FALLBACK_MARGIN) also.push(t);
@@ -895,4 +982,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };
+module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };

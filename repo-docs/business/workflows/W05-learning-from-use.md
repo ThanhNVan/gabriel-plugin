@@ -18,7 +18,7 @@ Two events in order:
 7. **Use the link next time.** `mk.js` `search()` reads the links with at least 2 confirmations. It spreads from them, never starts from them (see [R24](../02-business-rules.md#r24-learned-links-never-start-a-search)).
 8. **Clean up at rebuild.** `integrate()` removes links whose neurons are gone and links that have faded under 0.02.
 
-Other commands: `brain.js learn-show` lists the strongest links. `brain.js learn-reset` forgets all of them. `brain.js touched-files <file>` learns from files a Codex step changed. It uses the newest map of any session in the last 45 minutes.
+Other commands: `brain.js learn-show` lists the strongest links. `brain.js learn-reset [name]` forgets all of them, or one doc set's with a name. `brain.js touched-files <file>` learns from files a Codex step changed. It uses the newest map of any session in the last 45 minutes.
 
 ```mermaid
 sequenceDiagram
@@ -51,4 +51,4 @@ sequenceDiagram
 - The `last` row for the session gets the file added to its done list.
 - The next prompt on the same topic may rank the opened file's main classes higher. Nothing in the docs or the code graph changes.
 - Check: `node src/brain.js learn-show 15` lists the strongest links with their current weight.
-- Undo: `node src/brain.js learn-reset` deletes all learned links and the `last` rows.
+- Undo: `node src/brain.js learn-reset [name]` deletes all learned links and the `last` rows (with a name: that doc set's only).

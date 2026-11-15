@@ -127,7 +127,7 @@ Learning links a prompt to the code you open next. It works like this:
 5. A link shows in search only after 2 confirmations.
 6. A link fades by half every 45 days. Links under 0.02 are removed.
 
-A learned link never starts a search and never passes the gate. It only adds a small push to nodes that already fit. Use `node src/brain.js learn-show` to see the strongest links. Use `node src/brain.js learn-reset` to clear them.
+A learned link never starts a search and never passes the gate. It only adds a small push to nodes that already fit. Use `node src/brain.js learn-show` to see the strongest links. Use `node src/brain.js learn-reset [name]` to clear them. With a name, only that doc set's links go.
 
 ## Dedupe
 

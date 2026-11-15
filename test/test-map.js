@@ -148,6 +148,10 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.strictEqual(mk.searchAll(home, order, { strong: 0 }).project, 'alpha', 'and the Alpha prompt stays with Alpha');
     assert.strictEqual(mk.searchAll(home, 'beta ' + order, { strong: 0 }).project, 'alpha', 'naming a project that does not know the prompt does not block the others');
     assert.strictEqual(mk.searchAll(home, 'in beta ' + parcel, { strong: 0 }).project, 'beta', 'a named project that knows the prompt wins');
+    // opts.trace: search() and searchAll() say why a map was or was not shown
+    { const t = {}; assert.strictEqual(mk.search(home, 'zzzz qqqq xxxx wwww', { project: 'alpha', trace: t }), null); assert.strictEqual(t.reason, 'no-seeds'); }
+    { const t = {}; assert.ok(mk.search(home, order, { project: 'alpha', trace: t })); assert.strictEqual(t.reason, 'shown'); assert.ok(t.best > 0); }
+    { const t = {}; mk.searchAll(home, order, { trace: t }); assert.strictEqual(t.sets.alpha.reason, 'shown'); assert.ok('beta' in t.sets); }
     // a pinned session (opts.pin, from "gabriel use <name>") searches only that set; an unknown pin is ignored
     const pa = mk.searchAll(home, parcel, { pin: 'alpha' });
     assert.ok(!pa || pa.project !== 'beta', 'pinned to alpha: beta is never chosen');
@@ -216,6 +220,17 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.ok(r3.merged.dropped > 0 && r3.merged.kept === 0, 'links to a removed node are dropped');
     assert.strictEqual(mk.learnShow(home, 5, T0).total, 0, 'nothing is left to show');
     mk.remember(home, 's2', mk.search(home, Q, { now: T0 }), T0); mk.touched(home, 's2', 'C:\\w\\src\\Services\\Shop\\OrderRepository.cs', { now: T0 });
+    // the learned count and the reset work per doc set; a reset of one set leaves the others alone
+    assert.ok(mk.status(home, 'alpha').learned > 0, 'alpha counts its own learned links');
+    assert.strictEqual(mk.status(home, 'beta').learned, 0, 'beta has none: the count is per doc set');
+    assert.strictEqual(mk.learnReset(home, 'beta'), 0, 'a reset of beta deletes nothing of alpha');
+    assert.ok(mk.status(home, 'alpha').learned > 0);
+    const badSet = require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'brain.js'), 'learn-reset', 'nope'], { env: { ...process.env, BRAIN_HOME: home }, encoding: 'utf8' });
+    assert.strictEqual(badSet.status, 1, 'an unknown doc set exits with 1');
+    assert.ok(/unknown doc set: nope/.test(badSet.stdout + badSet.stderr), 'an unknown doc set is named');
+    assert.ok(mk.status(home, 'alpha').learned > 0, 'an unknown doc set deletes nothing');
+    assert.ok(mk.learnReset(home, 'alpha') > 0, 'a reset of alpha deletes its links');
+    assert.strictEqual(mk.status(home, 'alpha').learned, 0);
     assert.ok(mk.learnReset(home) >= 0 && mk.learnShow(home, 5, T0).total === 0, 'learn-reset forgets everything');
     assert.ok(mk.status(home).graphCommit === 'abc12345def', 'status reads the graph commit from the first bytes of graph.json');
 
@@ -230,9 +245,11 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
 
     // mk-status all: the Alpha line shows its graph path, and GRAPH MISSING when the file is gone
     const statusRun = () => require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'src', 'brain.js'), 'mk-status', 'all'], { env: { ...process.env, BRAIN_HOME: home }, encoding: 'utf8' }).split('\n');
-    const statusAlpha = () => statusRun().find((l) => l.startsWith('Alpha'));
+    // the whole Alpha block: its header line and the lines below it, up to the empty line
+    const blockOf = (label) => { const ls = statusRun(), i = ls.findIndex((l) => l.startsWith(label)); if (i < 0) return ''; const out = []; for (let j = i; j < ls.length && ls[j] !== ''; j++) out.push(ls[j]); return out.join('\n'); };
+    const statusAlpha = () => blockOf('Alpha');
     // the fix line printed right after a set's status line (null when there is none)
-    const fixOf = (label) => { const ls = statusRun(), i = ls.findIndex((l) => l.startsWith(label)); return i >= 0 && ls[i + 1] && ls[i + 1].startsWith('  fix: ') ? ls[i + 1] : null; };
+    const fixOf = (label) => blockOf(label).split('\n').find((l) => l.startsWith('  fix: ')) || null;
     assert.ok(statusAlpha().includes(path.join(root, 'graphify-out', 'graph.json')) && !/GRAPH MISSING/.test(statusAlpha()), 'mk-status shows the graph path');
     fs.renameSync(gfile, gfile + '.away');
     try {

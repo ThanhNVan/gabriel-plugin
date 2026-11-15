@@ -14,17 +14,18 @@ node "<plugin folder>/src/brain.js" mk-status all
 
 A map appears only when a prompt matches your docs well enough. Check these in order.
 
-1. **The prompt is short.** Prompts with fewer than 4 words, and prompts that start with `/`, skip the search. Ask a longer question.
-2. **The map is not built.** Run `/gabriel:status`. If it says "no map", run `/gabriel:setup`. Or run `node "<plugin folder>/src/brain.js" build-mk <name>`.
-3. **The doc set is small.** A few short files may show no map at all. The quiet gate is tuned for bigger doc sets. Add more docs, or check the match yourself:
+1. **Ask why.** Run `/gabriel:why "your question"`. It prints one line per doc set and says why it showed no map. Follow the next step in that line.
+2. **The prompt is short.** Prompts with fewer than 4 words, and prompts that start with `/`, skip the search. Ask a longer question.
+3. **The map is not built.** Run `/gabriel:status`. If it says "no map", run `/gabriel:setup`. Or run `node "<plugin folder>/src/brain.js" build-mk <name>`.
+4. **The doc set is small.** A few short files may show no map at all. The quiet gate is tuned for bigger doc sets. Add more docs, or check the match yourself:
 
    ```
    node "<plugin folder>/src/brain.js" mk "your question"
    ```
 
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
-4. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt (its `aliases` in `projects.json` count). A pinned session ignores other set names: see the next section.
-5. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
+5. **The words do not match.** Use the same words as your docs, or name the doc set in the prompt (its `aliases` in `projects.json` count). A pinned session ignores other set names: see the next section.
+6. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
 
 ## The map shows only one project
 
@@ -154,7 +155,7 @@ Fix: check the repo. If it is wrong, run `/gabriel:add-docs <name> --code <right
 
 ## `GRAPH MISSING` in status
 
-`/gabriel:status` (or `node "<plugin folder>/src/brain.js" mk-status all`) shows `graph <path>   GRAPH MISSING` for a set. The graph file is gone. The background check does not rebuild that set, so its map stops following the docs.
+`/gabriel:status` (or `node "<plugin folder>/src/brain.js" mk-status all`) shows a `GRAPH MISSING` header for a set, with a `graph <path>   GRAPH MISSING` line under it. The graph file is gone. The background check does not rebuild that set, so its map stops following the docs.
 
 Fix: the same as `graph not found` above. `mk-status all` prints the fix line `fix: /gabriel:add-docs <name> --code <repo> --relink` under the set.
 
@@ -171,7 +172,7 @@ Message: `repo refused: <reason>`. Nothing is saved. The reasons:
 
 ## `REPO MISSING` in status
 
-`mk-status all` (or `/gabriel:status`) shows `repo <path>   REPO MISSING` when the folder is gone. The map still works. It shows the graph's lines, with no check mark. Fix: put the folder back, or set a new one with `/gabriel:add-docs <name> --repo <folder> --relink`.
+`mk-status all` (or `/gabriel:status`) shows a `REPO MISSING` header, and a `repo <path>   REPO MISSING` line under it, when the folder is gone. The map still works. It shows the graph's lines, with no check mark. Fix: put the folder back, or set a new one with `/gabriel:add-docs <name> --repo <folder> --relink`.
 
 `(<file>:<line> ✓ moved)` means the file moved inside the repo. The name was found in the new file, so use that line. `mk-status all` shows `no repo (add-docs <name> --repo <folder> --relink)` for a set with a graph but no repo folder: its code lines have no check mark and the line may be old.
 
@@ -195,4 +196,5 @@ Items already sent in this session are not sent again. A note shows how many wer
 
 - Run `node "<plugin folder>/src/brain.js" check` to see problems in note headers.
 - Run `node "<plugin folder>/src/brain.js" learn-show` to see learned links.
+- Set `GABRIEL_DEBUG=1`, ask again, then read `<data>/debug.log` (the data folder, `~/.gabriel` by default). It lists each error that gabriel caught. Unset `GABRIEL_DEBUG` when done.
 - Open an issue in the project repository with the output of `/gabriel:status` and the Node version. Remove any private text first.

@@ -6,8 +6,15 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 - It builds a local map of your doc folders. A code graph adds code names to the map.
 - Prompts that match nothing get no extra text.
 
+## Quick start (5 minutes)
+
+1. `/plugin marketplace add <git url or local folder>` and `/plugin install gabriel@gabriel`.
+2. `/gabriel:setup`. Say no to the optional steps for now.
+3. `/gabriel:add-docs <name> <a folder of docs you already have>`.
+4. Ask a question about those docs. No map? Run `/gabriel:why "<your question>"`.
+
 > [!WARNING]
-> **The setup is big.** Plan an afternoon, not five minutes. The plugin installs fast, but gabriel is only as good as the docs you give it. The full setup is: graph your code, write or collect docs, add them, then write a few test questions. It pays off later. See [Pros and cons](#pros-and-cons).
+> **The full setup is big.** The quick start above takes minutes and works on docs you already have. The best results need more: a code graph and docs about your code. Plan an afternoon for that. See [Pros and cons](#pros-and-cons).
 
 ## Pros and cons
 
@@ -62,6 +69,7 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 | Tell gabriel that I added or changed doc files | `/gabriel:update` |
 | Bring the docs up to date after the code changed | `/gabriel:refresh-docs <name>` |
 | See if everything is up to date | `/gabriel:status` |
+| I want to know why I got no map | `/gabriel:why "<prompt>"` |
 | Make gabriel pick better results, using my test questions | `/gabriel:retrain <name>` |
 | Work on one project only in this chat | type `gabriel use <name>` (no slash) |
 
@@ -78,7 +86,7 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 
 **`/gabriel:status`.** Shows each doc set and when its map was built. `ok` means it is up to date. `GRAPH MISSING` means the code graph file is gone. `REPO MISSING` means the code folder set with `--repo` is gone.
 
-**`/gabriel:retrain <name>`.** gabriel ranks the parts it finds. Retrain teaches it, using test questions you write (see [docs/EVAL.md](docs/EVAL.md)). With a name, it keeps the new ranking only if it scores at least as well. With no name, it retrains the default doc set and always keeps the new ranking (the old one is saved as `rank.prev.json`). With a name and `--force` (`/gabriel:retrain <name> --force`), it keeps the new ranking even when the score falls, and still saves the old one as `rank.prev.json`.
+**`/gabriel:retrain <name>`.** gabriel ranks the parts it finds. Retrain teaches it, using test questions you write (see [docs/EVAL.md](docs/EVAL.md)). No name means the default doc set. The new ranking is kept only if it scores at least as well. `--force` keeps it anyway (`/gabriel:retrain <name> --force`). The old file is saved as `rank.prev.json`.
 
 **`/gabriel:tune-embeddings`.** Optional, and slow. It trains gabriel's small meaning model on your questions, and keeps the new model only if it scores better. Most people never need it. See [docs/TUNING.md](docs/TUNING.md).
 
@@ -93,7 +101,8 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 | `/gabriel:update [--dry-run] [--stack]` | Adds new doc folders, rebuilds changed maps, suggests test questions. `--stack` fetches stack docs again. |
 | `/gabriel:refresh-docs <name>` or `<code folder> [docs folder]` | After code changes: updates the graph, fixes and shrinks the docs it touches, rebuilds the map, then asks whether to retrain. Uses the set's code and docs folders. |
 | `/gabriel:status` | Shows each doc set, its code graph, and when its map was built. `GRAPH MISSING` means the graph file is gone. |
-| `/gabriel:retrain [name]` | Retrains the ranking on your test questions. With a name, keeps the new weights only if they score no worse. With no name, retrains the default doc set and always keeps the new weights (old ones saved as `rank.prev.json`). `--force` with a name keeps the new weights even when the score falls. |
+| `/gabriel:why "<prompt>"` | Says why no map was shown for a prompt: one line per doc set, with the next step. Writes nothing. |
+| `/gabriel:retrain [name]` | Retrains the ranking on your test questions. No name means the default doc set. Keeps the new weights only if they score no worse. `--force` keeps them anyway. The old file is saved as `rank.prev.json`. |
 | `/gabriel:tune-embeddings` | Optional, slow fine-tune of the meaning model. See [docs/TUNING.md](docs/TUNING.md). |
 ## What you see
 

@@ -6,7 +6,7 @@ argument-hint: "<doc set name> | <code folder> [docs folder]"
 ---
 
 Arguments, either:
-- `<doc set name>` alone (for example `makillez`): run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all` and read that set's line. Its `graph <path>` is the path to `graph.json`, and its `@<commit>` gives the old commit. Read the set's entry in `projects.json` (find the file with `node -e "console.log(require('${CLAUDE_PLUGIN_ROOT}/src/paths.js').projectsFile())"`):
+- `<doc set name>` alone (for example `makillez`): run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" mk-status all` and read that set's block. Its `graph <path>` is the path to `graph.json`, and its `@<commit>` gives the old commit. Read the set's entry in `projects.json` (find the file with `node -e "console.log(require('${CLAUDE_PLUGIN_ROOT}/src/paths.js').projectsFile())"`):
   - `repo` is the **code folder**. If `repoBase` is `src`, the graph paths are relative to `<repo>/src`, so graphify runs on `<repo>/src`.
   - The **graph folder** is the folder above `graphify-out` (the `graph` path without `graphify-out/graph.json`).
   - `root` is the **docs folder**.

@@ -164,7 +164,7 @@ flowchart TD
 
 ## 6. Measure and retrain
 
-Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. With a doc set name, it keeps the new weights only when the strict pass count does not fall, unless you add `--force`. With no name (the default set), it always keeps them and saves the old file as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
+Your saved questions show how well the map finds answers. `retrain` trains new ranking weights from them. No name means the default doc set. It keeps the new weights only when the strict pass count does not fall. `--force` keeps them anyway. The old file is saved as `rank.prev.json`. Code: `eval/suggest-cases.js`, `eval/eval-map.js`, `src/train-rank.js` and `src/retrain.js`. The weights are read by `loadRank()` and used by `rankDocs()` in `src/mk.js`.
 
 ```mermaid
 flowchart TD
@@ -178,8 +178,8 @@ flowchart TD
   TR --> D2{"Training worked?"}
   D2 -- "no" --> K0["Keep current weights"]
   D2 -- "yes" --> E2["eval-map --rank temp file: score the new weights"]
-  E2 --> D3{"Name given? New strict count at least the old one? (no name: always yes)"}
-  D3 -- "yes" --> SV["Old file to rank.prev.json if no name. Copy temp file to private rank.json for this doc set"]
+  E2 --> D3{"New strict count at least the old one? (--force: always yes)"}
+  D3 -- "yes" --> SV["Old file to rank.prev.json. Copy temp file to private rank.json for this doc set"]
   D3 -- "no" --> K1["Keep current weights: the count fell"]
 ```
 

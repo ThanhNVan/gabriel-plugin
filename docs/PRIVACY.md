@@ -43,6 +43,7 @@ Everything is in one data folder, `~/.gabriel`. Older installs keep `~/.claude/g
 | `tip-index` | The number of the next tip. | No. |
 | `onboarding.json` | Which first-run steps are done or skipped, the folders picked, and the date. | Folder paths only. |
 | `docs-add.lock` | Stops a second background update for 10 minutes. | No. |
+| `debug.log` | Only with `GABRIEL_DEBUG=1`: one line per caught error (time, function name, error text). No prompts. Starts again past 1 MB. | Error text only. It can hold file paths. |
 | `private/<name>/` | Files you add yourself: ranking weights, questions, eval cases. | Yes, if you add private text. |
 | `private/<name>/notes/EVAL-MK.md` | Eval report from `eval/eval-map.js --report`, for the default project: every question and its result. | Yes. It repeats your questions. |
 | `dq.<name>.bin`, `dq.<name>.idx.json` | Question index for one doc set: meaning numbers and section keys. | Numbers and keys only. The numbers come from your questions. |
@@ -93,7 +94,7 @@ That removes the map, the history, the model, the seen state and your private fi
 
 A removed doc set keeps its rows in `mk.db`. To purge them, delete `mk.db` and run `/gabriel:setup`. Learned links are lost too.
 
-To forget only the learned links, run `node "<plugin folder>/src/brain.js" learn-reset`. To forget only prompt history, delete the `history/` folder.
+To forget only the learned links, run `node "<plugin folder>/src/brain.js" learn-reset [name]` (a name clears one doc set; no name clears all). To forget only prompt history, delete the `history/` folder.
 
 ## For contributors: the privacy scan
 

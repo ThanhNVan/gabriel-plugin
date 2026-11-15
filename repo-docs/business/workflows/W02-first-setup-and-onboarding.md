@@ -59,5 +59,5 @@ flowchart TD
 - Packages in the plugin folder, and the data folder with `docs/`, `private/`, `models/`, `graph.json` and `mk.db` (once a doc set exists).
 - The model in `<data>/models/`, unless skipped.
 - Setup prints each step. A failed step stops setup (steps 1, 2 and 7) or is printed (step 8 and 9).
-- Check: `node src/brain.js mk-status all` shows one line per doc set.
+- Check: `node src/brain.js mk-status all` shows one block per doc set.
 - Onboarding writes only what the user picked. Each step has its own result.

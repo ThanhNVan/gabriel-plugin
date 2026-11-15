@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0 (2026-11-15)
+
+- README: a new "Quick start (5 minutes)" section, four steps from install to a first map. The setup warning now points to it.
+- `search()` in `src/mk.js` runs ten helper steps in order. No behavior change.
+- `mk-status all` shows each doc set as a short block: a header with its state (`ok`, `STALE`, `no map`, `GRAPH MISSING` or `REPO MISSING`), then its map, graph, repo and fix lines. A blank line separates the sets. The block code is in `src/statusview.js`.
+- Each map note has at most one 💡 line. The setup hint or tip wins over the pin hint. `buildNote()` in `src/brain.js` builds the note.
+- `/gabriel:why "<prompt>"` (`brain.js why`) says why no map was shown for a prompt, one line per doc set. It writes nothing. `skipReason()` gives the reason a short or automated prompt is skipped.
+- Map build: edge keys use the node count, not a fixed base; no behavior change.
+- `learn-reset [name]` clears the learned links of one doc set only. An unknown name prints `unknown doc set: <name>`, deletes nothing and exits with 1. `mk-status` counts learned links per doc set.
+- Debug log: set `GABRIEL_DEBUG=1` to write each caught error to `<data>/debug.log`. Off by default. Prompt text is never written. The file starts again past 1 MB.
 - `/gabriel:refresh-docs <doc set name>` uses the set's code folder and docs folder (from `projects.json`), asks for them if missing, and asks before retrain: skip, keep only if better, or replace anyway. `retrain --force` (`node src/retrain.js <name> --force`) keeps the new weights even when the strict score falls.
 - Setup keeps the code repo clean: onboarding makes `<name>-code-docs/` next to the code, moves the graph into `graphify-out/` there, writes the docs in `docs/` and registers the set with `--code` and `--repo` by itself.
 - A code name whose file moved inside the repo is found again and shows `(<file>:<line> ✓ moved)`; a set with a graph but no repo folder gets a `mk-status all` hint (`no repo (add-docs ...)`) and a tip.
@@ -9,6 +19,7 @@
 
 - Code graph path: a missing `graph` file now fails the build with `graph not found: <path>` and keeps the old map. `mk-status all` shows each graph path and `GRAPH MISSING`. `add-docs` asks for the code repo when `--code` is missing. The background check now rebuilds any stale doc set, not only the default one (skipping a set whose graph is missing).
 - Skills show a short hint for each argument.
+- The CLI modes live in one table (`MODES` in `src/brain.js`), and the usage line is built from it. Each mode runs as before. `touched-files`, `build-dq` and `mk-status all` now show in the usage line.
 - Plainer words for the tips, the setup hint and the `gabriel use` replies. The 📌 pinned line now has a blank line before it. Not pinned, with 2 or more doc sets, each map note ends with a 💡 line that suggests `gabriel use <set>`.
 
 - Pin one doc set per session: the prompt `gabriel use <set>` (a name or alias) makes this session's map search only that set; `gabriel use auto` undoes it; an unknown name lists the sets. While pinned, every gabriel note starts with `📌 pinned: <set>`. Three new tips explain it (`src/pin.js`, `searchAll` `opts.pin`).
@@ -16,6 +27,9 @@
 - The map adds up to 3 code names two strong graph links from the top 4 code hits, marked `2 links away`, when they share the hit's name stem (a leading verb dropped). Per set, the `chain` setting in `projects.json` sets the counts (default seeds 4, max 3, stem 3). It finds the rest of a flow through a shared type (an event base class, say). On 12 Makillez questions: chain off 9/12, seeds 3 max 3 stem 3 10/12, seeds 4 max 3 stem 3 (the default) 11/12. Makillez main gate unchanged (strict 523/569, quiet 30/31); the block grows about 54 characters on average.
 
 - `/gabriel:retrain` with no name always keeps the new weights for the default doc set, and saves the old file as `rank.prev.json`. With a name, the score guard stays.
+
+- Retrain rule changed: no name now means the default doc set under the same guard. The new weights are kept only when the strict count is not lower. `--force` keeps the new weights anyway. Whenever an existing rank file is replaced, the old one is saved as `rank.prev.json`.
+- CI: `.github/workflows/test.yml` runs lint and tests on Windows and Ubuntu for each push to `master` and each pull request.
 
 - New doc sets (`add-docs`, `/gabriel:update`) get `aliases: [<name>]`, so naming the set in a prompt routes to it. The map header now says "docs + code graph" instead of "technical-docs + code graph". When one alias sits inside a longer one ("gabriel" in "gabriel-dev"), only the longer one counts as named (`namedProjects()` in `src/mk.js`).
 
