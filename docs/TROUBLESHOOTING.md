@@ -192,6 +192,10 @@ Setup step 9 runs `npm test` in the plugin folder. A failure there does not stop
 
 Items already sent in this session are not sent again. A note shows how many were skipped. The state resets after a compaction, or after 30 prompts. Start a new session to see them again.
 
+## A `⚠️` note says the code graph is behind
+
+A note that says `The <name> graph is N commits behind` means the code graph was built at an older commit, and 10 or more changed code files are in it. Run `/gabriel:refresh-docs <name>`. Another note says files you touched are not in the code graph: run the same command. The graph and docs note shows on every 2nd prompt until you refresh. The touched-files note shows once per session. Both show even with `"tips": false`. `mk-status all` shows the counts on a `drift` line.
+
 ## Still stuck
 
 - Run `node "<plugin folder>/src/brain.js" check` to see problems in note headers.

@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const history = require('./history.js');
-const { homeDir, graphFile, dataDir, tokens, build, fresh, loadThesaurus, wordScores, rank, query } = require('./rules.js');
+const { homeDir, graphFile, dataDir, tokens, build, fresh, loadThesaurus, wordScores, rank, query, writeAtomic } = require('./rules.js');
 const { MODEL, ehash, withTimeout, getEmbedder, readVectors, embedNodes } = require('./embed.js');
 const { getProject } = require('./projects.js');
 const paths = require('./paths.js');
@@ -25,6 +25,7 @@ const MAX_CHARS = 2400, NODE_CHARS = 320;
 const SIM_FLOOR = 0.2, SIM_SPAN = 0.35, SIM_GATE = 0.3;            // calibrated on the real rules: unrelated prompts peak at 0.18
 const EMBED_TIMEOUT = 9000, REFRESH_LOCK_MS = 120000, MK_LOCK_MS = 600000; // the hook timeout is 60 s (hooks/hooks.json); the map search is skipped after 11 s
 const MK_BUDGET_MS = 11000;
+const DRIFT_FILES = 10, DRIFT_EVERY = 2, MISS_FILES = 3, DRIFT_MS = 3600000, MISS_KEEP = 20, DOCS_STALE_DAYS = 7;   // warnings: a set's graph is behind by 10+ changed code files; 3+ touched files are not in the graph; docs more than 7 days older than the code
 
 // Words + synonyms + meaning. Any trouble with the model falls back to words + synonyms.
 async function searchFull(home, text, opts = {}) {
@@ -74,8 +75,27 @@ function touchedHook(host) {
     const { sessionId } = host.readInput(raw);
     const files = host.readTouched(raw);
     if (!files.length || !sessionId) return;
-    for (const file of files) require('./mk.js').touched(homeDir(), sessionId, file);
+    for (const file of files) {
+      const r = require('./mk.js').touched(homeDir(), sessionId, file);
+      if (r && r.ignored === 'file not in the map') noteMiss(sessionId, file);
+    }
   } catch (e) { debug('touchedHook', e); /* never block a tool call */ }
+}
+
+// The session's touched files that the map does not know: seen/<sid>.miss (a JSON array, distinct, at most MISS_KEEP).
+function noteMiss(sessionId, file) {
+  try {
+    const sid = String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+    if (!sid) return;
+    const f = path.join(paths.dataDir(), 'seen', sid + '.miss');
+    let list = [];
+    try { list = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { list = []; }
+    if (!Array.isArray(list)) list = [];
+    if (list.includes(file) || list.length >= MISS_KEEP) return;
+    list.push(file);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, JSON.stringify(list));
+  } catch (e) { debug('noteMiss', e); }
 }
 
 // When a doc or the code graph changed since the map was built, rebuild it in the background (once per 10 minutes). The old map keeps serving.
@@ -109,6 +129,9 @@ function refreshMapInBackground(home) {
     try { due = Date.now() - fs.statSync(stamp).mtimeMs > 60000; } catch { /* no stamp yet */ }
     if (!due) return;
     try { fs.writeFileSync(stamp, ''); } catch { /* data folder missing: check every time */ }
+    let driftDue = true;   // drift.json's age is the stamp: the drift check runs at most once an hour
+    try { driftDue = Date.now() - fs.statSync(path.join(dataDir(home), 'drift.json')).mtimeMs > DRIFT_MS; } catch { /* no file yet */ }
+    if (driftDue) spawn(process.execPath, [__filename, 'drift'], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref();
     if (registerNewDocFolders(home)) return;   // the update also builds their maps
     let staleSet = null;   // the first doc set with a stale map; a set whose graph file is missing would fail every time, so it is skipped
     for (const p of mk.projectNames()) {
@@ -248,6 +271,69 @@ function setupHint(sessionId) {
   } catch { return ''; }
 }
 
+// <data>/docs-checked.json: per doc set, the repo commit the docs were last checked at ({} when missing or bad). Never throws.
+function readDocsChecked() {
+  try { return JSON.parse(fs.readFileSync(path.join(paths.dataDir(), 'docs-checked.json'), 'utf8')) || {}; } catch { return {}; }
+}
+
+// True the first time for this session and kind (writes seen/<sid>.<kind>). False with no session id or when already marked.
+function firstInSession(sessionId, kind) {
+  const sid = String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+  if (!sid) return false;
+  const mark = path.join(paths.dataDir(), 'seen', sid + '.' + kind);
+  if (fs.existsSync(mark)) return false;
+  fs.mkdirSync(path.dirname(mark), { recursive: true });
+  fs.writeFileSync(mark, '');
+  return true;
+}
+
+// True on the 1st, (n+1)th, (2n+1)th... call for this session and kind; the count is kept in seen/<sid>.<kind>. False with no session id.
+function everyNth(sessionId, kind, n) {
+  const sid = String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+  if (!sid) return false;
+  const mark = path.join(paths.dataDir(), 'seen', sid + '.' + kind);
+  let count = 0;
+  try { count = Number(fs.readFileSync(mark, 'utf8')) || 0; } catch { /* first time */ }
+  fs.mkdirSync(path.dirname(mark), { recursive: true });
+  fs.writeFileSync(mark, String(count + 1));
+  return count % n === 0;
+}
+
+// Warning on every DRIFT_EVERY-th prompt of a session while the drift lasts (1 in 2), ignores tips:false. Up to three sentences, one per case: the graph is behind (changed code files >= DRIFT_FILES),
+// the docs were last checked more than DOCS_STALE_DAYS before the latest code commit, or the docs were never checked (only with a graph drift). Never throws.
+function driftNote(sessionId) {
+  try {
+    const sets = Object.entries(JSON.parse(fs.readFileSync(path.join(paths.dataDir(), 'drift.json'), 'utf8')).sets || {});
+    const top = (pred, key) => sets.filter(pred).sort((a, b) => b[1][key] - a[1][key])[0];
+    const g = top(([, x]) => x.changed >= DRIFT_FILES, 'changed');
+    const d = top(([, x]) => x.docsBehindDays > DOCS_STALE_DAYS, 'docsBehindDays');
+    const never = sets.find(([, x]) => x.neverChecked && x.changed >= DRIFT_FILES);
+    if (!g && !d && !never) return '';
+    const sentences = [];
+    if (g) sentences.push(`The ${g[0]} graph is ${g[1].commits} commits behind (${g[1].changed} code files changed). Run /gabriel:refresh-docs ${g[0]}.`);
+    if (d) sentences.push(`The ${d[0]} docs were last checked ${Math.round(d[1].docsBehindDays)} days before the latest code commit (${d[1].commitsSince} commits since). Run /gabriel:refresh-docs ${d[0]}.`);
+    if (never) sentences.push(`The ${never[0]} docs were never checked with /gabriel:refresh-docs.`);
+    if (!everyNth(sessionId, 'drift', DRIFT_EVERY)) return '';
+    return '⚠️ gabriel: ' + sentences.join(' ');
+  } catch { return ''; }
+}
+
+// Warning, once per session: at least MISS_FILES touched files are not in the code graph. Ignores tips:false. Never throws.
+function missNote(sessionId) {
+  try {
+    const sid = String(sessionId || '').replace(/[^A-Za-z0-9_-]/g, '');
+    if (!sid) return '';
+    const list = JSON.parse(fs.readFileSync(path.join(paths.dataDir(), 'seen', sid + '.miss'), 'utf8'));
+    if (!Array.isArray(list) || list.length < MISS_FILES || !firstInSession(sessionId, 'missnote')) return '';
+    return `⚠️ gabriel: ${list.length} files you touched are not in the code graph. It may be old. Run /gabriel:refresh-docs.`;
+  } catch { return ''; }
+}
+
+// The one hint line for a prompt: setup first, then the warnings, then a tip.
+function noteHint(sid) {
+  return setupHint(sid) || driftNote(sid) || missNote(sid) || require('./tips.js').tipFor(sid);
+}
+
 // The items for one prompt: rules, the project map, similar earlier prompts. Logs the prompt and starts the background refreshes.
 async function gather(prompt, sid, cwd) {
   const started = Date.now();
@@ -315,7 +401,7 @@ async function hook(host) {
     const pinned = require('./pin.js').getPin(homeDir(), sid);
     const withPin = (note) => pinned ? `\n📌 pinned: ${pinned}  ("gabriel use auto" to undo)` + (note ? '\n' + note : '') : note;
     const hintOnly = async () => { // this hook prints nothing for the prompt: print the setup hint alone, if due
-      await emit(host.writeOutput({ text: '', note: withPin(setupHint(sid) || require('./tips.js').tipFor(sid)) }));
+      await emit(host.writeOutput({ text: '', note: withPin(noteHint(sid)) }));
     };
     const cmd = require('./pin.js').parsePin(prompt);
     if (cmd) return await emit(host.writeOutput({ text: '', note: pinNote(cmd, sid) }));
@@ -323,7 +409,7 @@ async function hook(host) {
     const parts = await gather(prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
     const { text: additionalContext, skipped, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
-    const hint = setupHint(sid) || require('./tips.js').tipFor(sid);   // the setup hint first; after setup, one tip per session
+    const hint = noteHint(sid);   // the setup hint first; then the warnings; then one tip per session
     if (!additionalContext) {
       await emit(host.writeOutput({ text: '', note: buildNote({ view: '', skipped, hint, pinned, manySets: false, skipPrefix: '🧭 Brain: ' }) }));
       save();
@@ -346,7 +432,7 @@ async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason };
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
@@ -527,9 +613,10 @@ const MODES = {
         };
         const { statusBlock } = require('./statusview.js');
         const names = mk.projectNames();
+        const driftSets = (() => { try { return JSON.parse(fs.readFileSync(path.join(paths.dataDir(), 'drift.json'), 'utf8')).sets || {}; } catch { return {}; } })();   // written by the drift mode
         names.forEach((p, i) => {
           const s = mk.status(home, p), gp = mk.graphPathOf(p), rp = getProject(p).repo;
-          for (const l of statusBlock({ label: getProject(p).label, name: p, s, graphPath: gp, graphExists: !!gp && fs.existsSync(gp), repo: rp, repoExists: !!rp && fs.existsSync(rp), fix: fixFor(p, s, gp) })) console.log(l);
+          for (const l of statusBlock({ label: getProject(p).label, name: p, s, graphPath: gp, graphExists: !!gp && fs.existsSync(gp), repo: rp, repoExists: !!rp && fs.existsSync(rp), fix: fixFor(p, s, gp), drift: driftSets[p] })) console.log(l);
           if (i < names.length - 1) console.log('');   // one empty line between doc sets
         });
       } else {
@@ -564,6 +651,45 @@ const MODES = {
     args: '[--host <name>]',
     run: async ({ host }) => {
       touchedHook(host);
+    },
+  },
+  // after /gabriel:refresh-docs: record the repo HEAD that the docs now match, in <data>/docs-checked.json
+  'docs-checked': {
+    args: '<name>',
+    run: async ({ arg, home }) => {
+      const P = arg ? getProject(arg) : null;
+      if (!P) { console.log(`unknown doc set: ${arg || ''}`); process.exitCode = 1; return; }
+      if (!P.repo) { console.log(`${arg} has no repo folder. Add one with /gabriel:add-docs ${arg} --repo <folder> --relink`); process.exitCode = 1; return; }
+      const h = require('./repo.js').headCommit(P.repo);
+      if (!h) { console.log(`${arg}: the repo folder is not a git repo with a commit: ${P.repo}`); process.exitCode = 1; return; }
+      const file = path.join(paths.dataDir(), 'docs-checked.json');
+      let all = {};
+      try { all = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { all = {}; }
+      all[arg] = { commit: h.commit, t: h.t, at: Date.now() };
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      writeAtomic(file, JSON.stringify(all, null, 2) + '\n');
+      console.log(`docs checked for ${arg} at ${h.commit.slice(0, 7)}`);
+    },
+  },
+  // how far each doc set's code graph is behind its repo HEAD: writes <data>/drift.json (started hourly by refreshMapInBackground)
+  'drift': {
+    args: '',
+    run: async ({ home }) => {
+      const mk = require('./mk.js'), { graphDrift, lastCommitTime, commitsSince } = require('./repo.js'), sets = {}, checked = readDocsChecked();
+      for (const p of mk.projectNames()) {
+        try {
+          const P = getProject(p) || {}, g = mk.graphPathOf(p), entry = {};
+          if (!P.repo) continue;
+          const commit = g && fs.existsSync(g) ? mk.status(home, p).graphCommit : null;
+          const d = commit ? graphDrift(P.repo, commit, mk.codeFiles(home, p), P.repoBase || '') : null;
+          if (d) Object.assign(entry, { commits: d.commits, changed: d.changed });
+          const c = checked[p], codeT = lastCommitTime(P.repo);
+          if (c && codeT != null) Object.assign(entry, { docsBehindDays: (codeT - c.t) / 86400, commitsSince: commitsSince(P.repo, c.commit) });
+          else if (!c) Object.assign(entry, { docsBehindDays: null, neverChecked: true });   // no docs-checked entry yet
+          if (Object.keys(entry).length) sets[p] = entry;
+        } catch (e) { debug('drift', e); }
+      }
+      writeAtomic(path.join(paths.dataDir(), 'drift.json'), JSON.stringify({ t: Date.now(), sets }));
     },
   },
   // after a Codex step: node brain.js touched-files <file>... ; learns from the newest map (any session, last 45 min)

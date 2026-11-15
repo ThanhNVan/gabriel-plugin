@@ -135,7 +135,9 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     // ---- a second project in the same file: kept apart, routed by what it knows, and a rebuild of one leaves the other alone ----
     write(path.join(root2, 'technical-docs', '01-shipping.md'), ['# 01 — Shipping', '', '## Parcels', '', 'The `ParcelRouter` in `Services/Post/ParcelRouter.cs` sorts every parcel by zone and hands it to the courier.', ''].join('\n'));
     write(path.join(root2, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 120 }, (_, i) => `Spare note ${i} about thing${i} and widget${i}.\n`)].join('\n'));
-    write(path.join(root2, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [{ id: 'p', label: 'ParcelRouter', source_file: 'Services/Post/ParcelRouter.cs', source_location: 'L3', community: 1, community_name: 'Post' }], links: [], built_at_commit: 'fed98765cba' }));
+    // Id (under 4 characters) and List (in GENERIC) are the only code names in Services/Post/Short.cs: the file is mapped but has no named code
+    write(path.join(root2, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [{ id: 'p', label: 'ParcelRouter', source_file: 'Services/Post/ParcelRouter.cs', source_location: 'L3', community: 1, community_name: 'Post' },
+      { id: 'si', label: 'Id', source_file: 'Services/Post/Short.cs', source_location: 'L1', community: 1, community_name: 'Post' }, { id: 'sl', label: 'List', source_file: 'Services/Post/Short.cs', source_location: 'L2', community: 1, community_name: 'Post' }], links: [], built_at_commit: 'fed98765cba' }));
     await mk.build(home, { root: root2, project: 'beta', noEmbed: true });
     const parcel = 'how does the parcel router sort a parcel by zone', order = 'how does the order handler save an order';
     const p2 = mk.search(home, parcel, { project: 'beta' });
@@ -144,6 +146,10 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.strictEqual(mk.search(home, order, { project: 'beta' }), null, 'the second project does not know orders');
     const again = mk.search(home, order, {});
     assert.ok(again && again.project === 'alpha' && again.docs.some((d) => d.n.file.includes('01-intro')) && again.code.some((c) => c.n.label === 'OrderRepository'), 'building another project leaves Alpha as it was');
+    // a mapped file whose only code names are short or GENERIC gets its own reason, not 'file not in the map'
+    const pShort = mk.search(home, parcel, { project: 'beta' });
+    assert.strictEqual(mk.remember(home, 's5', pShort, Date.now()), true);
+    assert.deepStrictEqual(mk.touched(home, 's5', 'C:\\w\\Services\\Post\\Short.cs', { now: Date.now() }), { ignored: 'no named code in the file' }, 'a mapped file with no named code gives its own reason');
     assert.strictEqual(mk.searchAll(home, parcel, { strong: 0 }).project, 'beta', 'the router picks the project that knows the prompt');
     assert.strictEqual(mk.searchAll(home, order, { strong: 0 }).project, 'alpha', 'and the Alpha prompt stays with Alpha');
     assert.strictEqual(mk.searchAll(home, 'beta ' + order, { strong: 0 }).project, 'alpha', 'naming a project that does not know the prompt does not block the others');

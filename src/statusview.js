@@ -19,6 +19,12 @@ function statusBlock(v) {
   if (v.graphPath) lines.push('  graph  ' + v.graphPath + (v.graphExists ? '' : '   GRAPH MISSING'));
   if (v.repo) lines.push('  repo   ' + v.repo + (v.repoExists ? '' : '   REPO MISSING'));
   else if (v.graphPath) lines.push(`  repo   none (add-docs ${v.name} --repo <folder> --relink)`);
+  if (v.drift) {
+    const d = v.drift, parts = [];
+    if (d.commits) parts.push(`${d.commits} commits behind, ${d.changed} code files changed`);
+    if (d.docsBehindDays > 7) parts.push(`docs ${Math.round(d.docsBehindDays)} days behind`);
+    if (parts.length) lines.push('  drift  ' + parts.join(', '));
+  }
   if (v.fix) lines.push('  fix: ' + v.fix);
   return lines;
 }

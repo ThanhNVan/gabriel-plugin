@@ -171,6 +171,62 @@ process.on('exit', () => { if (!finished) { console.error('TEST DID NOT FINISH')
     assert.ok(buildNote({ view: '', skipped: 2, hint: '', pinned: null, manySets: true }).includes('(2 items already in context, not repeated)'));
     assert.strictEqual(buildNote({ view: '', skipped: 0, hint: '', pinned: null, manySets: false }), '');
   }
+  // warnings: drift and miss notes show once per session, at their level, and ignore tips:false
+  {
+    const dataDir = path.join(home, 'brain', 'data'), { driftNote, missNote, noteMiss } = require(brainPath);
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'projects.json'), JSON.stringify({ version: 1, projects: [], tips: false }));
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: Date.now(), sets: { alpha: { commits: 4, changed: 12 }, beta: { commits: 9, changed: 3 } } }));
+    const dn = driftNote('w1');
+    assert.ok(dn.startsWith('⚠️ ') && dn.includes('The alpha graph is 4 commits behind (12 code files changed)') && dn.includes('/gabriel:refresh-docs alpha'), 'drift note names the set with the most changed files: ' + dn);
+    assert.strictEqual(driftNote('w1'), '', 'drift note: not on the 2nd prompt');
+    assert.strictEqual(driftNote('w1'), dn, 'drift note: again on the 3rd prompt (every 2nd)');
+    assert.strictEqual(driftNote('w1'), '', 'drift note: not on the 4th prompt');
+    assert.ok(driftNote('w2').includes('alpha'), 'drift note: the next session shows it too');
+    assert.strictEqual(driftNote(''), '', 'drift note: no session id, no note');
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { beta: { commits: 9, changed: 3 } } }));
+    assert.strictEqual(driftNote('w3'), '', 'drift note: under the level of 10 changed files, no note');
+    assert.strictEqual(missNote('w1'), '', 'miss note: no list yet');
+    noteMiss('w1', 'a.cs'); noteMiss('w1', 'a.cs'); noteMiss('w1', 'b.cs');
+    assert.strictEqual(missNote('w1'), '', 'miss note: two distinct files is under the level of 3');
+    noteMiss('w1', 'c.cs');
+    const mn = missNote('w1');
+    assert.ok(mn.startsWith('⚠️ ') && mn.includes('3 files you touched are not in the code graph'), 'miss note at 3 files: ' + mn);
+    assert.strictEqual(missNote('w1'), '', 'miss note: once per session');
+    for (let i = 0; i < 25; i++) noteMiss('w4', 'f' + i + '.cs');
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'seen', 'w4.miss'), 'utf8')).length, 20, 'the miss list keeps 20 files');
+    assert.strictEqual(driftNote(''), '');
+    // docs age (from docs-checked): one line; 7 days or less is no note; a set never checked is noted only with a graph drift of 10+ files
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { gamma: { docsBehindDays: 9.4, commitsSince: 5 } } }));
+    assert.strictEqual(driftNote('d1'), '⚠️ gabriel: The gamma docs were last checked 9 days before the latest code commit (5 commits since). Run /gabriel:refresh-docs gamma.', 'docs note alone');
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { gamma: { docsBehindDays: 7, commitsSince: 1 } } }));
+    assert.strictEqual(driftNote('d2'), '', 'docs exactly 7 days old: no note');
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { alpha: { commits: 4, changed: 12, docsBehindDays: 9, commitsSince: 5 } } }));
+    assert.strictEqual(driftNote('d3'), '⚠️ gabriel: The alpha graph is 4 commits behind (12 code files changed). Run /gabriel:refresh-docs alpha. The alpha docs were last checked 9 days before the latest code commit (5 commits since). Run /gabriel:refresh-docs alpha.', 'graph and docs sentences together');
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { delta: { docsBehindDays: null, neverChecked: true, commits: 2, changed: 11 } } }));
+    assert.strictEqual(driftNote('d4'), '⚠️ gabriel: The delta graph is 2 commits behind (11 code files changed). Run /gabriel:refresh-docs delta. The delta docs were never checked with /gabriel:refresh-docs.', 'never checked, with a graph drift of 10+');
+    fs.writeFileSync(path.join(dataDir, 'drift.json'), JSON.stringify({ t: 1, sets: { delta: { docsBehindDays: null, neverChecked: true, commits: 2, changed: 3 } } }));
+    assert.strictEqual(driftNote('d5'), '', 'never checked with a small drift: stay quiet');
+    // docs-checked: records the repo HEAD and its commit time; a set without a repo is refused (temp git repo, fixed commit date)
+    const dcRepo = path.join(home, 'dc-repo'), dcEnv = { ...process.env, GIT_COMMITTER_DATE: '2026-01-05T00:00:00Z', GIT_AUTHOR_DATE: '2026-01-05T00:00:00Z' };
+    w('dc-repo/src/a.js', 'x\n');
+    require('node:child_process').execFileSync('git', ['-C', dcRepo, 'init', '-q']);
+    require('node:child_process').execFileSync('git', ['-C', dcRepo, 'add', '.']);
+    require('node:child_process').execFileSync('git', ['-C', dcRepo, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'c'], { env: dcEnv });
+    const dcHead = require('node:child_process').execFileSync('git', ['-C', dcRepo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    fs.writeFileSync(path.join(dataDir, 'projects.json'), JSON.stringify({ version: 1, tips: false, projects: [
+      { name: 'dc', label: 'DC', root: path.join(home, 'dc-docs'), repo: dcRepo },
+      { name: 'nr', label: 'NR', root: path.join(home, 'nr-docs') },
+    ] }));
+    const dcOut = runBrain(home, ['docs-checked', 'dc']);
+    assert.strictEqual(dcOut.stdout.trim(), 'docs checked for dc at ' + dcHead.slice(0, 7), dcOut.stdout + dcOut.stderr);
+    const dcRec = JSON.parse(fs.readFileSync(path.join(dataDir, 'docs-checked.json'), 'utf8')).dc;
+    assert.deepStrictEqual({ commit: dcRec.commit, t: dcRec.t }, { commit: dcHead, t: Date.UTC(2026, 0, 5) / 1000 }, 'docs-checked records HEAD and its commit time');
+    const nrOut = runBrain(home, ['docs-checked', 'nr']);
+    assert.strictEqual(nrOut.status, 1, 'a set with no repo is refused');
+    assert.ok(nrOut.stdout.includes('has no repo folder'), nrOut.stdout);
+    console.log('warnings: drift and miss notes checked');
+  }
   finished = true;
   console.log('ALL PASSED');
 })().catch((err) => { console.error(err); process.exit(1); });

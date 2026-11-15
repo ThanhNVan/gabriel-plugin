@@ -41,7 +41,7 @@ gabriel is for AI coding agents: Claude Code, Codex CLI, Gemini CLI, GitHub Copi
 
 In Claude Code, run:
 
-```
+```plain
 /plugin marketplace add <git url or local folder>
 /plugin install gabriel@gabriel
 /gabriel:setup
@@ -108,7 +108,7 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 
 This is a made-up example from a doc set named `notes`:
 
-```
+```plain
 My notes map (spreading search over docs, built 2026-11-10; start here, then confirm in the code, the map can be old):
 - doc bikes.md > Brakes: Check the brake pads every 500 km.
 - doc cooking.md > Rice: Soak rice for 30 minutes before you boil it.
@@ -121,7 +121,7 @@ The `map` skill tells Claude how to read this block. Claude treats it as a lead,
 
 Working in one project all session? Type this as a prompt:
 
-```
+```plain
 gabriel use makillez
 ```
 
@@ -172,7 +172,9 @@ Docs that name real files, classes and steps give gabriel the most to link. Keep
 
 ## Credit
 
+Made by ThanhNVan @ Metizoft.
 Made by ThanhNVan @ AIC Lab FPT University.
+Made by ThanhNVan @ FPT Education FSB.
 
 ## License
 

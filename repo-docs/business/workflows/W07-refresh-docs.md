@@ -14,6 +14,7 @@ The skill finds the folders from `projects.json`: the set's `repo` is the code f
 4. **Shrink the updated docs.** Write a key-idea list before the edit. Shorten the text. List each cut with its rule. Check the key-idea list after the edit: every idea must still be there, or moved and linked. Report "key ideas kept: N/N".
 5. **Run the update.** `/gabriel:update` rebuilds the changed maps. See [W04](W04-update-and-auto-add.md).
 6. **Ask about retrain.** The user picks one of three: skip; `/gabriel:retrain <name>` (keep the new weights only if the strict score does not fall); or retrain and replace anyway (`node src/retrain.js <name> --force`). Do what the user picks. If the update made new suggested cases, the user must save them first. Skip the optional model tune. See [W06](W06-eval-and-retrain.md).
+7. **Record the check.** Last, after the docs are updated, run `node src/brain.js docs-checked <name>`. It writes the repo HEAD to `docs-checked.json`, so the drift warning (see [R37](../02-business-rules.md#r37-drift-warning)) knows the docs are current.
 
 ## Diagram
 

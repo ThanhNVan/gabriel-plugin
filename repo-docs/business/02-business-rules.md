@@ -200,3 +200,20 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - The repo folder comes from `add-docs --repo`, which checks it first: a git repo, the graph's commit in its history, and at least 80% of 200 sampled graph files in it.
 - Gaps: [findings](../technical/findings.md).
 - Where: `src/repo.js` `checkRepo()`, `exactLines()`, `defLine()`; `src/setup.js` `checkRepoArg()`; `src/mk.js` `search()` and `format()` (`where()`). Tests: `test/test-repo.js`, `test/test-map.js`, `test/test-workflow.js`.
+
+## Warnings
+
+### R37 Drift warning
+- A warning, not a tip. While a drift lasts, the hook note shows it on every 2nd prompt of a session (the 1st, 3rd, 5th; `DRIFT_EVERY`). It says what is behind, at most three sentences:
+  - the code graph, when 10 or more changed code files are in it (`/gabriel:refresh-docs <name>`);
+  - the docs, when they were last checked with `docs-checked <name>` more than 7 days before the latest code commit;
+  - the docs, when a set with a repo was never checked, and its graph drift is 10 or more files. A new set with no check and little drift stays quiet.
+- `"tips": false` does not turn it off.
+- A background run writes the counts to `drift.json` at most once an hour (`brain.js drift`). It never blocks a prompt. `mk-status all` shows the counts on a `drift` line.
+- `docs-checked <name>` records the repo HEAD and its commit time in `docs-checked.json`. The refresh-docs skill runs it last.
+- Where: `src/brain.js` `driftNote()`, `readDocsChecked()`, `refreshMapInBackground()`, modes `drift` and `docs-checked`; `src/repo.js` `graphDrift()`, `lastCommitTime()`, `headCommit()`, `commitsSince()`; `src/mk.js` `codeFiles()`. Tests: `test/test-brain.js`, `test/test-repo.js`, `test/test-statusview.js`.
+
+### R38 Miss warning
+- A warning, not a tip. Touched files that the map does not know are kept per session (at most 20). When 3 or more are kept, the hook note says once per session that the code graph may be old.
+- `"tips": false` does not turn it off.
+- Where: `src/brain.js` `touchedHook()`, `noteMiss()`, `missNote()`. Tests: `test/test-brain.js`.

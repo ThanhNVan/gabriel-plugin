@@ -2,7 +2,7 @@
 // Tests for src/repo.js checkRepo(): is this folder the code repo of a graph? Temp folders only; git runs in them.
 const assert = require('node:assert'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { checkRepo, defLine, exactLines } = require('../src/repo.js');
+const { checkRepo, defLine, exactLines, graphDrift, lastCommitTime, commitsSince } = require('../src/repo.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-test-'));
 const git = (dir, args) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', ...args], { stdio: 'pipe' });
@@ -170,6 +170,35 @@ try {
   const three = [item('b', 'src/p1.js'), item('b', 'src/p2.js'), item('b', 'src/p3.js')];
   exactLines(mv, three);
   assert.deepStrictEqual(three.map((x) => x.n.exact), [true, true, false]);
+
+  // graphDrift: 2 commits after the graph's commit; only the changed files in the Set count
+  const dr = path.join(tmp, 'drift');
+  writeFiles(dr, { 'src/x.js': '1\n', 'src/y.js': '1\n', 'docs/z.md': '1\n' });
+  git(dr, ['init', '-q']); git(dr, ['add', '.']); git(dr, ['commit', '-q', '-m', 'init']);
+  const base0 = headOf(dr);
+  fs.writeFileSync(path.join(dr, 'src/x.js'), '2\n'); fs.writeFileSync(path.join(dr, 'docs/z.md'), '2\n');
+  git(dr, ['commit', '-qam', 'two']);
+  fs.writeFileSync(path.join(dr, 'src/y.js'), '2\n');
+  git(dr, ['commit', '-qam', 'three']);
+  const inSet = new Set(['src/x.js', 'src/y.js', 'src/gone.js']);
+  assert.deepStrictEqual(graphDrift(dr, base0, inSet), { commit: base0, commits: 2, changed: 2 }, 'docs/z.md is not a graph file, so it is not counted');
+  assert.deepStrictEqual(graphDrift(dr, base0, new Set(['x.js']), 'src'), { commit: base0, commits: 2, changed: 1 }, 'base src: the prefix is cut before the Set check');
+  assert.strictEqual(graphDrift(dr, 'f'.repeat(40), inSet), null, 'a bad commit gives null');
+  assert.strictEqual(graphDrift(path.join(tmp, 'nope'), base0, inSet), null, 'a bad folder gives null');
+
+  // lastCommitTime: a fixed committer date, read back as Unix seconds; a path with no commits gives null
+  const dt = path.join(tmp, 'dates'), when = (d) => ({ ...process.env, GIT_COMMITTER_DATE: d, GIT_AUTHOR_DATE: d });
+  writeFiles(dt, { 'docs/a.md': '1\n', 'src/code.js': '1\n' });
+  git(dt, ['init', '-q']); git(dt, ['add', '.']);
+  execFileSync('git', ['-C', dt, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'd1'], { env: when('2026-01-01T00:00:00Z') });
+  fs.writeFileSync(path.join(dt, 'src/code.js'), '2\n');
+  execFileSync('git', ['-C', dt, '-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', 'commit', '-qam', 'd2'], { env: when('2026-01-10T00:00:00Z') });
+  assert.strictEqual(lastCommitTime(dt), Date.UTC(2026, 0, 10) / 1000, 'whole repo: the newest commit');
+  assert.strictEqual(lastCommitTime(dt, 'docs'), Date.UTC(2026, 0, 1) / 1000, 'docs folder: its own last commit');
+  assert.strictEqual(lastCommitTime(dt, 'nothing-here'), null, 'no commits for a path: null');
+  assert.strictEqual(lastCommitTime(path.join(tmp, 'nope')), null, 'bad folder: null');
+  assert.strictEqual(commitsSince(dr, base0), 2, 'commitsSince: two commits after base0');
+  assert.strictEqual(commitsSince(dr, 'f'.repeat(40)), null, 'commitsSince: bad commit gives null');
 
   console.log('ALL PASSED');
 } finally {

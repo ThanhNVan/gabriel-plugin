@@ -16,7 +16,7 @@ The user sends a prompt in a host with the gabriel hook. In Claude Code: `UserPr
 8. Similar earlier prompts: `src/history.js` `searchHistory()` (at most 2, score 0.60 or more), then `formatHistory()`.
 9. `capText()` cuts the text to the host limit (none for Claude, 9000 for Codex).
 10. `dedupe()` drops items already sent in this session. See [R07](../02-business-rules.md#r07-an-item-is-not-sent-twice-in-one-session).
-11. A tip or the setup hint is added once per session: `src/tips.js` `tipFor()`, `src/brain.js` `setupHint()`. See [R28](../02-business-rules.md#r28-one-tip-per-session) and [R29](../02-business-rules.md#r29-setup-hint-until-setup-is-done).
+11. One hint line may be added, in this order (the drift warning on every 2nd prompt, the others once per session): the setup hint (`src/brain.js` `setupHint()`), the warnings (`driftNote()`, `missNote()`; they ignore `tips: false`), then a tip (`src/tips.js` `tipFor()`). See [R28](../02-business-rules.md#r28-one-tip-per-session) and [R29](../02-business-rules.md#r29-setup-hint-until-setup-is-done).
 12. `writeOutput()` sends the text to the model (`additionalContext`) and a short view to the user (`systemMessage`, from `humanize()`). The pin line, when set, starts every user note ([R35](../02-business-rules.md#r35-session-pin)). Then `dedupe()`'s `save()` runs.
 
 ## Diagram

@@ -462,7 +462,7 @@ function touched(home, session, file, opts = {}) {
     const base = path.basename(rel).replace(/\.[^.]+$/, '');
     const targets = db.prepare("SELECT key, label FROM nodes WHERE project = ? AND kind = 'code' AND file = ? AND deg <= ? ORDER BY (label = ?) DESC, deg DESC LIMIT 12").all(project, rel, HUB, base)
       .filter((n) => !n.label.startsWith('.') && n.label.length >= 4 && !GENERIC.has(n.label)).slice(0, LEARN_TARGETS);
-    if (!targets.length) return { ignored: 'file not in the map' };
+    if (!targets.length) return { ignored: 'no named code in the file' };
     const inFile = new Set(db.prepare('SELECT key FROM nodes WHERE project = ? AND file = ?').all(project, rel).map((r) => r.key));
     const seeds = JSON.parse(row.seeds).filter(([k]) => !inFile.has(k)).slice(0, LEARN_SEEDS);
     const get = db.prepare('SELECT w, n, t FROM learn WHERE ka = ? AND kb = ?'), put = db.prepare('INSERT OR REPLACE INTO learn(ka, kb, w, n, t, project) VALUES(?,?,?,?,?,?)');
@@ -501,6 +501,15 @@ function learnReset(home, project) {
     db.prepare('DELETE FROM learn WHERE ' + own).run(project); db.prepare('DELETE FROM last WHERE project = ?').run(project);
     return n;
   } finally { db.close(); }
+}
+
+// The distinct code files of one doc set, as the map stores them (graph paths). An empty Set when there is no map.
+function codeFiles(home = homeDir(), project = defaultProject()) {
+  try {
+    const db = new (sqlite())(dbFile(home), { readOnly: true });
+    try { return new Set(db.prepare("SELECT DISTINCT file FROM nodes WHERE project = ? AND kind = 'code' AND file != ''").all(project).map((r) => r.file)); }
+    finally { db.close(); }
+  } catch { return new Set(); }
 }
 
 // Is the map as new as the graph and the docs? Reads only the last bytes of graph.json (that is where built_at_commit is).
@@ -982,4 +991,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective };
+module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles };

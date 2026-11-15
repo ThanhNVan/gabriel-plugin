@@ -40,6 +40,47 @@ function checkRepo(repoDir, graphFile) {
   return { ok: true, reason: '', found, sampled, base };
 }
 
+// Unix seconds of the last commit that touched rel (default: the whole repo), or null. Never throws.
+function lastCommitTime(repoDir, rel = '.') {
+  try {
+    const out = execFileSync('git', ['-C', repoDir, 'log', '-1', '--format=%ct', '--', rel], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: GIT_TIMEOUT, windowsHide: true }).trim();
+    const n = Number(out);
+    return out && Number.isFinite(n) ? n : null;
+  } catch { return null; }
+}
+
+// HEAD's commit id and its commit time (Unix seconds), or null. Never throws.
+function headCommit(repoDir) {
+  try {
+    const opt = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: GIT_TIMEOUT, windowsHide: true };
+    const [commit, t] = execFileSync('git', ['-C', repoDir, 'log', '-1', '--format=%H %ct', 'HEAD'], opt).trim().split(' ');
+    const n = Number(t);
+    return commit && Number.isFinite(n) ? { commit, t: n } : null;
+  } catch { return null; }
+}
+
+// How many commits HEAD has after commit, or null. Never throws.
+function commitsSince(repoDir, commit) {
+  try {
+    const n = Number(execFileSync('git', ['-C', repoDir, 'rev-list', '--count', `${commit}..HEAD`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: GIT_TIMEOUT, windowsHide: true }).trim());
+    return Number.isFinite(n) ? n : null;
+  } catch { return null; }
+}
+
+// How far the graph is behind HEAD: commits since its commit, and how many changed paths are graph files.
+// files is a Set of graph paths; base is '' or 'src' (the same meaning as in checkRepo). Null on any error. Never throws.
+function graphDrift(repoDir, commit, files, base = '') {
+  try {
+    const opt = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: GIT_TIMEOUT, windowsHide: true };
+    const commits = commitsSince(repoDir, commit);
+    if (commits == null) return null;
+    const paths = execFileSync('git', ['-C', repoDir, 'diff', '--name-only', `${commit}..HEAD`], opt).split('\n').map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean);
+    const prefix = base ? base + '/' : '';
+    const changed = paths.filter((p) => p.startsWith(prefix) && files.has(p.slice(prefix.length))).length;
+    return { commit, commits, changed };
+  } catch { return null; }
+}
+
 // ---- prompt time: exact lines from the real repo files ----
 const MAX_FILES = 30, MAX_BYTES = 2 * 1024 * 1024, BUDGET_MS = 450;
 
@@ -165,4 +206,4 @@ function exactLines(repoDir, items, base = '') {
   }
 }
 
-module.exports = { checkRepo, defLine, exactLines };
+module.exports = { checkRepo, defLine, exactLines, graphDrift, lastCommitTime, isGitRepo, headCommit, commitsSince };

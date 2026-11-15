@@ -69,3 +69,4 @@ For each updated doc:
    - If the doc set has no `eval-cases.json` yet, retrain writes suggested cases and stops. Tell the user to review them, then retrain again.
    - Do not run the optional meaning-model fine-tune (`/gabriel:tune-embeddings`) here: it is slow and only on request.
 4. Report as one table, one row per item: graph nodes (before, after, commit), each doc changed (lines before and after, key ideas kept N/N), doc checker result, retrain (skipped by choice, or current and new strict, kept or not, and which option ran). Then what was not checked.
+5. **Record the check.** Last, after the docs are updated, run `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" docs-checked <name>`. It prints `docs checked for <name> at <sha>`. The drift warning uses this record.
