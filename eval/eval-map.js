@@ -16,6 +16,7 @@
 //   node eval/eval-map.js --chain 4,5,3         try the "two links away" step as seeds,max,stem (e.g. 4,5,3); default: the project's chain setting in projects.js
 //   --cases <file> overrides the cases file (one project only). No cases file: prints a note and exits 0. See docs/EVAL.md.
 //   --half tune|check           only the cases with that "half" (a case with no half runs in both): tune settings on one half, judge on the other
+//   --code-k <n> [--code-gap <g>] [--code-sim <s>]   class names added to the code list by meaning: at most n, within g of the best, scoring at least s (default: mk's own)
 //   --no-repo                   no exact lines from the repo folder: the graph's own lines (the "before" score for fn cases)
 // A case: q (the question), doc / sec (regular expressions for a doc file and its section), code (regex for a code name),
 // any (pass when the doc OR the code matches), none (nothing may be returned). Matching ignores case.
@@ -32,6 +33,7 @@ const { getEmbedder } = require('../src/embed.js');
 const { defLine } = require('../src/repo.js');
 
 const argv = process.argv.slice(2), flag = (n) => argv.includes(n), opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : null; };
+const codeOpt = { ...(opt('--code-k') ? { codeK: Number(opt('--code-k')) } : {}), ...(opt('--code-gap') ? { codeGap: Number(opt('--code-gap')) } : {}), ...(opt('--code-sim') ? { codeSim: Number(opt('--code-sim')) } : {}) };   // --code-k/--code-gap/--code-sim -> opts only when given (mk default otherwise)
 const chainOpt = opt('--chain') ? (([seeds, max, stem]) => ({ seeds, max, stem }))(opt('--chain').split(',').map((s) => (s.trim() === '' ? undefined : Number(s)))) : undefined;   // --chain 4,5,3 -> opts.chain; undefined = the project's own setting
 const rx = (s) => new RegExp(s, 'i');
 const short = (f) => f.replace(/^technical-docs\/(for-dev\/)?/, '').replace(/\.md$/, '');
@@ -105,12 +107,13 @@ async function evalProject(DEFAULT, casesFile, embed, rankOpt) {
   const half = opt('--half');   // tune or check: one half of a split case file; a case with no half runs in both
   const cases = all.filter((c) => (!opt('--set') || c.set === opt('--set')) && (!opt('--tier') || c.tier === opt('--tier')) && (!opt('--area') || c.id.toUpperCase().startsWith(opt('--area').toUpperCase())) && (!half || !c.half || c.half === half));
   if (half) console.log(`half: ${half} (${cases.length} cases)`);
+  for (const k of ['codeK', 'codeSim', 'codeGap']) if (codeOpt[k] !== undefined) console.log(`${k === 'codeK' ? 'code-k' : k === 'codeSim' ? 'code-sim' : 'code-gap'}: ${codeOpt[k]}`);
   const rows = [];
   for (const c of cases) {
     const start = Date.now();
     const pv = embed ? (await embed([c.q]))[0] : null;
     // --route: the real router picks the project; an answer from the wrong project counts as no answer (a miss), and any answer to an unrelated question is a leak
-    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...rankOpt });
+    const t0 = Date.now(), res0 = flag('--route') ? mk.searchAll(homeDir(), c.q, { pv, learn: false, strong: 0, cwd: opt('--cwd') || c.cwd || '', why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...codeOpt, ...rankOpt }) : mk.search(homeDir(), c.q, { pv, learn: false, project: c.project || DEFAULT, why: flag('--why'), noRepo: flag('--no-repo'), chain: chainOpt, ...codeOpt, ...rankOpt });
     const own = c.project || DEFAULT, res = flag('--route') && res0 && !c.none ? (res0.project === own ? res0 : (res0.also || []).find((a) => a.project === own) || null) : res0;   // the right project's block may be the main one or a second, shorter one
     rows.push({ c, status: judge(c, res), exact: exactOf(c, res, c.project || DEFAULT), renderedStatus: judgeRendered(c, res, res0), why: flag('--why') ? whyOf(c, res) : null, alsoN: res0 && res0.also ? res0.also.length : 0, blockN: res0 ? mk.format(res0).length : 0, ms: Date.now() - t0, totalMs: Date.now() - start, best: res ? res.best : 0, docs: res ? res.docs.map((d) => short(d.n.file) + ' > ' + (d.n.section || '').split(' > ').slice(-1)[0]) : [], code: res ? res.code.map((x) => x.n.label) : [], commit: res ? res.commit : null });
     if (rows.length % 25 === 0) console.log(`progress ${rows.length}/${cases.length}`);

@@ -29,6 +29,7 @@ def parse_args(argv=None):
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--warmup", type=float, default=0.1, help="share of steps used to warm up the learning rate")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--device", default="auto", help="auto (Intel xpu, then cuda, then cpu), xpu, cuda or cpu")
     return p.parse_args(argv)
 
 
@@ -41,6 +42,37 @@ def read_pairs(path):
                 anchors.append(row["anchor"])
                 positives.append(row["positive"])
     return anchors, positives
+
+
+def pick_device(want):
+    """The torch device to train on: the one asked for, or with "auto" the first that works (Intel xpu, cuda, cpu)."""
+    if want != "auto":
+        return want
+    try:
+        import torch
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            return "xpu"
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
+
+
+def xpu_safe_loss(model):
+    """MultipleNegativesRankingLoss with its default settings, without s[i, j] indexing.
+    On Intel GPUs (torch 2.15 xpu) that indexing crashes the device (UR_RESULT_ERROR_DEVICE_LOST).
+    Same math: cross entropy over scale * cos_sim(anchor, positive), right answer on the diagonal."""
+    import torch
+    import torch.nn.functional as F
+    from sentence_transformers.losses import MultipleNegativesRankingLoss
+
+    class XpuSafeMNRL(MultipleNegativesRankingLoss):
+        def compute_loss_from_embeddings(self, embeddings, labels):
+            scores = self.similarity_fct(embeddings[0], torch.cat(embeddings[1:], dim=0)) * self.scale
+            return F.cross_entropy(scores, torch.arange(scores.size(0), device=scores.device))
+
+    return XpuSafeMNRL(model)
 
 
 def progress_line(pct, step, total):
@@ -75,11 +107,13 @@ def main(argv=None):
                 print(progress_line(pct, state.global_step, total), flush=True)
             return control
 
+    device = pick_device(args.device)
+    print(f"device: {device}", flush=True)
     started = time.time()
     os.makedirs(args.out, exist_ok=True)
-    model = SentenceTransformer(args.base, device="cpu")
+    model = SentenceTransformer(args.base, device=device)
     train_ds = Dataset.from_dict({"anchor": anchors, "positive": positives})
-    loss = MultipleNegativesRankingLoss(model)
+    loss = xpu_safe_loss(model) if device == "xpu" else MultipleNegativesRankingLoss(model)
     work = tempfile.mkdtemp(prefix="gabriel-train-", dir=args.out)
     try:
         targs = SentenceTransformerTrainingArguments(
@@ -89,7 +123,7 @@ def main(argv=None):
             learning_rate=args.lr,
             warmup_ratio=args.warmup,
             seed=args.seed,
-            use_cpu=True,
+            use_cpu=(device == "cpu"),
             save_strategy="no",
             logging_steps=10,
             report_to="none",

@@ -26,6 +26,16 @@ const mk = require('../src/mk.js');
   assert.deepStrictEqual(mk.namedProjects(ps, 'gabriel and gabriel-dev'), ['gd'], 'the short name inside the long one is not counted separately');
 }
 
+// Class-name text for the meaning index: the words of the name, then the last 4 folders of its file (not the file name).
+{
+  assert.strictEqual(typeof mk.codeText, 'function', 'codeText must be exported');
+  assert.strictEqual(mk.codeText('DeleteProjectCommandHandler', 'Services/Vessels/Vessels.Application/Commands/Project/Delete/DeleteProjectCommandHandler.cs'),
+    'delete project command handler | Vessels.Application Commands Project Delete');
+  assert.strictEqual(mk.codeText('DeleteProjectCommandHandler', 'Services\\Vessels\\Vessels.Application\\Commands\\Project\\Delete\\DeleteProjectCommandHandler.cs'),
+    'delete project command handler | Vessels.Application Commands Project Delete', 'backslash paths give the same text');
+  assert.strictEqual(mk.codeText('InvoiceWriter', 'X.cs'), 'invoice writer | ', 'a file with no folder ends with an empty folder part');
+}
+
 const write = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
 write(path.join(root, 'technical-docs', 'for-dev', '01-intro.md'), [
   '# 01 — Intro', '', '## Orders', '',
@@ -57,6 +67,12 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     const r = await mk.build(home, { root, noEmbed: true });
     assert.strictEqual(r.files, 3); assert.strictEqual(r.code, 704);
     assert.strictEqual(mk.stale(home), false, 'fresh map is not stale');
+
+    // an old map (meta version 5, before class-name folders) must count as stale, then a rebuild clears it
+    { const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(mk.dbFile(home)); d.prepare("UPDATE meta SET v = '5' WHERE k = 'version'").run(); d.close(); }
+    assert.strictEqual(mk.stale(home), true, 'a meta version 5 map must be stale');
+    await mk.build(home, { root, noEmbed: true });
+    assert.strictEqual(mk.stale(home), false, 'a rebuilt map is not stale');
 
     // a prompt about the handler reaches the doc that cites it, the handler itself, and (by spreading) its repository
     const res = mk.search(home, 'how does the order handler save an order', {});
@@ -392,6 +408,8 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
           assert.ok(withRepo.includes('exact: 1/1 (100%)'), 'eval: the fn case is exact with the repo ' + withRepo);
           const noRepo = runEval('--no-repo');
           assert.ok(noRepo.includes('exact: 0/1 (0%)'), 'eval --no-repo: the stale graph line is not exact ' + noRepo);
+          const ck3 = runEval('--code-k', '3');
+          assert.ok(ck3.includes('code-k: 3'), 'eval --code-k 3 is printed ' + ck3);
           // --half: only the cases of that half run; a case with no half runs in both
           const halfFile = path.join(tmp, 'eval-half.json'), base = { set: 'dev', tier: 'easy', project: 'alpha', code: 'OrderHandler', fn: 'OrderHandler', file: 'Services/Shop/OrderHandler\\.cs$' };
           fs.writeFileSync(halfFile, JSON.stringify([
@@ -449,6 +467,59 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       assert.ok(labels8.includes('SetOrderTaskStatusCommandHandler'), 'chain by name: the hit is shown ' + labels8);
       assert.ok(res8.code.some((c) => c.chain && c.n.label === 'OnOrderTaskStatusChanged'), 'chain by name: the On<stem> handler is added with no graph link (role words Command, Handler dropped) ' + labels8);
       assert.ok(!labels8.includes('OnParcelShipped'), 'chain by name: a handler with another stem is not added ' + labels8);
+    }
+
+    // meaning code slots: the class names closest in meaning to the question take the slots (codeK), a weak meaning adds nothing,
+    // and a name in two files picks the lower-deg file (the same rule as the class-name text in build)
+    {
+      const fixtureHome = (tag, nodes, links) => {
+        const h = path.join(tmp, 'home-' + tag), r = path.join(tmp, 'docs-' + tag);
+        write(path.join(r, 'technical-docs', '01-widgets.md'), '# 01 — Widgets\n\n## Widgets\n\nThe widget factory runner builds each widget maker.\n');
+        write(path.join(r, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+        write(path.join(r, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, links, built_at_commit: 'eee999' }));
+        return { h, r };
+      };
+      const setVecc = (h, pairs) => {   // vector rows for the class names (dimension 4), the way build writes them when an embedder runs
+        const { DatabaseSync } = require('node:sqlite'), d = new DatabaseSync(mk.dbFile(h));
+        const ins = d.prepare('INSERT OR REPLACE INTO vecc(label, v, project) VALUES(?,?,?)');
+        for (const [label, v] of pairs) ins.run(label, Buffer.from(Float32Array.from(v).buffer), 'beta');
+        d.close();
+      };
+      const n9 = (id, label, file) => ({ id, label, source_file: file, source_location: 'L3', community: 1, community_name: 'Widgets' });
+      const q9 = 'how is the widget factory runner built', pv9 = [1, 0, 0, 0];
+      const makers = ['AlphaWidgetMaker', 'BetaWidgetMaker', 'GammaWidgetMaker', 'DeltaWidgetMaker', 'EpsilonWidgetMaker'];
+      const vecs = [[1, 0, 0, 0], [0.9, 0.4359, 0, 0], [0.8, 0.6, 0, 0], [0.7, 0.7141, 0, 0], [0.6, 0.8, 0, 0]];   // dot with pv9: 1.0, 0.9, 0.8, 0.7, 0.6
+      const nodes9 = [n9('w0', 'WidgetFactoryRunner', 'Services/Widgets/WidgetFactoryRunner.cs'), ...makers.map((l, i) => n9('m' + i, l, 'Services/Widgets/' + l + '.cs'))];
+
+      // 1: codeK 4 (and no gap limit) adds 4 of the 5 closest names
+      const f1 = fixtureHome('k', nodes9, []);
+      await mk.build(f1.h, { root: f1.r, project: 'beta', noEmbed: true });
+      setVecc(f1.h, makers.map((l, i) => [l, vecs[i]]));
+      const k4 = mk.search(f1.h, q9, { project: 'beta', pv: pv9, codeK: 4, codeGap: 1 }) || { code: [] };
+      const k4n = k4.code.map((c) => c.n.label).filter((l) => makers.includes(l)).length;
+      assert.ok(k4n >= 4, 'codeK 4 adds 4 close class names, got ' + k4n + ' ' + k4.code.map((c) => c.n.label));
+      const k2 = mk.search(f1.h, q9, { project: 'beta', pv: pv9 }) || { code: [] };
+      const k2n = k2.code.map((c) => c.n.label).filter((l) => makers.includes(l)).length;
+      assert.strictEqual(k2n, 1, 'default gap 0.05: only the name within 0.05 of the best (Beta is 0.1 below) is added, got ' + k2n + ' ' + k2.code.map((c) => c.n.label));
+
+      // 2: every score under CODE_SIM (0.55): the code list is the same as with the threshold raised above every score
+      const f2 = fixtureHome('weak', nodes9, []);
+      await mk.build(f2.h, { root: f2.r, project: 'beta', noEmbed: true });
+      setVecc(f2.h, makers.map((l) => [l, [0.3, 0.9539, 0, 0]]));   // dot 0.3
+      const weakOn = mk.search(f2.h, q9, { project: 'beta', pv: pv9 }) || { code: [] };
+      const weakOff = mk.search(f2.h, q9, { project: 'beta', pv: pv9, codeSim: 2 }) || { code: [] };
+      assert.deepStrictEqual(weakOn.code.map((c) => c.n.label), weakOff.code.map((c) => c.n.label), 'weak meaning adds no class name');
+
+      // 3: DupWidget is in two files; the newer copy has 3 links in, so it has the higher deg. The lower-deg file is picked.
+      const dupNodes = [n9('d1', 'DupWidget', 'Services/Old/DupWidget.cs'), n9('d2', 'DupWidget', 'Services/New/DupWidget.cs'), n9('ex0', 'Extra0', 'Services/New/Extra0.cs'), n9('ex1', 'Extra1', 'Services/New/Extra1.cs'), n9('ex2', 'Extra2', 'Services/New/Extra2.cs')];
+      const dupLinks = ['ex0', 'ex1', 'ex2'].map((s) => ({ source: s, target: 'd2', relation: 'references', confidence_score: 1 }));
+      const f3 = fixtureHome('dup', dupNodes, dupLinks);
+      await mk.build(f3.h, { root: f3.r, project: 'beta', noEmbed: true });
+      setVecc(f3.h, [['DupWidget', [0.9, 0.4359, 0, 0]]]);
+      const dup = mk.search(f3.h, q9, { project: 'beta', pv: pv9, codeK: 4, codeGap: 1 }) || { code: [] };
+      const dupHits = dup.code.filter((c) => c.n.label === 'DupWidget');
+      assert.ok(dupHits.length > 0, 'the duplicate name is added ' + dup.code.map((c) => c.n.label));
+      assert.ok(dupHits.every((c) => c.n.file === 'Services/Old/DupWidget.cs'), 'the lower-deg file is picked ' + dupHits.map((c) => c.n.file));
     }
 
     // a broken map file never throws

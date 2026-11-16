@@ -13,7 +13,7 @@ const paths = require('./paths.js');
 const { debug } = require('./debuglog.js');
 const { extSet, isDocName, extractText } = require('./extract.js');
 
-const DB_VERSION = 5;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index
+const DB_VERSION = 6;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index; 6 = class-name text has folders
 const DECAY = 0.55, ROUNDS = 3, FRONTIER = 300, HUB = 600;     // spreading: damping per step, steps, neurons kept per step, a neuron with more links only receives
 const SEED_DOCS = 30, SEED_CODE = 30, SEED_HUB = 800;          // seeds kept per layer; code nodes with more links than SEED_HUB are never seeds
 const MIN_SCORE = 2.5, WORD_SCALE = 12, THESAURUS_WEIGHT = 0.5; // same word scoring as rules.js
@@ -24,6 +24,7 @@ const ALSO_CLOSE = 0.4, FALLBACK_IF_WEAKER_THAN = 1.6, ALSO_CHARS = 1100;   // a
 const FALLBACK_FIRST = 0.8;
 const FALLBACK_GATE = 1.7, FALLBACK_MARGIN = 0.3, FALLBACK_PROBE_ALONE = 0.5, FALLBACK_PROBE_WITH_PROJECT = 1.0;   // general docs: their own stricter gate (positives: median 2.35, 10th percentile 1.75; unrelated prompts: median 0.67, 90th percentile 1.10), the lead needed over a project, and the words-only look that decides whether the full tech search runs
 const CODE_SIM = 0.55;  // a class name must be this close in meaning to the question to be added
+const CODE_K = 2;       // at most this many class names (closest in meaning first) are added to the code list
 const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65;
 // Learning from use: opening or editing a file soon after a map was shown strengthens the links from that prompt's strongest seeds to the file's main types.
 // Bounded on purpose: a link saturates at LEARN_MAX (a full link counts like one full graph edge), fades with a half-life, needs several confirmations to show, and is never used to start a search or pass the gate.
@@ -51,6 +52,12 @@ const sqlite = () => require('node:sqlite').DatabaseSync;       // loaded here s
 
 // ---- words ----
 const camel = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+// the text embedded for a class name: its words, then the last 4 folders of its file (the file name is left out)
+const codeText = (label, file) => {
+  const parts = String(file || '').replace(/\\/g, '/').split('/');
+  parts.pop();
+  return camel(label).toLowerCase() + ' | ' + parts.slice(-4).join(' ');
+};
 // The root of a word, so that forms of one word meet: generated and generator -> generat, sends and sender -> send. Cut up to two endings, drop a doubled end letter and a final e.
 function rootOf(w) {
   let r = w;
@@ -318,11 +325,16 @@ async function build(home = homeDir(), opts = {}) {
       for (const r of rows) { const f = hv.get(headOf(r.section)); if (f) puth.run(r.id, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); }
       db.exec('COMMIT');
       // the meaning of class names: each distinct type name, read as words (DomainServiceDomainEventsHolder -> "domain service domain events holder")
-      const names = db.prepare("SELECT DISTINCT label FROM nodes WHERE kind = 'code' AND file != ''").all().map((r) => r.label).filter((l) => /^[A-Za-z][A-Za-z0-9]{4,}$/.test(l) && !GENERIC.has(l));
+      // one row per label: the file of its lowest-deg node (the folders of that file are part of the text)
+      const fileOf = new Map();
+      for (const r of db.prepare("SELECT label, file, deg FROM nodes WHERE kind = 'code' AND file != '' ORDER BY deg ASC").all()) {
+        if (!fileOf.has(r.label) && /^[A-Za-z][A-Za-z0-9]{4,}$/.test(r.label) && !GENERIC.has(r.label)) fileOf.set(r.label, r.file);
+      }
+      const names = [...fileOf.keys()];
       const putc = db.prepare('INSERT INTO vecc VALUES(?,?)');
       db.exec('BEGIN');
       for (let i = 0; i < names.length; i += 64) {
-        const part = names.slice(i, i + 64), got = await embed(part.map((l) => camel(l).toLowerCase()));
+        const part = names.slice(i, i + 64), got = await embed(part.map((l) => codeText(l, fileOf.get(l))));
         part.forEach((l, j) => { const f = Float32Array.from(got[j]); putc.run(l, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); });
       }
       db.exec('COMMIT');
@@ -776,10 +788,12 @@ function addNamedCode(S) {
         }
       } catch { /* a map without class-name numbers */ }
       near.sort((a, b) => b[1] - a[1]);
-      const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg DESC LIMIT 1");
-      const add = [];
-      for (const [label, s] of near.slice(0, 2)) {
-        if (s < near[0][1] - 0.05) continue;
+      const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg ASC LIMIT 1");
+      const add = [], K = opts.codeK ?? CODE_K, gap = opts.codeGap ?? 0.05;
+      for (const [label, s] of near) {
+        if (add.length >= K) break;
+        if (s < near[0][1] - gap) continue;
+        if (code.some((c) => c.n.label === label) || add.some((e) => e.n.label === label)) continue;
         const row = byLabel.get(label, project), n = row && info.get(row.id);
         if (n && n.deg <= SEED_HUB) add.push({ a: s, n });
       }
@@ -1018,4 +1032,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers };
+module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers, codeText };

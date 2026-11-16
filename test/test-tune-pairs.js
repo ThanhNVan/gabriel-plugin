@@ -89,6 +89,52 @@ const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
     assert.match(cli.stderr, /too few cases: add or review more in eval-cases\.json \(have \d+, need 1000\)/);
     console.log('  ok: too few cases -> exit 1 with the message');
 
+    // 4: code pairs (src/tune/code-pairs.js): anchors from code names, positive = codeText(label, file)
+    const { codePairs } = require(path.join(ROOT, 'src', 'tune', 'code-pairs.js'));
+    const { codeText } = require(path.join(ROOT, 'src', 'mk.js'));
+    const DEL = { label: 'DeleteProjectCommandHandler', file: 'Services/Vessels/Vessels.Application/Commands/Project/Delete/DeleteProjectCommandHandler.cs' };
+    const EVT = { label: 'OnVesselCreated', file: 'Services/Vessels/Vessels.Application/Events/OnVesselCreated.cs' };
+    const REPO = { label: 'CompanyRepository', file: 'Services/Companies/Companies.Infrastructure/Repositories/CompanyRepository.cs' };
+    const DOTTED = { label: 'Metizoft.Vessels.Application', file: 'Services/Vessels/Vessels.Application/Foo.cs' };
+    const delAnchors = codePairs([DEL], { seed: 42 }).map((p) => p.anchor);
+    assert.ok(delAnchors.includes('what happens when a project is deleted'), 'delete anchor: ' + delAnchors.join(' | '));
+    const evtAnchors = codePairs([EVT], { seed: 42 }).map((p) => p.anchor);
+    assert.ok(evtAnchors.some((a) => a.startsWith('what happens after vessel')), 'event anchor: ' + evtAnchors.join(' | '));
+    const repoAnchors = codePairs([REPO], { seed: 42 }).map((p) => p.anchor);
+    assert.ok(repoAnchors.some((a) => a.includes('database')), 'repository anchor: ' + repoAnchors.join(' | '));
+    const skipped = codePairs([DEL], { seed: 42, skip: new Set(['what happens when a project is deleted']) }).map((p) => p.anchor);
+    assert.ok(!skipped.includes('what happens when a project is deleted'), 'skip set removes the anchor');
+    assert.deepStrictEqual(codePairs([DEL, EVT, REPO], { seed: 7 }), codePairs([DEL, EVT, REPO], { seed: 7 }), 'same seed, same output');
+    assert.strictEqual(codePairs([DOTTED], { seed: 42 }).length, 0, 'namespace label gives 0 pairs');
+    assert.strictEqual(codePairs([{ label: 'Some.Dotted', file: DEL.file }], { seed: 42 }).length, 0, 'any label with a dot gives 0 pairs');
+    for (const r of [DEL, EVT, REPO]) {
+      for (const p of codePairs([r], { seed: 42 })) assert.strictEqual(p.positive, codeText(r.label, r.file), 'positive is codeText');
+    }
+    console.log('  ok: code pairs: anchors from names, skip set, seed, namespace labels dropped, positive = codeText');
+
+    // 5: a project with code in the map but no eval-cases.json still gets code pairs; its case questions stay out
+    fs.writeFileSync(path.join(DATA, 'projects.json'), JSON.stringify({ version: 1, projects: [
+      { name: 'demo', root: DOCS, layout: 'all-md', graph: null }, { name: 'other', root: DOCS, layout: 'all-md', graph: null }] }));
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(mk.dbFile());
+    const ins = db.prepare("INSERT INTO nodes(kind, label, file, deg, project) VALUES ('code', ?, ?, 1, 'other')");
+    ins.run(DEL.label, DEL.file); ins.run(EVT.label, EVT.file);
+    db.close();
+    fs.mkdirSync(path.join(DATA, 'private', 'other'), { recursive: true });
+    fs.writeFileSync(path.join(DATA, 'private', 'other', 'eval-cases-scenario.json'), JSON.stringify([{ id: 'SC-1', q: 'what happens when a project is deleted', code: '^DeleteProjectCommandHandler$' }]));
+    const e = exportPairs({ out: path.join(base, 'out-e'), seed: 42, min: 10 });
+    assert.ok(e.codeCounts.other > 0, 'code pairs for a project with no eval-cases.json: ' + JSON.stringify(e.codeCounts));
+    assert.strictEqual(e.train + e.heldout - Object.values(e.codeCounts).reduce((s, n) => s + n, 0), NF * NS, 'doc pairs still come only from demo');
+    let anchors = readJsonl(path.join(base, 'out-e', 'pairs.train.jsonl')).filter((p) => p.project === 'other').map((p) => p.anchor);
+    assert.ok(!anchors.includes('what happens when a project is deleted'), 'a scenario question is never a training anchor');
+    // a question of ANOTHER project is never an anchor either (one skip list for all projects)
+    fs.rmSync(path.join(DATA, 'private', 'other', 'eval-cases-scenario.json'));
+    fs.writeFileSync(path.join(DATA, 'private', 'demo', 'eval-cases-exact.json'), JSON.stringify([{ id: 'EX-1', q: 'what happens when a project is deleted', code: 'x' }]));
+    exportPairs({ out: path.join(base, 'out-f'), seed: 42, min: 10 });
+    anchors = readJsonl(path.join(base, 'out-f', 'pairs.train.jsonl')).map((p) => p.anchor);
+    assert.ok(!anchors.includes('what happens when a project is deleted'), 'a question of project demo is never an anchor for project other');
+    console.log('  ok: code pairs for every project with code in the map; scenario questions stay out');
+
     console.log('ALL PASSED');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });

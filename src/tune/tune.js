@@ -1,6 +1,7 @@
 // Optional: tune the meaning model on your own eval questions, score it on a copy of your data, keep it only if it wins.
 //   node src/tune/tune.js [--venv <dir>] [--yes]   the whole run: 5 steps (slow on CPU; see docs/TUNING.md)
 //                                                  --venv defaults to <dataDir>/tune-venv (made by node src/setup.js --tune)
+//   node src/tune/tune.js ... --force              keep the tuned model even when the keep rule says roll back (R27)
 //   node src/tune/tune.js --rollback               remove embedModel from projects.json (config only)
 // Your real data does not change until the scores say keep. The scores run on a copy of the data folder,
 // because a model change re-embeds every map and the real maps must stay as they are until the decision.
@@ -12,7 +13,7 @@ const paths = require('../paths.js');
 const mk = require('../mk.js');
 const { writeAtomic } = require('../rules.js');
 const { loadProjects } = require('../projects.js');
-const { exportPairs } = require('./export-pairs.js');
+const { exportPairs, CODE_CASE_FILES } = require('./export-pairs.js');
 
 const SRC = path.resolve(__dirname, '..');                  // src/
 const ROOT = path.resolve(__dirname, '..', '..');           // the plugin folder
@@ -128,15 +129,31 @@ function evalMap(project, env, casesFile) {
     quiet: countOf(text, /unrelated questions\s+quiet (?:(\d+)\/(\d+)|-)/, 'quiet'),
   };
 }
+// The case files a project has: main = eval-cases.json (full, quiet, held-out), code = exact, chain and scenario files.
+function caseFilesOf(p) {
+  const dir = paths.privateDir(p);
+  return { main: fs.existsSync(path.join(dir, 'eval-cases.json')), code: CODE_CASE_FILES.map((f) => path.join(dir, f)).filter((f) => fs.existsSync(f)) };
+}
 function measure(label, env, projects, work) {
-  const res = { held: {}, full: {}, quiet: {} };
+  const res = { held: {}, full: {}, quiet: {}, code: {} };
   for (const p of projects) {
-    const full = evalMap(p, env, null);
-    res.full[p] = full.strict; res.quiet[p] = full.quiet;
+    const has = caseFilesOf(p);
+    const full = has.main ? evalMap(p, env, null) : null;   // a project with only code case files gets the code score only
+    if (full) { res.full[p] = full.strict; res.quiet[p] = full.quiet; }
     const hc = path.join(work, 'pairs', `${p}.heldout-cases.json`);
     const n = fs.existsSync(hc) ? JSON.parse(fs.readFileSync(hc, 'utf8')).length : 0;
     if (n) res.held[p] = evalMap(p, env, hc).strict;
-    console.log(`  ${label} ${p}: full ${full.strict.n}/${full.strict.t}${n ? `, held-out ${res.held[p].n}/${res.held[p].t}` : ''}, quiet ${full.quiet.n}/${full.quiet.t}`);
+    // code score: exact, chain and scenario case files in the private folder (only on the machine that has them)
+    const codeFiles = has.code;
+    let codeTxt = '';
+    if (codeFiles.length) {
+      const c = { n: 0, t: 0 };
+      for (const f of codeFiles) { const r = evalMap(p, env, f).strict; c.n += r.n; c.t += r.t; }
+      res.code[p] = c;
+      codeTxt = `, code ${c.n}/${c.t}`;
+    }
+    const parts = [full && `full ${full.strict.n}/${full.strict.t}`, n && `held-out ${res.held[p].n}/${res.held[p].t}`, full && `quiet ${full.quiet.n}/${full.quiet.t}`, codeTxt.replace(/^, /, '')];
+    console.log(`  ${label} ${p}: ${parts.filter(Boolean).join(', ')}`);
   }
   return res;
 }
@@ -150,6 +167,7 @@ function score(T, work, projects) {
   run(process.execPath, ['--max-old-space-size=4096', BRAIN, 'build-mk', 'all'], envTuned, 'build maps (tuned)');
   rebuildQuestionIndex(projects, envTuned);
   const tuned = measure('tuned', envTuned, projects, work);
+  if (!Object.keys(base.code).length) console.log('no exact/chain cases: code score skipped');
   return { base, tuned };
 }
 
@@ -165,6 +183,8 @@ function decide(base, tuned) {
   }
   if (tot(tuned.full) < tot(base.full)) reasons.push(`full strict fell (${tot(base.full)} -> ${tot(tuned.full)})`);
   if (tot(tuned.quiet) < tot(base.quiet)) reasons.push(`quiet fell (${tot(base.quiet)} -> ${tot(tuned.quiet)})`);
+  // code is never required to rise; it only must not fall
+  if (base.code && tuned.code && tot(tuned.code) < tot(base.code)) reasons.push(`code total fell (${tot(base.code)} -> ${tot(tuned.code)})`);
   return { keep: reasons.length === 0, reasons };
 }
 
@@ -177,6 +197,7 @@ function printTable(base, tuned) {
   rows.push(['held-out total', f(sum(base.held)), f(sum(tuned.held))]);
   rows.push(['full strict total', f(sum(base.full)), f(sum(tuned.full))]);
   rows.push(['quiet total', f(sum(base.quiet)), f(sum(tuned.quiet))]);
+  if (base.code && tuned.code && Object.keys(base.code).length) rows.push(['code total', f(sum(base.code)), f(sum(tuned.code))]);
   const w = Math.max(...rows.map((r) => r[0].length), 18);
   console.log('\n' + ['measure'.padEnd(w), 'before'.padStart(9), 'after'.padStart(9), 'change'.padStart(8)].join('  '));
   for (const [label, b, a] of rows) {
@@ -202,10 +223,11 @@ function rollBackModel() {   // the real data was never changed, so only the (un
 
 // ---- main ----
 function parseArgs(argv) {
-  const o = { rollback: false, yes: false, venv: null };
+  const o = { rollback: false, yes: false, venv: null, force: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--rollback') o.rollback = true;
+    else if (a === '--force') o.force = true;
     else if (a === '--yes') o.yes = true;
     else if (a === '--venv') { if (argv[i + 1] === undefined) throw new Error('--venv needs a folder'); o.venv = path.resolve(argv[++i]); }
     else throw new Error('unknown argument: ' + a);
@@ -235,7 +257,7 @@ async function main(argv) {
   venvPython(o.venv);   // fails early when the venv has no python
   const cur = readConfig();
   if (cur && cur.embedModel) throw new Error(`projects.json already sets embedModel "${cur.embedModel}". Run --rollback first, then tune again.`);
-  const projects = loadProjects().map((p) => p.name).filter((n) => fs.existsSync(path.join(paths.privateDir(n), 'eval-cases.json')));
+  const projects = loadProjects().map((p) => p.name).filter((n) => { const h = caseFilesOf(n); return h.main || h.code.length > 0; });
   if (!projects.length) throw new Error('no eval cases yet: write eval-cases.json for a project first (docs/EVAL.md)');
   if (!fs.existsSync(mk.dbFile())) throw new Error('no map yet: run node src/brain.js build-mk all first');
   if (!o.yes) {
@@ -269,7 +291,10 @@ async function main(argv) {
 
     stepStart(5, 'keep or roll back');
     const d = decide(res.base, res.tuned);
-    if (d.keep) keepModel(T, projects);
+    if (d.keep || o.force) {
+      if (!d.keep) console.log(`kept by --force (the user chose it). Numbers that fell or failed the rule: ${d.reasons.join('; ')}`);
+      keepModel(T, projects);
+    }
     else {
       rollBackModel();
       console.log(`rolled back: the current model stays (projects.json unchanged). Numbers that fell or failed the rule: ${d.reasons.join('; ')}`);
@@ -282,7 +307,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { decide, parseArgs, keepModel };
+module.exports = { decide, parseArgs, keepModel, caseFilesOf };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }).catch((e) => {
