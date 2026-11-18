@@ -25,12 +25,12 @@ Run the passes in this order. Each one reads the graph that the step before wrot
 
 ```mermaid
 flowchart LR
-  A["1. AST<br/>graphify"] --> B["2. Event pass<br/>publishes_event, raises_event"]
-  B --> C["3. Compiler pass<br/>calls, implemented_by,<br/>sends_to_handler, uses_dbset"]
-  C --> D["4. Route bridge<br/>client route = controller route"]
-  D --> E["5. TS pass<br/>calls, template_*, http_route"]
-  E --> F["6. Tidy<br/>false links, stubs, migrations"]
-  F --> G["7. Stamp<br/>built_at_commit, marker"]
+  A["1. AST: graphify"] --> B["2. Event pass: publishes_event, raises_event"]
+  B --> C["3. Compiler pass: calls, implemented_by, sends_to_handler, uses_dbset"]
+  C --> D["4. Route bridge: client route = controller route"]
+  D --> E["5. TS pass: calls, template_*, http_route"]
+  E --> F["6. Tidy: false links, stubs, migrations"]
+  F --> G["7. Stamp: built_at_commit, marker"]
   G --> H["8. Wiki (optional)"]
   G --> I["gabriel map build"]
 ```

@@ -103,6 +103,7 @@ A "session gate" applies only to a project with `"sessionGate": true` in `projec
 - **Trained weights (optional).** If a project has `private/<name>/rank.json`, docs are ranked with its weights (key `w`). Signals include word and meaning scores, heading match, file depth and file size.
 - **Picking.** With trained weights: at most 6 docs, at most 2 per file, one per section, and only docs within 3 points of the top score. Default: at most 6 docs, at most 2 per file, and none under 30 percent of the top score. Code names: at most 6, at most 2 types per file, with the same 30 percent rule.
 - **Training.** `node src/train-rank.js --project <name>` trains the weights from your own questions, for any doc set. See [EVAL](EVAL.md).
+- **Reranker (optional).** After the map search, an optional local reranker (`src/rerank.js`) can rescore the code candidate pool (up to 50 names, `POOL` in `src/mk.js`). It is off unless `rerankModel` is set in `projects.json` (or env `GABRIEL_RERANK_MODEL`); see [TUNING](TUNING.md) to train one.
 
 ## Routing and fallback
 
