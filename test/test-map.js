@@ -499,6 +499,43 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       assert.ok(!labels8.includes('OnParcelShipped'), 'chain by name: a handler with another stem is not added ' + labels8);
     }
 
+    // handler table: a handler that shares no name words with its event is placed after the event (graph links kept in table 'handler')
+    {
+      const handlerCase = async (tag, extra, links, q) => {
+        const root9 = path.join(tmp, 'docs-h' + tag), home9 = path.join(tmp, 'home-h' + tag);
+        write(path.join(root9, 'technical-docs', '01-notes.md'), '# 01 — Notes\n\n## Events\n\nAn event is raised and a handler takes it.\n');
+        write(path.join(root9, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+        const n9 = (id, label) => ({ id, label, source_file: 'src/' + label + '.cs', source_location: 'L3', community: 1, community_name: 'Events' });
+        const fill9 = Array.from({ length: 650 }, (_, i) => n9('f' + i, 'Filler' + i));
+        const nodes9 = [n9('m', 'Mediator'), ...extra.map(([id, label]) => n9(id, label)), ...fill9];
+        const links9 = [...links, ...fill9.map((f) => ({ source: f.id, target: 'm', relation: 'references', confidence_score: 1 }))];
+        write(path.join(root9, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: nodes9, links: links9, built_at_commit: 'eee999' }));
+        await mk.build(home9, { root: root9, project: 'beta', noEmbed: true });
+        const code9 = (mk.search(home9, q, { project: 'beta' }) || { code: [] }).code;
+        return code9;
+      };
+      const after = (code9, label) => { const i = code9.findIndex((c) => c.n.label === label); return i < 0 ? null : code9[i + 1] || null; };
+
+      // (a) handled_by: event ZetaRaisedEvent, handler OnZetaWork (only the word Zeta is shared, so the name rules skip it)
+      const ca = await handlerCase('a', [['ev', 'ZetaRaisedEvent'], ['on', 'OnZetaWork']], [{ source: 'ev', target: 'on', relation: 'handled_by', event: 'ZetaRaisedEvent', confidence_score: 1 }], 'raised event handled');
+      const na = after(ca, 'ZetaRaisedEvent');
+      assert.ok(na && na.n.label === 'OnZetaWork' && na.chain === true, 'handled_by: the handler follows its event as a chain line, got ' + ca.map((c) => c.n.label));
+
+      // (b) sends_to_handler with no event field: the same placement
+      const cb = await handlerCase('b', [['ev', 'ZetaSentEvent'], ['on', 'OnZetaJob']], [{ source: 'ev', target: 'on', relation: 'sends_to_handler', confidence_score: 1 }], 'sent event handled');
+      const nb = after(cb, 'ZetaSentEvent');
+      assert.ok(nb && nb.n.label === 'OnZetaJob' && nb.chain === true, 'sends_to_handler: the handler follows its event as a chain line, got ' + cb.map((c) => c.n.label));
+
+      // (c) a references link is not a handler link: an On node with no shared words is not added
+      const cc = await handlerCase('c', [['ev', 'ZetaRaisedEvent'], ['q', 'OnQuietThing']], [{ source: 'ev', target: 'q', relation: 'references', confidence_score: 1 }], 'zeta raised event handled');
+      assert.ok(!cc.some((c) => c.chain && c.n.label === 'OnQuietThing'), 'references: a plain link is not a handler line, got ' + cc.map((c) => c.n.label));
+
+      // (d) the event field: the sender is a controller method; the event class ZetaCmd is the top hit and gets the handler too
+      const cd = await handlerCase('d', [['ctl', 'Dispatcher.Dispatch'], ['zc', 'ZetaCmd'], ['hz', 'HandleZetaThing']], [{ source: 'ctl', target: 'hz', relation: 'sends_to_handler', event: 'ZetaCmd', confidence_score: 1 }], 'zeta cmd');
+      const nd = after(cd, 'ZetaCmd');
+      assert.ok(nd && nd.n.label === 'HandleZetaThing' && nd.chain === true, 'event field: the handler follows the event class as a chain line, got ' + cd.map((c) => c.n.label));
+    }
+
     // meaning code slots: the class names closest in meaning to the question take the slots (codeK), a weak meaning adds nothing,
     // and a name in two files picks the lower-deg file (the same rule as the class-name text in build)
     {

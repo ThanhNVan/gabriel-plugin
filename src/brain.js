@@ -67,7 +67,7 @@ async function mapFor(home, text, pv, started, session, cwd = '', scoreFn) {
     const left = () => MK_BUDGET_MS - 1500 - (Date.now() - started);
     const score = scoreFn === undefined ? (left() > 0 ? await withTimeout(rr.getReranker(), left()).catch(() => null) : null) : scoreFn;   // a slow cold load must not stall the hook
     res = await rr.rerankMap(res, text, score, left());   // the reranker keeps today's list on any problem
-    if (res && session) mk.remember(home, session, res);   // after the rerank: remembers the list that is shown (see `touched`)
+    if (res && session) mk.remember(home, session, res);   // remembers res.seedKeys (the search seeds); the rerank does not change them, so learning uses the pre-rerank seeds
     return mk.format(res);
   } catch (e) { debug('mapFor', e); return ''; }
 }

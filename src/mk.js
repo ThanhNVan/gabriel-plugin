@@ -14,7 +14,7 @@ const { debug } = require('./debuglog.js');
 const { extSet, isDocName, extractText } = require('./extract.js');
 const repo = require('./repo.js');
 
-const DB_VERSION = 6;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index; 6 = class-name text has folders
+const DB_VERSION = 7;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index; 6 = class-name text has folders; 7 = handler table
 const DECAY = 0.55, ROUNDS = 3, FRONTIER = 300, HUB = 600;     // spreading: damping per step, steps, neurons kept per step, a neuron with more links only receives
 const SEED_DOCS = 30, SEED_CODE = 30, SEED_HUB = 800;          // seeds kept per layer; code nodes with more links than SEED_HUB are never seeds
 const MIN_SCORE = 2.5, WORD_SCALE = 12, THESAURUS_WEIGHT = 0.5; // same word scoring as rules.js
@@ -40,7 +40,8 @@ const CHAIN_ROLES = new Set(['Command', 'Query', 'Request', 'Handler', 'Dto', 'E
 const CHAIN_DEFAULT = { seeds: 4, max: 3, stem: 3 };   // seeds 4: 11/12 on eval-cases-chain.json vs 10/12 with 3; main gate unchanged (523/569, quiet 30/31), 2026-11-14   // fallback for the "two links away" step (seeds, max, stem); the real values come from the project's chain setting in projects.js, or opts.chain. Clamped in search().
 // a setting that is not a finite number falls back to its default; the rest is clamped into its range
 const chainNum = (v, d, lo, hi) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : d;
-const REL = { calls: 1, implements: 1, inherits: 1, extends: 1, dispatches_to: 1, rationale_for: 0.8, conceptually_related_to: 0.6, semantically_similar_to: 0.6, method: 0.7, defines: 0.6, contains: 0.5, references: 0.3, imports: 0.2, imports_from: 0.2, re_exports: 0.2 };
+const HANDLER_REL = new Set(['handled_by', 'sends_to_handler', 'dapr_to_handler']);   // graph links from a sender or event to its handler
+const REL = { calls: 1, implements: 1, inherits: 1, extends: 1, dispatches_to: 1, rationale_for: 0.8, conceptually_related_to: 0.6, semantically_similar_to: 0.6, method: 0.7, defines: 0.6, contains: 0.5, references: 0.3, imports: 0.2, imports_from: 0.2, re_exports: 0.2, handled_by: 1, publishes_event: 1, raises_event: 1, sends_to_handler: 1, publishes_to_handler: 1, implemented_by: 1, http_route: 1, template_calls: 1, template_uses: 1, uses_dbset: 1 };
 
 // Projects come from projects.js (file order = routing order). A search looks at one project only, so a new project cannot disturb the answers of the others.
 const { loadConfig, loadProjects, getProject, projectNames, embedModel, DEFAULT_EMBED_MODEL } = require('./projects');
@@ -269,6 +270,7 @@ async function build(home = homeDir(), opts = {}) {
     CREATE TABLE kw2(word TEXT, node INTEGER);
     CREATE TABLE df(word TEXT, kind TEXT, n INTEGER, PRIMARY KEY(word, kind));
     CREATE TABLE edges(a INTEGER, b INTEGER, w REAL);
+    CREATE TABLE handler(a INTEGER, b INTEGER);
     CREATE TABLE comm(id INTEGER PRIMARY KEY, name TEXT, size INTEGER);
     CREATE TABLE vec(node INTEGER PRIMARY KEY, v BLOB);
     CREATE TABLE vech(node INTEGER PRIMARY KEY, v BLOB);
@@ -278,12 +280,12 @@ async function build(home = homeDir(), opts = {}) {
   db.exec('BEGIN');
   let nid = 0;
   // 1. code neurons
-  const codeId = new Map(), labelOf = new Map(), byFile = new Map(), byLabel = new Map(), comms = new Map();
+  const codeId = new Map(), labelOf = new Map(), byFile = new Map(), byLabel = new Map(), comms = new Map(), migr = new Set();   // migr: ids of EF migration nodes (noise)
   for (const n of g.nodes) {
-    const id = ++nid; codeId.set(n.id, id); labelOf.set(id, n.label || '');
+    const id = ++nid; codeId.set(n.id, id); labelOf.set(id, n.label || ''); if (n.migration) migr.add(id);
     const kws = words(n.label || '');
     addNode.run(id, 'code', n.label || '', n.source_file || '', n.source_location || '', '', '', n.community ?? -1, 0, kws.size, 'c|' + n.id);   // the graph's own id: stable across rebuilds
-    for (const w of kws) addKw.run(w, id);
+    if (!n.migration) for (const w of kws) addKw.run(w, id);   // no keyword rows for migration nodes
     for (const f of families((n.label || '') + ' ' + roleWords(n.source_file))) addKw2.run(f, id);   // the code-name pass: word families, never used to start a doc search or to spread
     if (n.source_file) (byFile.get(n.source_file) || byFile.set(n.source_file, []).get(n.source_file)).push(id);
     if (n.label) (byLabel.get(n.label) || byLabel.set(n.label, []).get(n.label)).push(id);
@@ -299,8 +301,9 @@ async function build(home = homeDir(), opts = {}) {
     const a = codeId.get(e.source), b = codeId.get(e.target);
     if (!a || !b || a === b) continue;
     const w = (REL[e.relation] ?? 0.3) * (e.confidence_score ?? 1);
+    const w2 = migr.has(a) || migr.has(b) ? w * 0.2 : w;   // migration end: weak synapse
     const k = a < b ? a * M + b : b * M + a;
-    if ((pair.get(k) || 0) < w) pair.set(k, w);
+    if ((pair.get(k) || 0) < w2) pair.set(k, w2);
   }
   const deg = new Map();
   for (const [k, w] of pair) {
@@ -309,6 +312,16 @@ async function build(home = homeDir(), opts = {}) {
     deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1);
   }
   log(`code synapses ${pair.size}`);
+  // 2b. handler links: the sender and the event (by name) each point to the handler. Skips duplicates.
+  const addHandler = db.prepare('INSERT INTO handler VALUES(?,?)'), hseen = new Set();
+  const putHandler = (a, b) => { if (hseen.has(a * M + b)) return; hseen.add(a * M + b); addHandler.run(a, b); };
+  for (const e of g.links) {
+    const b = codeId.get(e.target);
+    if (!b || !HANDLER_REL.has(e.relation)) continue;
+    const a = codeId.get(e.source);
+    if (a) putHandler(a, b);
+    for (const ev of byLabel.get(e.event) || []) putHandler(ev, b);
+  }
   // 3. doc neurons and their synapses
   const docs = [];
   let skipped = 0;   // files with no readable text (unreadable, empty, scanned PDF, opt-in file too big or skipped)
@@ -445,6 +458,8 @@ function openMain(home) {
     CREATE TABLE IF NOT EXISTS df(word TEXT, kind TEXT, n INTEGER, project TEXT, PRIMARY KEY(word, kind, project));
     CREATE TABLE IF NOT EXISTS df2(word TEXT, n INTEGER, project TEXT, PRIMARY KEY(word, project));
     CREATE TABLE IF NOT EXISTS edges(a INTEGER, b INTEGER, w REAL);
+    CREATE TABLE IF NOT EXISTS handler(a INTEGER, b INTEGER, project TEXT);
+    CREATE INDEX IF NOT EXISTS handler_a ON handler(a, project);
     CREATE TABLE IF NOT EXISTS comm(id INTEGER, name TEXT, size INTEGER, project TEXT);
     CREATE TABLE IF NOT EXISTS vec(node INTEGER PRIMARY KEY, v BLOB, project TEXT);
     CREATE TABLE IF NOT EXISTS vech(node INTEGER PRIMARY KEY, v BLOB, project TEXT);
@@ -475,12 +490,13 @@ function integrate(home, tmp, project) {
       const mine = '(SELECT id FROM nodes WHERE project = ?)';
       for (const tbl of ['kw', 'kw2']) db.prepare(`DELETE FROM ${tbl} WHERE node IN ${mine}`).run(project);
       db.prepare(`DELETE FROM edges WHERE a IN ${mine}`).run(project);
-      for (const tbl of ['vec', 'vech', 'vecc', 'df', 'df2', 'comm', 'meta', 'nodes']) db.prepare(`DELETE FROM ${tbl} WHERE project = ?`).run(project);
+      for (const tbl of ['handler', 'vec', 'vech', 'vecc', 'df', 'df2', 'comm', 'meta', 'nodes']) db.prepare(`DELETE FROM ${tbl} WHERE project = ?`).run(project);
       const off = db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM nodes').get().m, plainKey = project === legacyProject(), learns = !!(getProject(project) || {}).learn;   // the legacy project keeps its old node keys (no prefix); only a project that learns gets its links pruned
       db.prepare(`INSERT INTO nodes SELECT id + ?, kind, label, file, loc, section, text, comm, deg, nkw, ${plainKey ? 'key' : "? || ':' || key"}, ? FROM t.nodes`).run(...(plainKey ? [off, project] : [off, project, project]));
       db.prepare('INSERT INTO kw SELECT word, node + ?, ? FROM t.kw').run(off, project);
       db.prepare('INSERT INTO kw2 SELECT word, node + ?, ? FROM t.kw2').run(off, project);
       db.prepare('INSERT INTO edges SELECT a + ?, b + ?, w FROM t.edges').run(off, off);
+      db.prepare('INSERT INTO handler SELECT a + ?, b + ?, ? FROM t.handler').run(off, off, project);
       db.prepare('INSERT INTO vec SELECT node + ?, v, ? FROM t.vec').run(off, project);
       db.prepare('INSERT INTO vech SELECT node + ?, v, ? FROM t.vech').run(off, project);
       db.prepare('INSERT INTO vecc SELECT label, v, ? FROM t.vecc').run(project);
@@ -974,15 +990,36 @@ function addNeighbours(S) {
       for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) add(r.id);
     }
   } catch { /* chain is optional */ }
+  // Handler table: the handlers that a top hit links to by a handler relation (table 'handler'), placed right after it. At most 2 per hit, 3 per search.
+  const top = code.slice(0, 6), topIds = new Set(top.map((c) => c.n.id)), gotTable = new Set();   // snapshot: the list grows below
+  try {
+    const hq = db.prepare('SELECT b FROM handler WHERE a = ? AND project = ?');
+    const placed = new Set();   // handlers this step placed: a handler linked from two hits is placed once
+    let tabled = 0;
+    for (const c of top) {
+      if (tabled >= 3) break;
+      if (!code.includes(c)) continue;   // this hit was moved as a handler of an earlier hit
+      let per = 0;
+      for (const r of hq.all(c.n.id, project)) {
+        if (per >= 2 || tabled >= 3) break;
+        const n = info.get(r.b);
+        if (!n || !n.file || n.deg > SEED_HUB || n.id === c.n.id || placed.has(n.id)) continue;
+        const at = code.findIndex((x) => x.n.id === n.id);
+        if (at >= 0) code.splice(at, 1);   // it is somewhere else in the list (even the top 6): move it right after its hit
+        code.splice(code.indexOf(c) + 1, 0, { a: c.a, n, chain: true });
+        placed.add(n.id); topIds.add(n.id); gotTable.add(c.n.id); per++; tabled++;
+      }
+    }
+  } catch { /* an old map has no handler table: skip */ }
   // Handler step: the On<Event> handler of a top hit, placed right after it. Its link is weak (0.3), so the one-hop query above skips it.
   try {
     const exactOn = db.prepare("SELECT id FROM nodes WHERE project = ? AND kind = 'code' AND file != '' AND deg <= ? AND label = ? LIMIT 1");
     const linkedOn = db.prepare("SELECT n.id AS id FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND n.project = ? AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.label LIKE 'On%' ORDER BY e.w DESC LIMIT 20");
     const twoOn = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND n.project = ? AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.label LIKE 'On%' ORDER BY e1.w + e2.w DESC LIMIT 20");
-    const top = code.slice(0, 6), topIds = new Set(top.map((c) => c.n.id));   // snapshot: the list grows below
     let placed = 0;
     for (const c of top) {
       if (placed >= 2) break;   // at most 2 handlers per search
+      if (gotTable.has(c.n.id)) continue;   // the handler table already placed one for this hit
       // a handler is an On<Name> code node with a file, and not a hub
       const words = (s) => new Set((s.match(/[A-Z][a-z0-9]*/g) || []).filter((w) => !CHAIN_ROLES.has(w) && w !== 'On'));
       const hitWords = words(c.n.label.split('.')[0]);

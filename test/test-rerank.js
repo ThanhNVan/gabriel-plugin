@@ -15,6 +15,14 @@ const { rerankCode, rerankMap } = require('../src/rerank.js');
   const withChain = { code: [{ a: 1, n: n('Alpha') }, { a: 0, n: n('Chain'), chain: true }], pool: res.pool };
   const chained = await rerankCode(withChain, 'where is gamma', score, { max: 2 });
   assert.strictEqual(chained.code[chained.code.length - 1].n.label, 'Chain', 'chain item stays last');
+  // a chain item follows its hit when the hit is picked; a picked label is never shown twice
+  const pairIn = { code: [{ a: 1, n: n('Gamma') }, { a: 1, n: n('OnGamma'), chain: true }, { a: 1, n: n('Alpha') }], pool: [...res.pool, { label: 'Zed', file: 'z.cs' }] };
+  const pairScore = async (q, texts) => texts.map((t) => (/gamma/i.test(t) ? 9 : /zed/i.test(t) ? 5 : 0));
+  const pairOut = (await rerankCode(pairIn, 'q', pairScore, { max: 3 })).code.map((c) => c.n.label);
+  assert.strictEqual(pairOut[pairOut.indexOf('Gamma') + 1], 'OnGamma', 'handler stays right after its hit: ' + pairOut);
+  const dupIn = { code: [{ a: 1, n: n('Alpha') }, { a: 0, n: n('Gamma'), chain: true }], pool: res.pool };
+  const dupOut = (await rerankCode(dupIn, 'where is gamma', score, { max: 2 })).code.map((c) => c.n.label);
+  assert.strictEqual(dupOut.filter((l) => l === 'Gamma').length, 1, 'no label twice: ' + dupOut);
   const { getReranker, rerankModel } = require('../src/rerank.js');
   const tmp = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'rerank-'));
   assert.strictEqual(await getReranker('local/none-such', tmp), null, 'missing model folder gives null');

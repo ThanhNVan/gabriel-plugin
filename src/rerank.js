@@ -44,8 +44,15 @@ async function rerankCode(res, q, score, { max = 6, rich = false, project: optPr
       const p = res.pool[i], prev = old.get(p.label);
       return prev ? { ...prev, a: s[i] } : { a: s[i], n: { label: p.label, file: p.file, kind: 'code' } };
     });
-    const chainItems = (res.code || []).filter((c) => c.chain);
-    return { ...res, code: [...picked, ...chainItems] };
+    // a chain item follows the hit it came after (its source) when that hit is picked; the rest go last. A picked label never shows twice.
+    const pickedLabels = new Set(picked.map((c) => c.n.label)), after = new Map(), rest = [];
+    let src = null;
+    for (const c of res.code || []) {
+      if (!c.chain) { src = c.n.label; continue; }
+      if (pickedLabels.has(c.n.label)) continue;
+      if (src && pickedLabels.has(src)) (after.get(src) || after.set(src, []).get(src)).push(c); else rest.push(c);
+    }
+    return { ...res, code: [...picked.flatMap((c) => [c, ...(after.get(c.n.label) || [])]), ...rest] };
   } catch {
     return res;
   }
