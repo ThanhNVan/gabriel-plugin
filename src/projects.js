@@ -34,7 +34,8 @@ function loadConfig() {
   const legacyProject = j.legacyProject || null;   // tag for map rows written before projects existed (owner only)
   if (legacyProject && !seen.has(legacyProject)) throw new Error(`legacyProject ${legacyProject} is not a project`);
   const embedModel = typeof j.embedModel === 'string' && j.embedModel ? j.embedModel : null;   // optional: a tuned meaning model, e.g. "local/gabriel-tuned"
-  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || defaultRuleFiles(), embedModel }; cacheKey = key; return cache;
+  const rerankModel = typeof j.rerankModel === 'string' && j.rerankModel ? j.rerankModel : null;   // optional: a tuned reranker, e.g. "local/gabriel-rerank"
+  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || defaultRuleFiles(), embedModel, rerankModel }; cacheKey = key; return cache;
 }
 const loadProjects = () => loadConfig().projects;
 const getProject = (name) => loadProjects().find((p) => p.name === name);
@@ -45,4 +46,9 @@ function embedModel() {
   if (process.env.GABRIEL_EMBED_MODEL) return process.env.GABRIEL_EMBED_MODEL;
   try { return loadConfig().embedModel || DEFAULT_EMBED_MODEL; } catch { return DEFAULT_EMBED_MODEL; }
 }
-module.exports = { hasFiles, loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL };
+// The reranker id: env GABRIEL_RERANK_MODEL first (empty = off), then projects.json "rerankModel", else null. Never throws.
+function rerankModel() {
+  if (process.env.GABRIEL_RERANK_MODEL !== undefined) return process.env.GABRIEL_RERANK_MODEL || null;
+  try { return loadConfig().rerankModel || null; } catch { return null; }
+}
+module.exports = { hasFiles, loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL, rerankModel };

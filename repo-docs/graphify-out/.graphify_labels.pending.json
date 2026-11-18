@@ -1,4 +1,5 @@
 {
+  "0": "tune.js",
   "1": "mk.js",
   "2": "codex.js",
   "3": "setup.js",
@@ -6,6 +7,7 @@
   "8": "getProject",
   "17": "test",
   "20": "ref_path",
+  "21": "projects.js",
   "22": "test-setup-hosts.js",
   "30": "build",
   "31": "graphdb.js",
@@ -16,8 +18,16 @@
   "66": "Architecture (01)",
   "67": "dbFile",
   "68": "ref_node_fs",
+  "69": "export-pairs.js",
   "71": "R36 Exact code lines",
+  "72": "main",
   "74": "train.py",
-  "93": "migrate-data.js",
-  "94": "codex.js"
+  "75": "paths.js",
+  "79": "test-tune-decide.js",
+  "82": "code-pairs.js",
+  "93": "addDocs",
+  "94": "hostSetup",
+  "95": "ref_node_assert",
+  "98": "test-mermaid.js",
+  "101": "defaultProject"
 }

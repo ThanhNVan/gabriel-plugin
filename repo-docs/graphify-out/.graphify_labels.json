@@ -1,5 +1,4 @@
 {
-  "0": "tune.js",
   "5": "retrain.js",
   "6": "package.json",
   "7": "extract.js",
@@ -13,7 +12,6 @@
   "16": "suggest-cases.js",
   "18": "history.js",
   "19": "test-brain.js",
-  "21": "train-rank.js",
   "23": "test-graph.js",
   "24": "test-tune.js",
   "25": "wide-test.js",

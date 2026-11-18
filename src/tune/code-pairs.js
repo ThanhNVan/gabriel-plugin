@@ -1,10 +1,10 @@
 'use strict';
 // Training pairs made from code names (the tuner, see docs/TUNING.md). A row is one class name and its file.
-// Each row gives up to `per` template questions (anchor) built from the name's words; the positive is codeText(label, file),
-// the same text the map embeds for the class name (src/mk.js). Only code names and folders are used, never eval text.
+// Each row gives up to `per` template questions (anchor) built from the name's words; the positive is richText(label, file, project)
+// (or codeText without a project), the same text the map embeds for the class name (src/mk.js). Never eval text.
 //   codePairs(rows: {label, file}[], opts?: {seed?, per?, skip?: Set<string>}) -> {anchor, positive}[]
 // The templates are the spike's make-code-pairs.js, copied in as data. Same rows + same seed = same output.
-const { codeText } = require('../mk.js');
+const { codeText, richText } = require('../mk.js');
 
 // a small seeded random number generator (mulberry32). Local copy: export-pairs.js requires this file, so no require back.
 function seeded(seed) {
@@ -101,13 +101,14 @@ const IDENT = /^[A-Za-z][A-Za-z0-9]{4,}$/;
 
 function codePairs(rows, opts = {}) {
   const seed = opts.seed ?? 42, per = opts.per ?? 3, skip = opts.skip ?? new Set();
-  const rnd = seeded(seed);
+  const rnd = seeded(seed), cache = new Map();
   const pairs = [];
   for (const r of rows) {
     const label = String(r.label || '');
     const file = String(r.file || '');
     if (!IDENT.test(label) || label.startsWith('Metizoft')) continue;
-    const positive = codeText(label, file);
+    // with opts.project: the same richer text the map embeds (doc comment and body from the repo); else the name and folders only
+    const positive = opts.project ? richText(label, file, opts.project, cache) : codeText(label, file);
     for (const anchor of anchorsOf(label, file, rnd, per)) {
       if (skip.has(anchor.toLowerCase())) continue;
       pairs.push({ anchor, positive });

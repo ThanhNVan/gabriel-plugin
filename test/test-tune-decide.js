@@ -36,4 +36,13 @@ const quiet = { makillez: { n: 30, t: 31 } };
   console.log('  ok: code total rose -> keep true');
 }
 
+// 4: --no-keep is read; --no-keep with --force is refused (they contradict)
+{
+  const { parseArgs } = require('../src/tune/tune.js');
+  assert.strictEqual(parseArgs(['--no-keep']).noKeep, true);
+  assert.strictEqual(parseArgs([]).noKeep, false);
+  assert.throws(() => parseArgs(['--no-keep', '--force']), /--no-keep and --force/);
+  console.log('  ok: parseArgs reads --no-keep');
+}
+
 console.log('ALL PASSED');

@@ -34,6 +34,8 @@ const mk = require('../src/mk.js');
   assert.strictEqual(mk.codeText('DeleteProjectCommandHandler', 'Services\\Vessels\\Vessels.Application\\Commands\\Project\\Delete\\DeleteProjectCommandHandler.cs'),
     'delete project command handler | Vessels.Application Commands Project Delete', 'backslash paths give the same text');
   assert.strictEqual(mk.codeText('InvoiceWriter', 'X.cs'), 'invoice writer | ', 'a file with no folder ends with an empty folder part');
+  assert.strictEqual(mk.codeText('DeleteProjectCommandHandler', 'a/b/c/X.cs'), 'delete project command handler | a b c', 'class text unchanged from the old formula');
+  assert.strictEqual(mk.codeText('.collect_metrics()', 'x/y/z.py'), 'collect metrics | x y', 'method label: name words, no dots or parens');
 }
 
 const write = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
@@ -82,6 +84,15 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.ok(res.code.some((c) => c.n.label === 'OrderRepository'), 'the repository must light up through the calls link');
     assert.ok(!res.code.some((c) => c.n.label === 'ResultBase'), 'a hub must not be shown');
     assert.ok(res.code.length <= 6 && res.docs.length <= 4, 'caps hold');
+
+    // opt-in candidate pool for the reranker: off by default, unique labels, starts with the shown code
+    const rp = mk.search(home, 'how does the order handler save an order', { pool: true });
+    assert.ok(rp && Array.isArray(rp.pool), 'pool: true must give res.pool');
+    assert.ok(rp.pool.length <= 50, 'pool is at most 50');
+    assert.strictEqual(new Set(rp.pool.map((p) => p.label)).size, rp.pool.length, 'pool labels are unique');
+    assert.ok(rp.code.every((c, i) => rp.pool[i].label === c.n.label), 'pool starts with the shown code');
+    assert.ok(rp.pool.length >= rp.code.length, 'pool holds every shown code');
+    assert.strictEqual(res.pool, undefined, 'no pool without opts.pool');
 
     // the doc link reaches the billing doc, which cites the invoice writer
     const res2 = mk.search(home, 'when does the invoice get created after an order', {});
@@ -178,6 +189,25 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       mk.pairHandlers(S3);
       assert.deepStrictEqual(S3.code.map((c) => c.n.label), ['SubmitOrderCommand', 'SubmitOrderCommandHandler'], 'a handler already shown: no swap');
       db6.close();
+    }
+
+    // event handler: a top hit (an event class) gets its On<Event> handler right after it; the link is weak (0.3), so the one-hop query skips it
+    {
+      const root7 = path.join(tmp, 'docs7'), home7 = path.join(tmp, 'home7');
+      // the prompt words are in the doc, not in the names, so the event comes in by its doc link and the handler only by the new step
+      write(path.join(root7, 'technical-docs', '01-sale.md'), '# 01 — Sale\n\n## Sale\n\nThe `ZetaRaisedEvent` tells billing that a sale was made.\n');
+      write(path.join(root7, 'technical-docs', '02-filler.md'), ['# 02 — Filler', '', ...Array.from({ length: 60 }, (_, i) => `Spare note ${i} about item${i}.\n`)].join('\n'));
+      const n7 = (id, label, file) => ({ id, label, source_file: file, source_location: 'L3', community: 1, community_name: 'Shop' });
+      write(path.join(root7, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [
+        n7('e', 'ZetaRaisedEvent', 'Services/Shop/Events/ZetaRaisedEvent.cs'),
+        n7('oh', 'OnZetaRaised', 'Services/Shop/Handlers/OnZetaRaised.cs'),
+      ], links: [{ source: 'e', target: 'oh', relation: 'references', confidence_score: 1 }], built_at_commit: 'ggg777' }));
+      await mk.build(home7, { root: root7, project: 'beta', noEmbed: true });
+      const r7 = mk.search(home7, 'which message tells billing about a sale', { project: 'beta' });
+      assert.ok(r7 && r7.code.some((c) => c.n.label === 'ZetaRaisedEvent'), 'the event class is a code hit');
+      const labels7 = r7.code.map((c) => c.n.label);
+      assert.strictEqual(labels7[labels7.indexOf('ZetaRaisedEvent') + 1], 'OnZetaRaised', 'the handler comes right after the event: ' + labels7);
+      assert.strictEqual(r7.code[labels7.indexOf('OnZetaRaised')].chain, true, 'the handler is marked as a chain line');
     }
 
     // the printed block names the commit and stays short
@@ -520,6 +550,49 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
       const dupHits = dup.code.filter((c) => c.n.label === 'DupWidget');
       assert.ok(dupHits.length > 0, 'the duplicate name is added ' + dup.code.map((c) => c.n.label));
       assert.ok(dupHits.every((c) => c.n.file === 'Services/Old/DupWidget.cs'), 'the lower-deg file is picked ' + dupHits.map((c) => c.n.file));
+    }
+
+    // the class-name meaning text includes the code body from the project's repo (a fake embedder records the texts)
+    {
+      const saved = process.env.GABRIEL_DATA;
+      const tg = path.join(tmp, 'gamma'), dataG = path.join(tmp, 'data-gamma'), homeG = path.join(tmp, 'home-gamma');
+      const rootG = path.join(tg, 'docs'), repoG = path.join(tg, 'repo');
+      try {
+        process.env.GABRIEL_DATA = dataG;
+        fs.mkdirSync(dataG, { recursive: true });
+        fs.writeFileSync(path.join(dataG, 'projects.json'), JSON.stringify({ version: 1, projects: [{ name: 'gamma', label: 'Gamma', root: rootG, repo: repoG, graph: 'graphify-out/graph.json' }] }));
+        write(path.join(rootG, 'technical-docs', '01-orders.md'), '# 01 — Orders\n\n## Orders\n\nThe order handler saves orders.\n');
+        write(path.join(rootG, 'graphify-out', 'graph.json'), JSON.stringify({ nodes: [{ id: 'h', label: 'OrderHandler', source_file: 'Services/Shop/OrderHandler.cs', source_location: 'L1', community: 1, community_name: 'Shop' }], links: [], built_at_commit: 'ggg111' }));
+        write(path.join(repoG, 'Services', 'Shop', 'OrderHandler.cs'), ['public class OrderHandler', '{', '    public void Handle() { SaveOrder(); }', '}', ''].join('\n'));
+        const seen = [];
+        const fake = async (texts) => { seen.push(...texts); return texts.map(() => [1, 0, 0, 0]); };
+        await mk.build(homeG, { root: rootG, project: 'gamma', embed: fake });
+        const { richText } = require('../src/mk.js');
+        const want = richText('OrderHandler', 'Services/Shop/OrderHandler.cs', 'gamma');
+        assert.ok(want.includes('SaveOrder'), 'richText reads the body from the repo');
+        assert.ok(seen.includes(want), 'build embeds richText for the class name, not only codeText');
+      } finally {
+        process.env.GABRIEL_DATA = saved;
+      }
+    }
+
+    // brain.mapFor reranks the map's code lists: a pool label the scorer likes comes first; a scorer error keeps the same text
+    {
+      const brain = require('../src/brain.js');
+      const text = 'how does the order handler save an order';
+      const codeOf = (s) => s.split('\n').filter((l) => l.startsWith('- code ')).map((l) => l.slice(7).split(' (')[0]);
+      const cwd = 'alpha';   // the alpha project has sessionGate: its map needs the repo name in cwd here
+      const pool = mk.searchAll(home, text, { pool: true, cwd }).pool;
+      const plain = await brain.mapFor(home, text, null, Date.now(), '', cwd, null);
+      const plainFirst = codeOf(plain)[0];
+      const target = pool.find((p) => p.label !== plainFirst);
+      assert.ok(target, 'the pool has a label that is not first in the plain map');
+      const idx = pool.indexOf(target);
+      const fakeScore = async (q, texts) => texts.map((_, i) => (i === idx ? 9 : 0));
+      const boosted = await brain.mapFor(home, text, null, Date.now(), '', cwd, fakeScore);
+      assert.strictEqual(codeOf(boosted)[0], target.label, 'the reranked best label comes first, got ' + codeOf(boosted));
+      const broken = async () => { throw new Error('boom'); };
+      assert.strictEqual(await brain.mapFor(home, text, null, Date.now(), '', cwd, broken), plain, 'a scorer error keeps the same text');
     }
 
     // a broken map file never throws

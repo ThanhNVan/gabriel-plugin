@@ -2,7 +2,10 @@
 //   node src/tune/tune.js [--venv <dir>] [--yes]   the whole run: 5 steps (slow on CPU; see docs/TUNING.md)
 //                                                  --venv defaults to <dataDir>/tune-venv (made by node src/setup.js --tune)
 //   node src/tune/tune.js ... --force              keep the tuned model even when the keep rule says roll back (R27)
-//   node src/tune/tune.js --rollback               remove embedModel from projects.json (config only)
+//   node src/tune/tune.js ... --no-keep            score and print only: never keep, never change projects.json
+//   node src/tune/tune.js --rollback              remove embedModel from projects.json (config only)
+//   node src/tune/tune.js ... --real               also train on the real questions (rerank-train-cases.json, one per row)
+//   node src/tune/tune.js ... --templates <n>      keep at most n code-name template pairs per project (default: all)
 // Your real data does not change until the scores say keep. The scores run on a copy of the data folder,
 // because a model change re-embeds every map and the real maps must stay as they are until the decision.
 const fs = require('fs');
@@ -223,15 +226,23 @@ function rollBackModel() {   // the real data was never changed, so only the (un
 
 // ---- main ----
 function parseArgs(argv) {
-  const o = { rollback: false, yes: false, venv: null, force: false };
+  const o = { rollback: false, yes: false, venv: null, force: false, noKeep: false, real: false, templates: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--rollback') o.rollback = true;
     else if (a === '--force') o.force = true;
+    else if (a === '--no-keep') o.noKeep = true;
     else if (a === '--yes') o.yes = true;
+    else if (a === '--real') o.real = true;
+    else if (a === '--templates') {
+      const n = Number(argv[i + 1]);
+      if (argv[i + 1] === undefined || !Number.isInteger(n) || n < 0) throw new Error('--templates needs a whole number');
+      o.templates = n; i++;
+    }
     else if (a === '--venv') { if (argv[i + 1] === undefined) throw new Error('--venv needs a folder'); o.venv = path.resolve(argv[++i]); }
     else throw new Error('unknown argument: ' + a);
   }
+  if (o.noKeep && o.force) throw new Error('--no-keep and --force cannot be used together');
   return o;
 }
 
@@ -272,7 +283,7 @@ async function main(argv) {
   try {
     const T = stage(work);
     stepStart(1, 'export pairs');
-    const pairs = exportPairs({ out: path.join(work, 'pairs') });
+    const pairs = exportPairs({ out: path.join(work, 'pairs'), real: o.real, templates: o.templates });
     console.log(`  ${pairs.train} train pairs, ${pairs.heldout} held-out pairs`);
     stepDone(1, 'export pairs');
 
@@ -291,7 +302,8 @@ async function main(argv) {
 
     stepStart(5, 'keep or roll back');
     const d = decide(res.base, res.tuned);
-    if (d.keep || o.force) {
+    if (o.noKeep) console.log(`not kept (--no-keep): the keep rule says ${d.keep ? 'keep' : 'roll back'}${d.keep ? '' : ': ' + d.reasons.join('; ')}`);
+    else if (d.keep || o.force) {
       if (!d.keep) console.log(`kept by --force (the user chose it). Numbers that fell or failed the rule: ${d.reasons.join('; ')}`);
       keepModel(T, projects);
     }

@@ -4,16 +4,25 @@ This step teaches the small meaning model your own words.
 It learns from your eval questions and your doc sections.
 It is optional. gabriel works well without it.
 
-Everything runs on your PC. Nothing you write leaves the machine.
+The tuning steps run on your PC. The optional description generator sends source code to Codex.
 The only downloads are the Python packages and the base model, which the training step fetches once.
 
 ## What it does
 
 1. Makes training pairs. Each eval question is paired with the doc section that answers it.
-2. Trains the model on those pairs, on the CPU.
+   Code pairs are added to training too: template questions built from each class name, paired with the name's words and its folders (`src/tune/code-pairs.js`). A template equal to any eval question is dropped. `node src/tune/export-pairs.js --no-code` leaves code pairs out.
+2. Trains the model on those pairs. `train.py --device auto` (the default) picks an Intel GPU (`xpu`), then `cuda`, then the CPU.
 3. Exports the trained model to ONNX with torch.onnx, then makes it smaller (8-bit) with onnxruntime quantization.
 4. Scores the old model and the new one on a copy of your data.
 5. Keeps the new model only if the scores pass the keep rule. Otherwise it rolls back.
+
+## Class descriptions (code-desc.json)
+
+The file `<data>/private/<name>/code-desc.json` stores descriptions by code label.
+The map and training pairs put each description before the code body.
+Generate descriptions with `node src/tune/code-desc.js --project <name>`.
+The command sends source code to Codex. Use `--dry-run` to inspect the first prompt.
+Rebuild the map after generation: `node src/brain.js build-mk <name>`.
 
 ## What you need
 
@@ -69,14 +78,16 @@ Each file is on one side only, so no section from a held-out file reaches traini
 
 ## The keep rule
 
-The tuned model is kept only when all four hold:
+The tuned model is kept only when all of these hold:
 
 - The held-out total goes up. It must be strictly higher.
 - No project's held-out score falls by more than 1.
 - The full strict score is not lower.
 - The quiet score (unrelated questions) is not lower.
+- The code total is not lower. It counts the `eval-cases-exact.json`, `eval-cases-chain.json` and `eval-cases-scenario.json` files in the private folder. With none, it prints `no exact/chain cases: code score skipped`.
 
 A run prints a before and after table, and the reason when it rolls back.
+`--force` keeps the tuned model even when the rule fails. It prints the numbers that failed. Rule: [R27](../repo-docs/business/02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins).
 
 ## Scores run on a copy
 
@@ -103,6 +114,6 @@ A run refuses to start while `projects.json` still sets `embedModel`. Run `--rol
 
 ## Limits
 
-- The training step only learns from your eval questions. Write them in your own words.
+- The training step learns from your eval questions and your class names. Write the questions in your own words.
 - The doc vectors in the map use the full chunk text. The training pairs use the first 300 characters, like the hook does for its vectors. A small mismatch.
-- Training on a CPU can take a long time. The time depends on the number of pairs and your CPU.
+- Training on a CPU can take a long time. The CPU torch build in "What you need" has no GPU support. The time depends on the number of pairs and your CPU.

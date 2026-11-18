@@ -136,7 +136,9 @@ A file opened or edited counts only if a map was shown in the same session no mo
 
 ### R27 Model tune keeps the tuned model only when it wins
 The tuned model is kept only when the held-out total rises, no doc set's held-out count falls by more than 1, and the full strict and quiet counts do not fall.
-- Where: `src/tune/tune.js` `decide()`, `rollBackModel()`.
+- The code total (the `eval-cases-exact.json`, `eval-cases-chain.json` and `eval-cases-scenario.json` files) must not fall. It need not rise. A doc set with no such file has no code score.
+- `--force` keeps the tuned model anyway (the user chose it) and prints the numbers that failed.
+- Where: `src/tune/tune.js` `decide()`, `rollBackModel()`, `caseFilesOf()`.
 
 ## Tips and hints
 

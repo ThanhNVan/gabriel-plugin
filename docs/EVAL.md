@@ -36,6 +36,7 @@ Run `node eval/eval-map.js --project <name>`. It runs every case and prints a su
 - `--rank <file>` scores other weights, like a candidate file.
 - `--chain <seeds>,<max>,<stem>` (for example `--chain 4,3,3`) tries the "two links away" step with these values. Without it, the project's `chain` setting is used (see [ADDING-DOCS](ADDING-DOCS.md), section 10).
 - `--half tune|check` runs only the cases with that `half` field. A case with no `half` runs in both. Tune settings on one half, then judge on the other.
+- `--code-k <n>`, `--code-gap <g>`, `--code-sim <s>` try other values for the class names added by meaning: at most `n`, within `g` of the best, scoring at least `s`. Without them, the map's own values are used.
 - `--report` writes `notes/EVAL-MK.md` in the project's private folder.
 - `--why` says why each miss missed. For each DOC or FAIL it prints `why <id> <class>`, then the counts. The classes:
   - `section-rank`: the right doc and section are in the candidates, but the map did not show them.
@@ -92,6 +93,24 @@ Every question is tested once, and never trained on. That is the score to trust 
 - Write some hard ones that describe a symptom, not the name of the thing.
 - Add some unrelated questions with `none`. They catch wrong matches.
 - Keep a new batch for the final check. Do not tune on it.
+
+### Real training questions (`rerank-train-cases.json`)
+
+Each row asks for one code class or method. Rows look like this:
+
+```json
+{"id": "TR-MK-2-001", "q": "A supplier user opening the list of tickets they already sent gets forbidden. What permission guards that list request?", "code": "^TicketsPreviouslySubmittedForSupplierQuery$", "file": "Ticket/TicketsPreviouslySubmittedForSupplierQuery\\.cs$", "area": "debug", "tier": "medium"}
+```
+
+- Write 12 to 34 words (about 23). Give a real situation: who, which screen or action, and what goes wrong or what they want. Then ask.
+- End with a question mark. Ask like a developer: "where is X decided", "why does Y happen", "what checks Z". Never end with a bare "Which handler?".
+- Never name the class. Do not use 3/4 or more of its name's words. The asker does not know the name.
+- Each question stands alone. Do not start with "Same", "Also" or "Again".
+- `area` is `debug`, `workflow` or `code`. Aim for about 45%, 40% and 15%.
+- `tier` is `medium` or `complex`. A complex question is a symptom a few steps away from the class. Aim for about one third complex.
+- Spread the rows over many features and kinds of code, not only `*CommandHandler`. Include query handlers, validators, entities, and Angular components and services (`^\.method\(\)$`).
+- `code` must be the exact name, as a regex (`^Name$`). `file` is the last folder and file name, with the dots escaped. Both must match a real map node.
+- No question may repeat an eval question or another row. Each `id` is unique.
 
 ## Question index (optional)
 

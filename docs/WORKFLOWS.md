@@ -200,11 +200,11 @@ flowchart TD
   T --> D2{"--yes given or you typed y?"}
   D2 -- "no" --> X2["Cancelled, nothing changed"]
   D2 -- "yes" --> ST["Stage a copy in data/tune/work: copy written files, link models and docs"]
-  ST --> P1["Step 1: export-pairs: one pair per question, split 20 percent by file"]
-  P1 --> P2["Step 2: train.py: 2 epochs, batch 32, learning rate 2e-5"]
+  ST --> P1["Step 1: export-pairs: one pair per question, split 20 percent by file, code-name pairs added to training"]
+  P1 --> P2["Step 2: train.py: 2 epochs, batch 32, learning rate 2e-5, device auto: xpu, cuda, then cpu"]
   P2 --> P3["Step 3: export-onnx.js runs export_onnx.py: ONNX, then 8-bit quantized"]
   P3 --> P4["Step 4: rebuild maps in the copy, score base and tuned"]
-  P4 --> D3{"Keep rule: held-out total up, no project down by more than 1, full and quiet not lower?"}
+  P4 --> D3{"Keep rule: held-out total up, no project down by more than 1, full, quiet and code not lower? Or --force"}
   D3 -- "yes" --> KP["Copy model to models local gabriel-tuned, set embedModel, rebuild question index"]
   D3 -- "no" --> RB["Delete the copy model. Real data unchanged"]
   KP --> CL["Delete the work folder"]

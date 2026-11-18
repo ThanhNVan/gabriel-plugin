@@ -135,6 +135,64 @@ const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
     assert.ok(!anchors.includes('what happens when a project is deleted'), 'a question of project demo is never an anchor for project other');
     console.log('  ok: code pairs for every project with code in the map; scenario questions stay out');
 
+    // 6: --real (real questions from rerank-train-cases.json) and --templates <n> (cap on template pairs, Task 5e)
+    // default output: no option and an explicit "off" give the same files
+    const dA = path.join(base, 'out-def-a'), dB = path.join(base, 'out-def-b');
+    const dflt = exportPairs({ out: dA, seed: 42, min: 10 });
+    exportPairs({ out: dB, seed: 42, min: 10, real: false, templates: undefined });
+    for (const f of ['pairs.train.jsonl', 'pairs.heldout.jsonl', 'split.json', 'demo.heldout-cases.json']) {
+      assert.ok(fs.readFileSync(path.join(dA, f)).equals(fs.readFileSync(path.join(dB, f))), 'byte-identical without options: ' + f);
+    }
+    assert.strictEqual(dflt.docPairs, NF * NS, 'doc pairs count');
+    assert.strictEqual(dflt.templatePairs, dflt.codeCounts.other + dflt.codeCounts.demo, 'template pairs count');
+    assert.strictEqual(dflt.realPairs, 0, 'no real pairs without --real');
+    assert.ok(dflt.codeCounts.other >= 2, 'fixture has at least 2 template pairs for other: ' + dflt.codeCounts.other);
+    console.log('  ok: no option = byte-identical files; counts printed as fields');
+
+    // real rows for project other: 1 match, 1 eval question (dropped), 2 with no match (skipped), 1 match with a case-insensitive label
+    fs.writeFileSync(path.join(DATA, 'private', 'other', 'rerank-train-cases.json'), JSON.stringify([
+      { id: 'R-1', q: 'how do we remove a project from the list', code: '^DeleteProjectCommandHandler$', file: 'Commands/Project/Delete', project: 'other' },
+      { id: 'R-2', q: 'what happens when a project is deleted', code: '^DeleteProjectCommandHandler$', project: 'other' },
+      { id: 'R-3', q: 'which handler runs when a vessel is created', code: '^onvesselcreated$', file: 'Events', project: 'other' },
+      { id: 'R-4', q: 'where is the ghost thing', code: '^NoSuchClass$', project: 'other' },
+      { id: 'R-5', q: 'what is in the vessel events folder', code: '^OnVesselCreated$', file: 'Nope/', project: 'other' },
+    ]));
+    const R = path.join(base, 'out-real');
+    const rr = exportPairs({ out: R, seed: 42, min: 10, real: true });
+    assert.strictEqual(rr.realPairs, 2, 'two real rows match');
+    assert.strictEqual(rr.realSkipped, 2, 'two real rows with no matching node are skipped');
+    assert.strictEqual(rr.realDropped, 1, 'one real question equals an eval question and is dropped');
+    const trainR = readJsonl(path.join(R, 'pairs.train.jsonl')), heldR = readJsonl(path.join(R, 'pairs.heldout.jsonl'));
+    const r1 = trainR.find((p) => p.id === 'R-1');
+    assert.ok(r1, 'R-1 is a train pair');
+    assert.strictEqual(r1.anchor, 'how do we remove a project from the list', 'real anchor = q');
+    assert.strictEqual(r1.positive, codeText(DEL.label, DEL.file), 'real positive = codeText of the matched node');
+    assert.strictEqual(r1.project, 'other');
+    const r3 = trainR.find((p) => p.id === 'R-3');
+    assert.ok(r3 && r3.positive === codeText(EVT.label, EVT.file), 'R-3 matches the node case-insensitively');
+    assert.ok(!trainR.some((p) => ['R-2', 'R-4', 'R-5'].includes(p.id)), 'dropped and skipped rows are not in train');
+    assert.ok(!heldR.some((p) => String(p.id || '').startsWith('R-')), 'real pairs never go to held-out');
+    assert.strictEqual(rr.train, trainR.length, 'train count includes real pairs');
+    assert.strictEqual(rr.train, dflt.train + 2, 'real pairs add to the default train set');
+    console.log('  ok: real pairs: anchor q, positive from the matched node, train only, eval questions dropped, no-match skipped');
+    console.log(`  counts (--real fixture): doc ${rr.docPairs}, template ${rr.templatePairs}, real ${rr.realPairs}, real skipped ${rr.realSkipped}, real dropped ${rr.realDropped}`);
+
+    // templates: n caps the template pairs per project (seeded sample)
+    const cap1 = exportPairs({ out: path.join(base, 'out-cap1'), seed: 42, min: 10, templates: 1 });
+    assert.strictEqual(cap1.codeCounts.other, 1, 'templates: 1 keeps one template pair for other');
+    const cap0 = exportPairs({ out: path.join(base, 'out-cap0'), seed: 42, min: 10, templates: 0 });
+    assert.strictEqual(cap0.codeCounts.other, 0, 'templates: 0 keeps no template pairs');
+    assert.throws(() => exportPairs({ out: path.join(base, 'out-bad'), templates: -1 }), /templates needs a whole number/);
+    console.log('  ok: --templates caps template pairs per project');
+
+    // CLI flags
+    const { parseArgs } = require(path.join(ROOT, 'src', 'tune', 'export-pairs.js'));
+    assert.deepStrictEqual(parseArgs(['--real', '--templates', '4']), { real: true, templates: 4 });
+    assert.deepStrictEqual(parseArgs([]), {});
+    assert.throws(() => parseArgs(['--templates', '-2']), /--templates needs a whole number/);
+    assert.throws(() => parseArgs(['--templates']), /--templates needs a value/);
+    console.log('  ok: parseArgs reads --real and --templates');
+
     console.log('ALL PASSED');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });

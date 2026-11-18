@@ -12,6 +12,7 @@ const { homeDir, dataDir, tokens, loadThesaurus } = require('./rules.js');
 const paths = require('./paths.js');
 const { debug } = require('./debuglog.js');
 const { extSet, isDocName, extractText } = require('./extract.js');
+const repo = require('./repo.js');
 
 const DB_VERSION = 6;     // 2 = stable node keys + learning tables; 3 = plural stems (ies -> y) and heading words ('#word') in the word index; 6 = class-name text has folders
 const DECAY = 0.55, ROUNDS = 3, FRONTIER = 300, HUB = 600;     // spreading: damping per step, steps, neurons kept per step, a neuron with more links only receives
@@ -26,10 +27,13 @@ const FALLBACK_GATE = 1.7, FALLBACK_MARGIN = 0.3, FALLBACK_PROBE_ALONE = 0.5, FA
 const CODE_SIM = 0.55;  // a class name must be this close in meaning to the question to be added
 const CODE_K = 2;       // at most this many class names (closest in meaning first) are added to the code list
 const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65;
+const POOL = 50;   // candidate pool size for the code reranker (search opts.pool)
+const POOL_NEAR = 20;   // pool slots for the closest class names by meaning (no score cut)
 // Learning from use: opening or editing a file soon after a map was shown strengthens the links from that prompt's strongest seeds to the file's main types.
 // Bounded on purpose: a link saturates at LEARN_MAX (a full link counts like one full graph edge), fades with a half-life, needs several confirmations to show, and is never used to start a search or pass the gate.
 const LEARN_RATE = 0.2, LEARN_MAX = 1, LEARN_GAIN = 1, LEARN_PRUNE = 0.02, LEARN_MIN_N = 2, LEARN_CAP = 0.45, HALF_LIFE_DAYS = 45, LEARN_WINDOW_MS = 45 * 60000, LEARN_SEEDS = 8, LEARN_TARGETS = 3;
 const GENERIC = new Set('Empty Task CancellationToken IEnumerable DateTime Guid List Dictionary String Int32 Result IRequest IRequestHandler Unit Component Object Json Action Func Exception Boolean Nullable Type Tuple'.split(' '));
+const CLASS_NAME = /^[A-Za-z][A-Za-z0-9]{4,}$/;   // a class name (the old vecc rows); function and method names are also embedded, but only classes are shown
 const NB_CODE = 3, NB_PER = 4, NB_CHARS = 900;   // map output: neighbors shown for the top 3 code hits, 4 each
 const CHAIN_VERBS = new Set(['Set', 'Get', 'Create', 'Update', 'Delete', 'Add', 'Remove', 'On']);
 const CHAIN_ROLES = new Set(['Command', 'Query', 'Request', 'Handler', 'Dto', 'Event', 'Notification', 'Message', 'Service', 'Repository', 'Result']);   // trailing role words are not the stem (VesselPurgeCommandHandler -> Vessel%Purge, which also finds OnVesselPurged)
@@ -52,12 +56,82 @@ const sqlite = () => require('node:sqlite').DatabaseSync;       // loaded here s
 
 // ---- words ----
 const camel = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+const nameCore = (label) => String(label).replace(/^\./, '').replace(/\(\)$/, '');   // .collect_metrics() -> collect_metrics
 // the text embedded for a class name: its words, then the last 4 folders of its file (the file name is left out)
 const codeText = (label, file) => {
   const parts = String(file || '').replace(/\\/g, '/').split('/');
   parts.pop();
-  return camel(label).toLowerCase() + ' | ' + parts.slice(-4).join(' ');
+  return camel(nameCore(label)).replace(/[_.]+/g, ' ').trim().toLowerCase() + ' | ' + parts.slice(-4).join(' ');
 };
+const MAX_RICH_BYTES = 2 * 1024 * 1024, BODY_LINES = 12, BODY_CHARS = 600, COMMENT_LINES = 3;
+const codeDesc = new Map();
+function resetCodeDesc() { codeDesc.clear(); }
+function descriptions(project) {
+  if (!codeDesc.has(project)) {
+    let data = {};
+    try {
+      const value = JSON.parse(fs.readFileSync(path.join(paths.privateDir(project), 'code-desc.json'), 'utf8'));
+      if (value && typeof value === 'object' && !Array.isArray(value)) data = value;
+    } catch { /* missing or invalid file */ }
+    codeDesc.set(project, data);
+  }
+  return codeDesc.get(project);
+}
+function codeLabels(db, project) {
+  const fileOf = new Map();
+  const where = project === undefined ? '' : ' AND project = ?';
+  const stmt = db.prepare("SELECT label, file, deg FROM nodes WHERE kind = 'code' AND file != ''" + where + ' ORDER BY deg ASC');
+  for (const r of (project === undefined ? stmt.all() : stmt.all(project))) {
+    if (fileOf.has(r.label) || GENERIC.has(r.label)) continue;
+    if (CLASS_NAME.test(r.label) || (/^\.?[A-Za-z_][A-Za-z0-9_]*\(\)$/.test(r.label) && nameCore(r.label).length >= 5)) fileOf.set(r.label, r.file);
+  }
+  return fileOf;
+}
+// the doc comment right above the definition (def = 1-based line): up to 3 comment lines, nearest first; text only (no /// or /** marks, no XML tags)
+function docComment(lines, def) {
+  const out = [];
+  let walked = 0;
+  for (let i = def - 2; i >= 0 && walked < COMMENT_LINES; i--) {
+    const t = lines[i].trim();
+    if (!/^(\/\/|\/\*|\*)/.test(t)) break;
+    walked++;
+    const text = t.replace(/^\/\/\/?|^\/\*\*?|\*\/$|^\*/g, '').replace(/<[^>]+>/g, ' ').trim();
+    if (text) out.unshift(text);
+  }
+  return out.join(' ');
+}
+// codeText plus the doc comment above the definition and the code body from the project's repo folder: the 12 non-empty lines from the definition, cut to 600 chars.
+// cache (a Map) holds each file's lines for one call: false when the file is missing or over 2 MB. Never throws.
+function richText(label, file, project, cache = new Map()) {
+  const desc = descriptions(project)[label];
+  const base = codeText(label, file) + (typeof desc === 'string' && desc ? ' | ' + desc : '');
+  try {
+    const P = getProject(project) || {};
+    if (!P.repo || !fs.existsSync(P.repo)) return base;
+    const key = path.join(P.repo, P.repoBase || '', String(file).replace(/\\/g, '/'));
+    if (!cache.has(key)) {
+      let lines = false;
+      const st = fs.statSync(key, { throwIfNoEntry: false });
+      if (st && st.isFile() && st.size <= MAX_RICH_BYTES) lines = fs.readFileSync(key, 'utf8').split('\n');
+      cache.set(key, lines);
+    }
+    const lines = cache.get(key);
+    if (!lines) return base;
+    const name = String(label).replace(/^\./, '').replace(/\(\)$/, '');
+    const def = repo.defLine(lines.join('\n'), name);   // 1-based, 0 = not found
+    if (!def) return base;
+    const body = [];
+    for (let i = def - 1; i < lines.length && body.length < BODY_LINES; i++) {   // from the definition line itself (its signature carries the most)
+      const t = lines[i].trim();
+      if (t) body.push(t);
+    }
+    const text = body.join(' ').replace(/\s+/g, ' ').slice(0, BODY_CHARS);
+    const parts = [docComment(lines, def), text].filter(Boolean);
+    return parts.length ? base + ' | ' + parts.join(' ') : base;
+  } catch {
+    return base;
+  }
+}
 // The root of a word, so that forms of one word meet: generated and generator -> generat, sends and sender -> send. Cut up to two endings, drop a doubled end letter and a final e.
 function rootOf(w) {
   let r = w;
@@ -326,15 +400,12 @@ async function build(home = homeDir(), opts = {}) {
       db.exec('COMMIT');
       // the meaning of class names: each distinct type name, read as words (DomainServiceDomainEventsHolder -> "domain service domain events holder")
       // one row per label: the file of its lowest-deg node (the folders of that file are part of the text)
-      const fileOf = new Map();
-      for (const r of db.prepare("SELECT label, file, deg FROM nodes WHERE kind = 'code' AND file != '' ORDER BY deg ASC").all()) {
-        if (!fileOf.has(r.label) && /^[A-Za-z][A-Za-z0-9]{4,}$/.test(r.label) && !GENERIC.has(r.label)) fileOf.set(r.label, r.file);
-      }
-      const names = [...fileOf.keys()];
+      const fileOf = codeLabels(db);
+      const names = [...fileOf.keys()], rcache = new Map();   // one file-lines cache for this build
       const putc = db.prepare('INSERT INTO vecc VALUES(?,?)');
       db.exec('BEGIN');
       for (let i = 0; i < names.length; i += 64) {
-        const part = names.slice(i, i + 64), got = await embed(part.map((l) => codeText(l, fileOf.get(l))));
+        const part = names.slice(i, i + 64), got = await embed(part.map((l) => richText(l, fileOf.get(l), project, rcache)));
         part.forEach((l, j) => { const f = Float32Array.from(got[j]); putc.run(l, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); });
       }
       db.exec('COMMIT');
@@ -782,6 +853,7 @@ function addNamedCode(S) {
       const T = opts.codeSim ?? CODE_SIM, near = [];
       try {
         for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
+          if (!CLASS_NAME.test(r.label)) continue;
           const v = f32(r.v); if (v.length !== opts.pv.length) break;
           let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
           if (s >= T) near.push([r.label, s]);
@@ -902,6 +974,33 @@ function addNeighbours(S) {
       for (const r of twoHop.all(c.n.id, SEED_HUB, c.n.id, '%' + stem + '%')) add(r.id);
     }
   } catch { /* chain is optional */ }
+  // Handler step: the On<Event> handler of a top hit, placed right after it. Its link is weak (0.3), so the one-hop query above skips it.
+  try {
+    const exactOn = db.prepare("SELECT id FROM nodes WHERE project = ? AND kind = 'code' AND file != '' AND deg <= ? AND label = ? LIMIT 1");
+    const linkedOn = db.prepare("SELECT n.id AS id FROM edges e JOIN nodes n ON n.id = e.b WHERE e.a = ? AND n.project = ? AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.label LIKE 'On%' ORDER BY e.w DESC LIMIT 20");
+    const twoOn = db.prepare("SELECT n.id AS id FROM edges e1 JOIN edges e2 ON e2.a = e1.b JOIN nodes n ON n.id = e2.b WHERE e1.a = ? AND n.project = ? AND n.kind = 'code' AND n.file != '' AND n.deg <= ? AND n.label LIKE 'On%' ORDER BY e1.w + e2.w DESC LIMIT 20");
+    const top = code.slice(0, 6), topIds = new Set(top.map((c) => c.n.id));   // snapshot: the list grows below
+    let placed = 0;
+    for (const c of top) {
+      if (placed >= 2) break;   // at most 2 handlers per search
+      // a handler is an On<Name> code node with a file, and not a hub
+      const words = (s) => new Set((s.match(/[A-Z][a-z0-9]*/g) || []).filter((w) => !CHAIN_ROLES.has(w) && w !== 'On'));
+      const hitWords = words(c.n.label.split('.')[0]);
+      // linked handlers must share 2+ name words with the hit (a hub link alone brings unrelated handlers)
+      const ok = (id, linked) => { const n = info.get(id); if (!n || topIds.has(id) || !/^On[A-Z][A-Za-z0-9_]*$/.test(n.label) || !n.file || n.deg > SEED_HUB) return null; if (linked && [...words(n.label)].filter((w) => hitWords.has(w)).length < 2) return null; return n; };
+      const base = c.n.label, names = [];
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(base)) names.push('On' + base, 'On' + base.replace(/(DomainEvent|Event|Command)$/, ''));   // OrderPlacedEvent -> OnOrderPlaced
+      let h = null;
+      for (const name of names) { const r = exactOn.get(project, SEED_HUB, name); h = r && ok(r.id); if (h) break; }   // (c) exact name first
+      if (!h) for (const r of linkedOn.all(c.n.id, project, SEED_HUB)) { if ((h = ok(r.id, true))) break; }   // (a) one link away
+      if (!h) for (const r of twoOn.all(c.n.id, project, SEED_HUB)) { if ((h = ok(r.id, true))) break; }   // (b) two links away
+      if (!h) continue;
+      const at = code.findIndex((x) => x.n.id === h.id);
+      if (at >= 0) code.splice(at, 1);   // it is further down: move it up
+      code.splice(code.indexOf(c) + 1, 0, { a: c.a, n: h, chain: true });
+      topIds.add(h.id); placed++;
+    }
+  } catch { /* handler step is optional */ }
 }
 
 // search() step 10: exact lines from the repo folder.
@@ -912,6 +1011,40 @@ function addExactLines(S) {
     const P = getProject(project) || {};
     if (P.repo && fs.existsSync(P.repo) && !opts.noRepo) require('./repo.js').exactLines(P.repo, [...code, ...code.flatMap((c) => c.nb || [])], P.repoBase || '');
   } catch { /* the graph's lines stay */ }
+}
+
+// Candidate pool for the reranker: shown code first, then close class names by meaning (opts.pv, no score cut, up to POOL_NEAR), then ranked code names fill the rest. Unique labels, max POOL.
+function codePool(S) {
+  const { db, project, opts, info } = S;
+  const pool = [], seen = new Set();
+  const push = (label, file, a) => { if (pool.length < POOL && !seen.has(label)) { seen.add(label); pool.push({ label, file, a }); } };
+  for (const c of S.code) push(c.n.label, c.n.file, c.a);
+  if (opts.pv) {
+    try {
+      const near = [];
+      for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
+        const v = f32(r.v); if (v.length !== opts.pv.length) break;
+        let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
+        near.push([r.label, s]);
+      }
+      near.sort((a, b) => b[1] - a[1]);
+      const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg ASC LIMIT 1");
+      let added = 0;
+      for (const [label, s] of near) {
+        if (added >= POOL_NEAR || pool.length >= POOL) break;
+        if (seen.has(label)) continue;
+        const row = byLabel.get(label, project), n = row && info.get(row.id);
+        if (n && n.deg <= SEED_HUB) { push(label, n.file, s); added++; }
+      }
+    } catch { /* a map without class-name numbers */ }
+  }
+  for (const [id, a] of S.ranked) {
+    if (pool.length >= POOL) break;
+    const n = info.get(id);
+    if (!n || n.kind === 'doc' || n.deg > HUB || !n.file || n.label.length < 4 || GENERIC.has(n.label) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n.label)) continue;
+    push(n.label, n.file, a);
+  }
+  S.pool = pool;
 }
 
 // Returns { docs, code, comms, commit, built } or null. `pv` is the prompt's meaning vector (optional).
@@ -941,11 +1074,12 @@ function search(home, text, opts = {}) {
     if (rankDocRows(S) !== undefined) return null;   // the nothing-to-show stop
     addNeighbours(S);
     addExactLines(S);
-    const { docs, code, feat, why, ranked, info, best, nSeeds, seedKeys, learned } = S;
+    if (opts.pool) codePool(S);
+    const { docs, code, feat, why, ranked, info, best, nSeeds, seedKeys, learned, pool } = S;
     // --why only: the candidate sections in rank order (the ranked list when no rank file is used)
     const cands = opts.why ? (why || ranked.filter(([id]) => info.get(id)?.kind === 'doc').slice(0, 40).map(([id]) => ({ file: info.get(id).file, sec: info.get(id).section || '' }))) : undefined;
     if (trace) trace.reason = 'shown';
-    return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands };
+    return { project, docs, code, commit: meta.commit, built: Number(meta.built), seeds: nSeeds, best, seedKeys, learned: learned.size, feat, cands, pool: opts.pool ? pool : undefined };
   } catch (e) { debug('search', e); return giveUp('error'); } finally { try { db.close(); } catch { /* already closed */ } }
 }
 
@@ -1032,4 +1166,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers, codeText };
+module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers, codeText, richText, codeLabels, resetCodeDesc };

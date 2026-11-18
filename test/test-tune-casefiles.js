@@ -3,7 +3,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const { CODE_CASE_FILES, CASE_FILES } = require('../src/tune/export-pairs.js');
-assert.deepStrictEqual(CODE_CASE_FILES, ['eval-cases-exact.json', 'eval-cases-chain.json', 'eval-cases-scenario.json']);
+assert.deepStrictEqual(CODE_CASE_FILES, ['eval-cases-exact.json', 'eval-cases-chain.json', 'eval-cases-scenario.json', 'eval-cases-written.json']);
 for (const f of CODE_CASE_FILES) assert.ok(CASE_FILES.includes(f), f + ' questions must be kept out of training');
 assert.ok(CASE_FILES.includes('eval-cases.json'));
 

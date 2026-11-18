@@ -57,12 +57,17 @@ async function searchFull(home, text, opts = {}) {
 }
 
 // The project map (mk.js): a spreading search over the project's docs + its code graph. Empty when there is no map or nothing fits.
-function mapFor(home, text, pv, started, session, cwd = '') {
+// scoreFn is for tests only: undefined = the local reranker (rerank.js), null = no rerank.
+async function mapFor(home, text, pv, started, session, cwd = '', scoreFn) {
   try {
     if (Date.now() - started > MK_BUDGET_MS) return '';
     const mk = require('./mk.js');
-    const res = mk.searchAll(home, text, { pv, cwd, session, pins: require('./pin.js').getPins(home, session) });   // one of the projects in projects.json, or (as a fallback) the general docs
-    if (res && session) mk.remember(home, session, res);   // so a file opened soon after can teach the network (see `touched`)
+    let res = mk.searchAll(home, text, { pv, cwd, session, pins: require('./pin.js').getPins(home, session), pool: true });   // one of the projects in projects.json, or (as a fallback) the general docs
+    const rr = require('./rerank.js');
+    const left = () => MK_BUDGET_MS - 1500 - (Date.now() - started);
+    const score = scoreFn === undefined ? (left() > 0 ? await withTimeout(rr.getReranker(), left()).catch(() => null) : null) : scoreFn;   // a slow cold load must not stall the hook
+    res = await rr.rerankMap(res, text, score, left());   // the reranker keeps today's list on any problem
+    if (res && session) mk.remember(home, session, res);   // after the rerank: remembers the list that is shown (see `touched`)
     return mk.format(res);
   } catch (e) { debug('mapFor', e); return ''; }
 }
@@ -358,7 +363,7 @@ async function gather(prompt, sid, cwd) {
   refreshMapInBackground(homeDir());
   const parts = [];
   if (nodes.length) parts.push(format(nodes));
-  const map = mapFor(homeDir(), prompt, pv, started, sid, cwd);
+  const map = await mapFor(homeDir(), prompt, pv, started, sid, cwd);
   if (map) parts.push(map);
   if (hist.length) parts.push(history.formatHistory(hist));
   return parts;
@@ -487,7 +492,7 @@ async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss, isRepoCodeFile };
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss, isRepoCodeFile, mapFor };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
