@@ -86,9 +86,13 @@ const CASES = [
 ];
 
 (async () => {
-  let fail = 0, total = 0, rules = 0, known = 0, fixed = 0;
+  let fail = 0, total = 0, rules = 0, known = 0, fixed = 0, skipped = 0;
+  // rank() drops inContext nodes (Claude has them already): when every rule is in context, the hook injects none, so there is nothing to score
+  const injectable = require('../src/rules.js').fresh(home).nodes.some((n) => !n.inContext);
+  if (!injectable) console.log('SKIP  rule cases: all rules are in context (CLAUDE.md and its imports), the hook injects none');
   for (const c of [...CASES, ...privateCases()]) {
     let ok = true, why = '';
+    if (!c.nomap && !injectable) { skipped++; continue; }
     if (c.nomap) { // the map is checked alone: the rules may still match
       const { pv } = await brain.searchFull(home, c.p);   // the hook gives the map the prompt's meaning vector too
       const m = require('../src/mk.js').searchAll(home, c.p, { pv, learn: false });
@@ -108,7 +112,7 @@ const CASES = [
     } else { rules += r.length; total++; if (!ok) fail++; }
     console.log(`${tag} ${String(r.length).padStart(2)} rules  "${c.p}"${why ? '  <- ' + why : ''}`);
   }
-  console.log(`\n${total - fail}/${total} passed, ${(rules / total).toFixed(1)} rules per prompt on average`);
+  console.log(`\n${total - fail}/${total} passed, ${(rules / (total || 1)).toFixed(1)} rules per prompt on average${skipped ? `, ${skipped} rule cases skipped` : ''}`);
   console.log(`${known - fixed} known failures not fixed${fixed ? `, ${fixed} known cases now pass` : ''}`);
   process.exit(fail ? 1 : 0);
 })();

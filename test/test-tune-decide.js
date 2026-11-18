@@ -45,4 +45,19 @@ const quiet = { makillez: { n: 30, t: 31 } };
   console.log('  ok: parseArgs reads --no-keep');
 }
 
+// pickVenv: with no --venv, the first tune-venv* whose torch sees a GPU (reverse name order), else tune-venv
+{
+  const { pickVenv } = require('../src/tune/tune.js'), fs = require('fs'), os = require('os'), path = require('path');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pickvenv-'));
+  try {
+    for (const n of ['tune-venv', 'tune-venv-xpu', 'tune-venv-xpu-old', 'other']) fs.mkdirSync(path.join(d, n));
+    const gpu = new Set(['tune-venv-xpu', 'tune-venv-xpu-old']), tried = [];
+    const probe = (dir) => { tried.push(path.basename(dir)); return gpu.has(path.basename(dir)); };
+    assert.strictEqual(path.basename(pickVenv(d, probe)), 'tune-venv-xpu-old', 'a GPU venv wins, reverse name order');
+    assert.ok(!tried.includes('other'), 'only tune-venv* folders are probed');
+    assert.strictEqual(path.basename(pickVenv(d, () => false)), 'tune-venv', 'no GPU venv: the default CPU venv');
+    console.log('  ok: pickVenv prefers a GPU venv');
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+}
+
 console.log('ALL PASSED');

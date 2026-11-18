@@ -56,8 +56,17 @@ python -m venv <venv>
 node src/tune/tune.js --yes
 ```
 
-The venv defaults to `<data>/tune-venv`. If it is missing, the run stops and tells you to run `node src/setup.js --tune`.
-Use `--venv <dir>` to pick another venv.
+With no `--venv`, the run picks the venv by itself and prints it (`venv: ...`):
+
+- It checks each `<data>/tune-venv*` folder, in reverse name order. It takes the first one whose torch sees a GPU (Intel `xpu` or `cuda`).
+- If none does, it uses `<data>/tune-venv` (the CPU build). If that is missing, the run stops and tells you to run `node src/setup.js --tune`.
+- Use `--venv <dir>` to choose one yourself.
+
+**Add a GPU venv (Intel).** `setup.js --tune` installs the CPU build of torch. For an Intel GPU, make one more venv named `tune-venv-xpu` in `<data>`:
+
+1. In the install steps above, use the index `https://download.pytorch.org/whl/xpu` instead of `.../whl/cpu`.
+2. Check it: `<venv>\Scripts\python -c "import torch; print(torch.xpu.is_available())"` must print `True`.
+3. Run the tune with no `--venv`. The log shows `device: xpu` when training starts.
 
 Or run `/gabriel:tune-embeddings` in Claude Code.
 

@@ -6,6 +6,7 @@
 //   node src/tune/tune.js --rollback              remove embedModel from projects.json (config only)
 //   node src/tune/tune.js ... --real               also train on the real questions (rerank-train-cases.json, one per row)
 //   node src/tune/tune.js ... --templates <n>      keep at most n code-name template pairs per project (default: all)
+//   node src/tune/tune.js ... --projects a,b       train and score only these doc sets (default: every set with eval cases)
 // Your real data does not change until the scores say keep. The scores run on a copy of the data folder,
 // because a model change re-embeds every map and the real maps must stay as they are until the decision.
 const fs = require('fs');
@@ -105,6 +106,21 @@ function venvPython(venv) {
   const py = process.platform === 'win32' ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python');
   if (!fs.existsSync(py)) throw new Error(`python not found at ${py}: create the venv and install src/tune/requirements.txt`);
   return py;
+}
+
+// Does this venv's torch see a GPU (Intel xpu or cuda)? 60 s limit: a busy GPU can hang the check.
+function venvHasGpu(venv) {
+  try {
+    const r = spawnSync(venvPython(venv), ['-c', 'import sys,torch; sys.exit(0 if (hasattr(torch,"xpu") and torch.xpu.is_available()) or torch.cuda.is_available() else 1)'], { timeout: 60000, windowsHide: true, stdio: 'ignore' });
+    return r.status === 0;
+  } catch { return false; }
+}
+
+// The default venv: the first <dir>/tune-venv* that sees a GPU (reverse name order, so tune-venv-xpu-old comes before tune-venv-xpu), else <dir>/tune-venv (CPU).
+function pickVenv(dir, probe = venvHasGpu) {
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^tune-venv/.test(n) && fs.statSync(path.join(dir, n)).isDirectory()).sort().reverse() : [];
+  const gpu = names.find((n) => n !== 'tune-venv' && probe(path.join(dir, n)));
+  return path.join(dir, gpu || 'tune-venv');
 }
 
 // the question index (dq) is embedded with one model: rebuild it for each project that has a question list
@@ -239,6 +255,7 @@ function parseArgs(argv) {
       if (argv[i + 1] === undefined || !Number.isInteger(n) || n < 0) throw new Error('--templates needs a whole number');
       o.templates = n; i++;
     }
+    else if (a === '--projects') { if (argv[i + 1] === undefined) throw new Error('--projects needs a list: a,b'); o.projects = argv[++i].split(',').map((s) => s.trim()).filter(Boolean); }
     else if (a === '--venv') { if (argv[i + 1] === undefined) throw new Error('--venv needs a folder'); o.venv = path.resolve(argv[++i]); }
     else throw new Error('unknown argument: ' + a);
   }
@@ -263,12 +280,13 @@ async function main(argv) {
     console.log(`removed embedModel "${cur.embedModel}" from projects.json. The next prompt rebuilds each map once with the default model.`);
     return 0;
   }
-  if (!o.venv) o.venv = path.join(paths.dataDir(), 'tune-venv');
+  if (!o.venv) o.venv = pickVenv(paths.dataDir());
+  console.log(`venv: ${o.venv}`);
   if (!fs.existsSync(o.venv)) throw new Error(`no tune venv at ${o.venv}: run /gabriel:setup --tune first (or node src/setup.js --tune)`);
   venvPython(o.venv);   // fails early when the venv has no python
   const cur = readConfig();
   if (cur && cur.embedModel) throw new Error(`projects.json already sets embedModel "${cur.embedModel}". Run --rollback first, then tune again.`);
-  const projects = loadProjects().map((p) => p.name).filter((n) => { const h = caseFilesOf(n); return h.main || h.code.length > 0; });
+  const projects = loadProjects().map((p) => p.name).filter((n) => { const h = caseFilesOf(n); return h.main || h.code.length > 0; }).filter((n) => !o.projects || o.projects.includes(n));   // --projects: train and score only these sets
   if (!projects.length) throw new Error('no eval cases yet: write eval-cases.json for a project first (docs/EVAL.md)');
   if (!fs.existsSync(mk.dbFile())) throw new Error('no map yet: run node src/brain.js build-mk all first');
   if (!o.yes) {
@@ -283,11 +301,11 @@ async function main(argv) {
   try {
     const T = stage(work);
     stepStart(1, 'export pairs');
-    const pairs = exportPairs({ out: path.join(work, 'pairs'), real: o.real, templates: o.templates });
+    const pairs = exportPairs({ out: path.join(work, 'pairs'), real: o.real, templates: o.templates, projects });
     console.log(`  ${pairs.train} train pairs, ${pairs.heldout} held-out pairs`);
     stepDone(1, 'export pairs');
 
-    stepStart(2, 'train (CPU, can be slow)');
+    stepStart(2, 'train (slow on CPU; the log shows the device)');
     run(venvPy, [path.join(SRC, 'tune', 'train.py'), '--base', TRAIN_BASE, '--pairs', path.join(work, 'pairs'), '--out', path.join(work, 'model')], process.env, 'train');
     stepDone(2, 'train');
 
@@ -319,7 +337,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { decide, parseArgs, keepModel, caseFilesOf };
+module.exports = { decide, parseArgs, keepModel, caseFilesOf, pickVenv };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }).catch((e) => {

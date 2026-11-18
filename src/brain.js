@@ -29,16 +29,17 @@ const DRIFT_FILES = 10, DRIFT_EVERY = 2, MISS_FILES = 3, DRIFT_MS = 3600000, MIS
 
 // Words + synonyms + meaning. Any trouble with the model falls back to words + synonyms.
 async function searchFull(home, text, opts = {}) {
-  const g = fresh(home), score = wordScores(g, text, opts.thesaurus || loadThesaurus());
+  const g = fresh(home), cand = g.nodes.some((n) => !n.inContext);   // rank() drops inContext nodes: with no other node, skip the scoring, keep pv and hist
+  const score = cand ? wordScores(g, text, opts.thesaurus || loadThesaurus()) : new Map();
   let hist = [], pv = null;
-  const vecs = readVectors(home, opts.model || MODEL);
-  if (vecs) {
+  const vecs = readVectors(home, opts.model || MODEL);   // rule vectors; null after a model change until the refresh re-embeds them
+  {
     try {
       const embed = opts.embed || (await getEmbedder(false));
-      if (embed) {
+      if (embed) {   // pv does not need the rule vectors: the map search uses it too
         [pv] = await withTimeout(embed([text.slice(0, 500)]), opts.timeoutMs || EMBED_TIMEOUT);
         hist = history.searchHistory(home, pv, opts.model || MODEL, { max: 2, exclude: text.trim() });
-        for (const n of g.nodes) {
+        if (cand && vecs) for (const n of g.nodes) {
           const v = vecs.get(ehash(n));
           if (!v || v.length !== pv.length) continue;               // vector of another size: ignore
           let sim = 0;
@@ -53,7 +54,7 @@ async function searchFull(home, text, opts = {}) {
   try { // exact rare words (ids, file names) fill the free history slots: meaning search can miss them
     for (const e of require('./graphdb.js').lexical(home, text, tokens, { max: 2, exclude: text.trim() })) if (hist.length < 2 && !hist.some((h) => h.p === e.p)) hist.push(e);
   } catch { /* the keyword graph is optional */ }
-  return { nodes: rank(g, score), hist, pv };
+  return { nodes: cand ? rank(g, score) : [], hist, pv };
 }
 
 // The project map (mk.js): a spreading search over the project's docs + its code graph. Empty when there is no map or nothing fits.

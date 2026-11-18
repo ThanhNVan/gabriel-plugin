@@ -287,6 +287,10 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     // C4: the extra pinned set prints as a short block with its own header
     const pabText = mk.format(pab);
     assert.ok(pabText.includes('Alpha map (') && pabText.includes('Beta map ('), pabText);
+    // long docs must not push out the first code lines (the 2026-11-19 RowGoalHintInterceptor case: 6 long docs, 0 code shown)
+    const head = mk.format({ ...pab, also: [], docs: [], code: [] }).length, fill = 2200 - head - 10 - '- doc d.md:1 > : \n'.length - 210;   // one doc that leaves 10 characters of the 2200 budget
+    const fat = mk.format({ ...pab, also: [], docs: [{ n: { file: 'd.md', loc: 'L1', section: 'S'.repeat(fill), text: 'x'.repeat(210) } }], code: pab.code.slice(0, 1) });
+    assert.ok(fat.includes('- code ' + pab.code[0].n.label), 'the first code line still shows when the docs fill the budget');
     await mk.build(home, { root: root2, project: 'beta', noEmbed: true });   // a rebuild replaces the project rows and leaves the others
     assert.ok(mk.search(home, order, {}) && mk.search(home, parcel, { project: 'beta' }), 'both projects still answer after a rebuild');
     assert.strictEqual(mk.stale(home, 'beta'), false, 'the rebuilt project is not stale');
@@ -303,6 +307,7 @@ write(path.join(root, 'graphify-out', 'graph.json'), JSON.stringify({ nodes, lin
     assert.strictEqual(mk.remember(home, 's1', before, T0), true);
     // session gate: a weak, unnamed match shows no map in a new session, but does in a session that already had an Alpha map, or inside the repo folder
     assert.strictEqual(mk.searchAll(home, Q, { session: 'fresh' }), null, 'a weak match in a new session shows no map (alpha has sessionGate: true)');
+    assert.strictEqual((mk.searchAll(home, Q, { session: 'fresh', pins: ['alpha'] }) || {}).project, 'alpha', 'one pin: the session gate does not hide the only pinned set');
     // sessionGate is off by default: beta (no sessionGate) shows a weak, unnamed match from outside its folder in a new session; alpha (sessionGate: true) hid it
     const weakParcel = 'how do parcels get routed by zone', outside = 'C:\\elsewhere';
     assert.strictEqual(mk.searchAll(home, weakParcel, { session: 'fresh2', cwd: outside }).project, 'beta', 'default (no sessionGate): a weak match from outside shows');

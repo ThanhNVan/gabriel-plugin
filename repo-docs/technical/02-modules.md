@@ -97,7 +97,7 @@ The questions live in each project's private folder, not in git.
 | `eval/eval-map.js` | Scores the default map (or one project, or the real router) on written questions. Prints a summary. `--why` gives each DOC or FAIL a miss class (`section-rank`, `not-in-pool`, `wrong-doc`, `code-only-miss`) and the counts. | `judge`, `judgeRendered` | `retrain.js`, `tune/tune.js`, `eval/eval-rerank.js` |
 | `eval/eval-model.js` | Tries another embedding model in a throwaway home, for several similarity floors. | `judge` (script) | run by hand |
 | `eval/eval-rerank.js` | Offline A/B test of a rerank idea. Changes no live file. | script | run by hand |
-| `eval/eval-rules.js` | Regression check of rules matching on the real rules. Exit 1 on a failure. | script | run by hand |
+| `eval/eval-rules.js` | Regression check of rules matching on the real rules. When every rule is `inContext`, it skips the rule cases and checks only the `nomap` cases. Exit 1 on a failure. | script | run by hand |
 | `eval/measure-hook.js` | Times the real hook in a new process. | script | run by hand |
 | `eval/suggest-cases.js` | Suggests one written question per doc section, for review. Never writes the real case file. | `sectionCases`, `covered`, `newSuggestions`, `esc` | `setup.js` (`--update`) |
 | `eval/wide-test.js` | Wide test of the rules and history, in a throwaway home. | script | run by hand |

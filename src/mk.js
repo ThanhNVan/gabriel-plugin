@@ -26,7 +26,7 @@ const FALLBACK_FIRST = 0.8;
 const FALLBACK_GATE = 1.7, FALLBACK_MARGIN = 0.3, FALLBACK_PROBE_ALONE = 0.5, FALLBACK_PROBE_WITH_PROJECT = 1.0;   // general docs: their own stricter gate (positives: median 2.35, 10th percentile 1.75; unrelated prompts: median 0.67, 90th percentile 1.10), the lead needed over a project, and the words-only look that decides whether the full tech search runs
 const CODE_SIM = 0.55;  // a class name must be this close in meaning to the question to be added
 const CODE_K = 2;       // at most this many class names (closest in meaning first) are added to the code list
-const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65;
+const MAX_DOCS = 6, MAX_CODE = 6, MAX_CHARS = 2200, DOC_CHARS = 210, GATE = 0.65, CODE_KEEP = 2;
 const POOL = 50;   // candidate pool size for the code reranker (search opts.pool)
 const POOL_NEAR = 20;   // pool slots for the closest class names by meaning (no score cut)
 // Learning from use: opening or editing a file soon after a map was shown strengthens the links from that prompt's strongest seeds to the file's main types.
@@ -48,7 +48,7 @@ const { loadConfig, loadProjects, getProject, projectNames, embedModel, DEFAULT_
 // the default project: the one with a routing prior, else the first that is not a fallback
 const defaultProject = () => { const ps = loadProjects(); return (ps.find((p) => p.prior > 0) || ps.find((p) => !p.fallback) || ps[0] || {}).name; };
 const docsRoot = (project = defaultProject()) => { const p = getProject(project); if (!p) throw new Error('unknown project: ' + project); return p.root; };
-const graphPathOf = (project) => { const P = getProject(project) || {}; return P.graph ? path.join(docsRoot(project), P.graph) : null; };   // the project's code graph file (null when it sets none); build() and status use the same rule
+const graphPathOf = (project) => { const P = getProject(project) || {}; return P.graph ? (path.isAbsolute(P.graph) ? P.graph : path.join(docsRoot(project), P.graph)) : null; };   // an absolute graph path stays as it is (a copied doc root, as in the tune run, keeps it)   // the project's code graph file (null when it sets none); build() and status use the same rule
 const legacyProject = () => loadConfig().legacyProject;
 const isFallback = (project) => !!(getProject(project) || {}).fallback;   // the general docs: answer only when no project does
 const dbFile = (home) => path.join(dataDir(home), 'mk.db');   // one file for all projects; every row carries its project
@@ -255,7 +255,7 @@ const spansOf = (t) => [...t.matchAll(/`([^`]{2,80})`/g)].map((m) => m[1].trim()
 // ---- build ----
 async function build(home = homeDir(), opts = {}) {
   const project = opts.project || defaultProject(), P = getProject(project) || {}, root = opts.root || docsRoot(project), t0 = Date.now(), log = opts.log || (() => {});
-  const gp = P.graph || null, graphPath = gp ? path.join(root, gp) : null;   // a project without a code graph (the general docs) has none
+  const gp = P.graph || null, graphPath = gp ? path.resolve(root, gp) : null;   // a project without a code graph (the general docs) has none
   if (graphPath && !fs.existsSync(graphPath)) throw new Error(`graph not found: ${graphPath}; run /graphify on the code repo, or fix "graph" for ${project} in projects.json`);   // before any write: the old map stays
   const g = graphPath && fs.existsSync(graphPath) ? JSON.parse(fs.readFileSync(graphPath, 'utf8')) : { nodes: [], links: [], built_at_commit: '' };
   const files = listDocs(root, P.layout, P.skipDirs, extSet(P.extensions));
@@ -467,7 +467,7 @@ function openMain(home) {
     CREATE TABLE IF NOT EXISTS meta(k TEXT, v TEXT, project TEXT, PRIMARY KEY(k, project));
     CREATE INDEX IF NOT EXISTS kw_w ON kw(word, project); CREATE INDEX IF NOT EXISTS kw2_w ON kw2(word, project);
     CREATE INDEX IF NOT EXISTS kw_node ON kw(node); CREATE INDEX IF NOT EXISTS kw2_node ON kw2(node);
-    CREATE INDEX IF NOT EXISTS edges_a ON edges(a); CREATE INDEX IF NOT EXISTS nodes_p ON nodes(project, kind); CREATE INDEX IF NOT EXISTS nodes_file ON nodes(file, project);
+    CREATE INDEX IF NOT EXISTS edges_a ON edges(a); CREATE INDEX IF NOT EXISTS nodes_p ON nodes(project, kind); CREATE INDEX IF NOT EXISTS nodes_file ON nodes(file, project); CREATE INDEX IF NOT EXISTS nodes_label ON nodes(label, project);
     CREATE INDEX IF NOT EXISTS vec_p ON vec(project); CREATE INDEX IF NOT EXISTS vech_p ON vech(project);`);
   if (carry) {
     const put = db.prepare('INSERT OR REPLACE INTO learn VALUES(?,?,?,?,?)'), putLast = db.prepare('INSERT OR REPLACE INTO last VALUES(?,?,?,?)');
@@ -624,7 +624,7 @@ function status(home = homeDir(), project = defaultProject()) {
   } catch { out.mapCommit = null; }
   out.graphCommit = null;
   if (P.graph) try { // graphify writes built_at_commit as the last key, so the last 400 bytes are enough (the file is ~90 MB)
-    const f = path.join(root, P.graph), size = fs.statSync(f).size, n = Math.min(400, size), b = Buffer.alloc(n), fd = fs.openSync(f, 'r');
+    const f = path.resolve(root, P.graph), size = fs.statSync(f).size, n = Math.min(400, size), b = Buffer.alloc(n), fd = fs.openSync(f, 'r');
     try { fs.readSync(fd, b, 0, n, size - n); } finally { fs.closeSync(fd); }
     out.graphCommit = (b.toString('utf8').match(/"built_at_commit"\s*:\s*"([0-9a-f]{7,40})"/) || [])[1] || null;
   } catch { out.graphCommit = null; }
@@ -635,11 +635,11 @@ function status(home = homeDir(), project = defaultProject()) {
 // What the map was built from: the graph file and every technical doc. Cheap to compare (a few stat calls).
 function sources(root, project) {
   const P = getProject(project) || {}, st = (f) => { try { const s = fs.statSync(f); return `${Math.round(s.mtimeMs)}:${s.size}`; } catch { return 'none'; } };
-  return { graph: st(path.join(root, P.graph || 'graphify-out/graph.json')), docs: listDocs(root, P.layout, P.skipDirs, extSet(P.extensions)).map((f) => path.relative(root, f).replace(/\\/g, '/') + '@' + st(f)).join('|') };
+  return { graph: st(path.resolve(root, P.graph || 'graphify-out/graph.json')), docs: listDocs(root, P.layout, P.skipDirs, extSet(P.extensions)).map((f) => path.relative(root, f).replace(/\\/g, '/') + '@' + st(f)).join('|') };
 }
 
 // no rows yet: a map is due only for the default project, and only when its graph file exists (the other projects are built on request)
-const graphOnDisk = (project) => { const P = getProject(project) || {}; return project === defaultProject() && !!P.graph && fs.existsSync(path.join(docsRoot(project), P.graph)); };
+const graphOnDisk = (project) => { const P = getProject(project) || {}; return project === defaultProject() && !!P.graph && fs.existsSync(path.resolve(docsRoot(project), P.graph)); };
 function stale(home = homeDir(), project = defaultProject()) { // true when there is no map, or a doc or the graph changed since it was built
   try {
     const db = new (sqlite())(dbFile(home), { readOnly: true });
@@ -837,6 +837,18 @@ function pickResults(S) {
   S.info = info; S.ranked = ranked; S.docs = docs; S.code = code;
 }
 
+// Meaning of every class-name row vs the question, computed once per search (addNamedCode and codePool both read it). Row order kept; a vector of another size stops the scan, as before.
+function vecSims(S) {
+  if (S.vecSims) return S.vecSims;
+  const out = [];
+  for (const r of S.db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(S.project)) {
+    const v = f32(r.v); if (v.length !== S.opts.pv.length) break;
+    let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * S.opts.pv[i];
+    out.push([r.label, s]);
+  }
+  return (S.vecSims = out);
+}
+
 // search() step 7: code-name pass and class-name meaning.
 function addNamedCode(S) {
   const { db, project, text, opts, N, info } = S;
@@ -868,12 +880,7 @@ function addNamedCode(S) {
     if (opts.pv) {
       const T = opts.codeSim ?? CODE_SIM, near = [];
       try {
-        for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
-          if (!CLASS_NAME.test(r.label)) continue;
-          const v = f32(r.v); if (v.length !== opts.pv.length) break;
-          let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
-          if (s >= T) near.push([r.label, s]);
-        }
+        for (const [label, s] of vecSims(S)) if (CLASS_NAME.test(label) && s >= T) near.push([label, s]);
       } catch { /* a map without class-name numbers */ }
       near.sort((a, b) => b[1] - a[1]);
       const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg ASC LIMIT 1");
@@ -1058,12 +1065,7 @@ function codePool(S) {
   for (const c of S.code) push(c.n.label, c.n.file, c.a);
   if (opts.pv) {
     try {
-      const near = [];
-      for (const r of db.prepare('SELECT label, v FROM vecc WHERE project = ?').all(project)) {
-        const v = f32(r.v); if (v.length !== opts.pv.length) break;
-        let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * opts.pv[i];
-        near.push([r.label, s]);
-      }
+      const near = vecSims(S).slice();   // a copy: the sort below must not reorder the shared list
       near.sort((a, b) => b[1] - a[1]);
       const byLabel = db.prepare("SELECT id FROM nodes WHERE kind = 'code' AND label = ? AND file != '' AND project = ? ORDER BY deg ASC LIMIT 1");
       let added = 0;
@@ -1157,7 +1159,7 @@ function searchAll(home, text, opts = {}) {
   // Opt-in per project (projects.json "sessionGate": true). Off by default.
   const gated = (h) => (getProject(h.r.project) || {}).sessionGate && !named.includes(h.r.project) && !cwd.includes(h.r.project) && h.r.best < (opts.strong ?? SESSION_STRONG) && !hadMap(home, opts.session, h.r.project);   // is this set cut by the session gate?
   if (pins.length >= 2) { while (hits[0] && gated(hits[0])) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated ??= hits[0].r.project; } hits.shift(); } }   // 2+ pins: drop each gated set from the top, the other pinned sets still show
-  else if (hits[0] && gated(hits[0])) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated ??= hits[0].r.project; } hits.length = 0; }
+  else if (pins.length !== 1 && hits[0] && gated(hits[0])) { if (outTrace) { outTrace.sessionGate = true; outTrace.gated ??= hits[0].r.project; } hits.length = 0; }   // one pin: the user chose this set, so the gate does not hide it
   const top = hits[0], also = [];
   if (pins.length >= 2) also.push(...hits.slice(1).map((h) => h.r));   // two or more pinned sets: every other pinned set that matched gets a short block
   else if (top && hits[1] && hits[1].score >= top.score - ALSO_CLOSE) also.push(hits[1].r);   // a close call: the second project gets a short block too
@@ -1189,13 +1191,17 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   let out = P.fallback
     ? `${pn} (general programming and architecture, from public docs; built ${new Date(res.built).toISOString().slice(0, 10)}; background reading, not a rule of this repo):\n`
     : `${pn} map (spreading search over ${P.graph ? 'docs + code graph' : 'docs'}${res.commit ? ' @' + res.commit.slice(0, 8) : ''}, built ${new Date(res.built).toISOString().slice(0, 10)}; start here, then confirm in the code, the map can be old):\n`;
-  const add = (s) => { if (out.length - nbUsed + s.length + 1 <= (lim.max ?? MAX_CHARS)) out += s + '\n'; };
+  const codeLine = (c) => `- code ${c.n.label} (${where(c.n, c.n.file, true)})${c.chain ? ' 2 links away' : ''}`;
+  const codes = res.code.slice(0, lim.code ?? 99);
+  let keep = lim.max ? 0 : codes.slice(0, CODE_KEEP).reduce((s, c) => s + codeLine(c).length + 1, 0);   // room kept for the first code lines: long docs must not push out an exact code hit
+  const add = (s) => { if (out.length - nbUsed + s.length + 1 <= (lim.max ?? MAX_CHARS) - keep) out += s + '\n'; };
   let nbUsed = 0;   // neighbor lines have their own budget, so they never push a code hit out
   const addNb = (s) => { if (nbUsed + s.length + 1 <= NB_CHARS) { out += s + '\n'; nbUsed += s.length + 1; } };
   for (const d of res.docs.slice(0, lim.docs ?? 99)) add(`- doc ${d.n.file.replace(/^technical-docs\//, '')}${d.n.loc ? ':' + d.n.loc.replace(/^L/, '') : ''} > ${d.n.section || '(top)'}: ${d.n.text.length > DOC_CHARS ? d.n.text.slice(0, DOC_CHARS) + '...' : d.n.text}`);
-  for (const c of res.code.slice(0, lim.code ?? 99)) {
+  keep = 0;
+  for (const c of codes) {
     const before = out.length;
-    add(`- code ${c.n.label} (${where(c.n, c.n.file, true)})${c.chain ? ' 2 links away' : ''}`);
+    add(codeLine(c));
     if (out.length === before) continue;   // the code line did not fit: show no orphan neighbor lines
     if (!lim.max) for (const x of c.nb || []) addNb(`    ↔ ${x.label} (${where(x, x.file || 'external', false)}) ${x.w >= 1 ? 'calls/implements' : x.w >= 0.7 ? 'method' : 'defines/related'}`);
   }

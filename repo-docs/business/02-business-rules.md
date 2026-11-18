@@ -44,6 +44,7 @@ Each rule, map block or earlier prompt is sent once per session. A second copy i
 - Doc hits: `MAX_DOCS`, at most 2 per file, none under 30% of the best hit. Code hits: `MAX_CODE`, at most 2 types per file, same 30% rule. Each doc snippet: `DOC_CHARS` (210).
 - Named pairs: a shown `XCommand`, `XQuery` or `XRequest` gives its slot to its handler (the same name plus `Handler`) from the same folder, when that handler is not shown yet. The block does not grow. Strict exact on 100 private Makillez cases (2026-11-16): tune 17/50 -> 28/50, check 15/50 -> 23/50. Where: `src/mk.js` `pairHandlers()`, run after `addNamedCode()` in `search()`.
 - Extra "2 links away" lines come on top, up to the set's `max` ([R34](#r34-two-links-away-code-names)). The size limit (`MAX_CHARS`) still applies to all lines.
+- The main block keeps room for its first 2 code lines (`CODE_KEEP`), so long doc lines cannot push them out. A doc line that does not fit is dropped instead.
 - Where: `src/mk.js` `format()`.
 
 ### R09 One doc set leads; a close second gets a short block
@@ -55,7 +56,7 @@ The fallback doc set (public background docs) answers when no doc set matches. I
 - Where: `src/mk.js` `searchAll()` (`FALLBACK_IF_WEAKER_THAN`, `FALLBACK_FIRST`, `FALLBACK_MARGIN`), `format()`.
 
 ### R11 Session gate (opt-in)
-When a doc set sets `sessionGate: true`, a weak match is dropped unless the prompt names the set or the working folder path contains its name. It also shows only when this session already had a map for that set. Default: off.
+When a doc set sets `sessionGate: true`, a weak match is dropped unless the prompt names the set or the working folder path contains its name. It also shows only when this session already had a map for that set. A set that is the only pin is not gated ([R35](#r35-session-pin)). Default: off.
 - Where: `src/mk.js` `searchAll()`, `hadMap()`, `SESSION_STRONG`; `src/projects.js` `DEFAULTS`.
 
 ### R12 A named doc set gets the prompt first
@@ -206,6 +207,7 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - While pinned, `src/mk.js` `searchAll()` searches only the pinned sets:
   - The top set gets the full map block. Each other pinned set that matched gets a short block.
   - With 2 or more pins, the session gate hides each set it gates, from the top down. The other pinned sets still show.
+  - With 1 pin, the session gate does not apply: the user chose that set.
   - The fallback general docs ([R10](#r10-general-docs-answer-only-when-no-doc-set-does)) run after the pinned blocks, as before.
   - Learning ([R23](#r23-a-learned-link-needs-two-confirmations-and-fades)) uses the top set only.
 - While pinned, every user note starts with a blank line, then `📌 pinned: a, b  ("gabriel use auto" to undo)`. The model text never gets it.

@@ -158,6 +158,8 @@ process.on('exit', () => { if (!finished) { console.error('TEST DID NOT FINISH')
   }
   assert.strictEqual((await brain.searchFull(home, 'open the file changelog-draft.md and fix the heading', o)).hist.some((x) => x.p === 'open the file changelog-draft.md and fix the heading'), false, 'the prompt itself came back');
   assert.strictEqual((await brain.searchFull(home, 'what is the weather like in Paris', o)).hist.length, 0, 'unrelated prompt got history');
+  // no rule vectors for the model (just after a model change): the prompt vector is still made, the map search needs it
+  assert.ok((await brain.searchFull(home, ask, { embed: fake, model: 'no-such-model' })).pv, 'pv is null when the rule vectors are missing');
 
   // Task 7: buildNote() gives one 💡 line at most; the setup hint or tip wins over the pin hint
   {
