@@ -1,14 +1,15 @@
 {
   "0": "tune.js",
   "1": "mk.js",
-  "2": "codex.js",
+  "2": "ref_path",
   "3": "setup.js",
   "4": "eval-map.js",
-  "8": "rankDocRows",
+  "6": "package.json",
+  "8": "code-desc.js",
   "14": "code-desc.js",
   "16": "update",
   "17": "test",
-  "20": "ref_path",
+  "20": "hostSetup",
   "21": "projects.js",
   "22": "test-setup-hosts.js",
   "30": "getProject",
@@ -36,5 +37,11 @@
   "103": "addDocs",
   "104": "test-suggest-cases.js",
   "105": "ref_node_assert",
-  "106": "Project map"
+  "106": "Project map",
+  "107": "test-mermaid.js",
+  "108": "migrate-data.js",
+  "109": "eslint.config.js",
+  "110": "devDependencies",
+  "111": "scripts",
+  "112": "engines"
 }

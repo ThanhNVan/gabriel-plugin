@@ -18,7 +18,7 @@ Terms in the order a reader meets them.
 - **Neuron**: one node of the map: a doc section or a code class or file.
 - **Synapse**: a link between two neurons in the map.
 - **Code graph**: `graphify-out/graph.json`, made by `/graphify`. gabriel reads it for code neurons and links. See [R33](02-business-rules.md#r33-a-code-graph-must-exist-and-match-the-docs).
-- **Graph entry**: the `graph` path of a doc set in `projects.json`, relative to its root. A missing file is `GRAPH MISSING` in status.
+- **Graph entry**: the `graph` path of a doc set in `projects.json`, relative to its root or absolute. A missing file is `GRAPH MISSING` in status.
 - **Relink**: `add-docs <name> --code <repo> --relink`. Sets only the graph entry of a doc set, then rebuilds its map. See [W03](workflows/W03-add-docs.md).
 - **Wrong-repo warning**: the build's warning that almost no doc section links to the code graph. Fix it with a relink.
 - **Seed**: a neuron that a prompt directly hits (by words or meaning). A search spreads from its seeds.

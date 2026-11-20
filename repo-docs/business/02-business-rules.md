@@ -192,7 +192,7 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
   - `gabriel use a b` sets the list. It replaces the old list.
   - `gabriel use +c` adds to the list. It counts only when every word has a `+`.
   - Mixed words, such as `gabriel use a +b`, set the list. The `+` is dropped.
-  - `gabriel use auto` clears the list.
+  - `gabriel use auto` clears the list and sets the session to auto mode ([R40](#r40-manual-mode)).
 - Which prompts are commands:
   - One word after `use` is always a command. An unknown name gets the near-miss note or the error note (below).
   - Two to 6 words are a command only when each word is a set, an alias, or a near-miss of one. Any other word makes the prompt an ordinary question, and it gets searched. For example, `gabriel use makillez docs for this` is searched.
@@ -253,3 +253,12 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - A plugin update replaces the installed copy in `.claude/plugins/cache`, so a docs or graph folder there would be lost. `add-docs` and `--relink` refuse a docs or `--code` folder inside any `.claude/plugins/cache` folder (a git clone of the plugin is allowed), before any write. With `--copy`, a docs folder in the cache is allowed (the copy goes to `<data>/docs/<name>`), but a graph left there is not linked. The message names the safe folder: `<data>/this-machine-repo-docs/<name>`.
 - Setup offers that folder as the default home ([DOC-LAYOUT](../../docs/DOC-LAYOUT.md)).
 - Where: `src/paths.js` `insidePluginCache()`; `src/setup.js` `pluginPathRefusal()`, `addDocs()`, `relinkDocs()`. Tests: `test/test-add-docs.js`, `test/test-plugin-cache.js`.
+
+### R40 Manual mode
+- In manual mode, the map runs only on a prompt that starts with `/gabriel ` (a space or the end after it). Other prompts get no map and no note.
+- The question after `/gabriel` is searched. The 4-word minimum of [R02](#r02-short-and-slash-prompts-get-no-context) does not apply. `/gabriel` alone gets the hint only.
+- `/gabriel:<skill>` is not a map request. `/gabriel <question>` also works in auto mode.
+- The default comes from `projects.json` `"mode"`: `"manual"`, or `"auto"` (default, also any other value).
+- `gabriel use manual` and `gabriel use auto` set the mode for one session. The session's choice beats `projects.json`. It is a file `seen/<sid>.mode`, removed 7 days after it was set.
+- Pin commands still work in manual mode.
+- Where: `src/brain.js` `askedQuestion()`, `isManual()`, `hook()`, `contextText()`; `src/pin.js` `parsePin()`, `getMode()`, `setMode()`; `src/projects.js` `loadConfig()`.

@@ -12,9 +12,14 @@ The reference build is Makillez (C# services and Angular web apps). Its tools ar
 | Event publisher to its subscriber (Dapr, a bus topic) | The link is a topic name in a string or an attribute. | Event pass (`publishes_event`, `handled_by`) |
 | Domain event to its handler | The type is matched at run time. | Event pass (`raises_event`) |
 | Interface method to its implementation | The AST sees the call to the interface only. | Compiler pass (`implemented_by`) |
-| Repository to its table (EF `DbSet`) | The table is a generic type argument. | Compiler pass (`uses_dbset`) |
+| Repository to its entity (EF `DbSet`) | The entity is a generic type argument. | Compiler pass (`uses_dbset`) |
+| Entity to its table, and to the entities its foreign keys point at | The table name and the keys are in EF configuration calls (`ToTable`, `HasOne(...).HasForeignKey(...)`). | Compiler pass (`mapped_to_table`, `foreign_key_to`) |
+| Startup to a background service | `AddHostedService<T>()` names the type; the framework calls `ExecuteAsync`. | Compiler pass (`hosts_service`) |
 | Frontend client to backend controller | The link is an HTTP verb and a URL string, often rewritten by a gateway. | Route bridge and TS pass (`http_route`) |
 | Template to component and method | Angular templates are HTML, not code. | TS pass (`template_uses`, `template_calls`) |
+| URL to the page that shows it | Routes are object literals passed to `RouterModule.forChild([...])`. | TS pass (`routes_to`, with `path` and `guards`) |
+| Code to the dialog it opens | The component is an argument to `MatDialog.open(X)`, not a call. | TS pass (`opens_dialog`) |
+| App to a shared library it imports from a build folder | The import resolves to `dist/*.d.ts`, which has no graph nodes. | TS pass (map the package name to the library source) |
 | A correct call to an overload | The AST matches on the name, so an overload links to itself. | Tidy pass (removes the false links) |
 
 Check your own repo first. List 5 to 10 real questions that the map answers badly today. Trace each one by hand. Each hop that the graph does not hold is a candidate pass.
@@ -26,9 +31,9 @@ Run the passes in this order. Each one reads the graph that the step before wrot
 ```mermaid
 flowchart LR
   A["1. AST: graphify"] --> B["2. Event pass: publishes_event, raises_event"]
-  B --> C["3. Compiler pass: calls, implemented_by, sends_to_handler, uses_dbset"]
+  B --> C["3. Compiler pass: calls, implemented_by, sends_to_handler, uses_dbset, hosts_service, mapped_to_table, foreign_key_to"]
   C --> D["4. Route bridge: client route = controller route"]
-  D --> E["5. TS pass: calls, template_*, http_route"]
+  D --> E["5. TS pass: calls, template_*, http_route, routes_to, opens_dialog"]
   E --> F["6. Tidy: false links, stubs, migrations"]
   F --> G["7. Stamp: built_at_commit, marker"]
   G --> H["8. Wiki (optional)"]
@@ -44,10 +49,11 @@ These rules keep a pass safe to run again and easy to roll back.
 1. **Tag every link you add.** Set `_origin` to the pass name, for example `"_origin": "event-pass"`. AST links carry `"_origin": "ast"`.
 2. **Remove your own links first.** At the start of a run, drop every link with your `_origin`, then add the new ones. A second run then gives the same file. Makillez checks this: two runs give the same SHA-256.
 3. **Set the confidence.** Use `EXTRACTED` when a compiler or parser proved the link. Use `INFERRED` when you matched by name, topic or URL.
-4. **Never delete nodes.** graphify refuses to write a graph with fewer nodes (the shrink guard). Remove or move links only.
-5. **Print counts.** Print what you added, what you could not match and what was ambiguous. A drop between two runs is the first sign of a broken pass.
-6. **Back up the graph first.** Copy `graph.json` and check the copy by SHA-256 before you write. Keep the graph folder in git, so `git checkout -- graphify-out/` rolls back.
-7. **Read the code at one commit.** Run the passes on a clean worktree of the commit in `built_at_commit`, not on your working branch.
+4. **Never delete nodes.** graphify refuses to write a graph with fewer nodes (the shrink guard). Remove or move links only. A pass may remove only the nodes it made itself (tag them with `_origin`).
+5. **Reuse a node before you make one.** Search the graph for a node that already stands for the thing. In Makillez, the migration SQL scripts already gave 153 table nodes (`vess.Components`). `mapped_to_table` links to them and makes a new node only for the 6 tables with none.
+6. **Print counts.** Print what you added, what you could not match and what was ambiguous. A drop between two runs is the first sign of a broken pass.
+7. **Back up the graph first.** Copy `graph.json` and check the copy by SHA-256 before you write. Keep the graph folder in git, so `git checkout -- graphify-out/` rolls back.
+8. **Read the code at one commit.** Run the passes on a clean worktree of the commit in `built_at_commit`, not on your working branch.
 
 A link that a pass adds looks like this:
 
@@ -74,6 +80,7 @@ Use it for links that live in strings and attributes.
 Use the compiler when the link depends on types.
 
 - `roslyn-calls/` is a small .NET console app. It opens each `.csproj`, builds the semantic model and writes an edges file: `calls`, `implemented_by`, `uses_dbset`, plus `sends_to_handler` and `publishes_to_handler` from the static type of the message in `Send(...)` and `Publish(...)`.
+- It also reads three framework calls. `AddHostedService<T>()` gives `hosts_service` to the `ExecuteAsync` that `T` runs (own or inherited). `ToTable(name, schema)` gives `mapped_to_table`. `HasOne` / `HasMany` / `WithOwner` followed by `HasForeignKey(x => x.Id)` gives `foreign_key_to`, with `via` and the key name. Skip EF migrations: they repeat the model.
 - `graph.py roslyn` reads that file and maps each symbol to a graph node by file and line.
 - **Run `dotnet restore` on each project first.** Without it the compiler cannot load the packages. In Makillez a run without restore found 54 routes and no MediatR links. With restore it found 624 routes.
 - Print the projects that failed to load and the calls it could not resolve (often generic types).
@@ -87,6 +94,9 @@ Other languages have the same kind of tool: the TypeScript compiler API, `go/typ
 - `graph.py bridge` joins client routes to controller routes on verb and path. It applies the gateway rewrite rules first (`envoy.yaml`), because the public path is not the controller path.
 - `graph.py ts` adds the result as `http_route` (`INFERRED`), plus the TS links.
 - Print the matched, ambiguous and unmatched routes.
+- **Routes:** `ts-calls` walks each `RouterModule.forRoot/forChild([...])` array and adds `routes_to` (module to component or lazy module) with the full `path` and the inherited `canActivate` guards. Paths are often constants (`pages.afds.url`, `` `${pages.x.url}/:id` ``, `a + '/view'`). Resolve them by value, not by symbol: a constant typed by an interface points its symbols at the interface. In Makillez, 56 of 77 paths stayed unresolved until this was fixed.
+- **Dialogs:** add `opens_dialog` only when the type checker says the receiver of `.open(X)` is `MatDialog` or `Dialog`. This needs the package types, so it needs `node_modules` (see Known traps).
+- **Shared library from a build folder:** the Makillez apps import `common-lib` from `dist/`. Map the package name to the library source (`paths: { 'common-lib': ['<lib>/src/public-api.ts'] }`) for the app roots only. App calls then reach the library source: 592 new links.
 
 ### 4.4 Tidy pass
 
@@ -103,16 +113,17 @@ Do not trust a pass because it added links. Measure it.
 
 1. **Coverage scorecard.** Write one row for each link family you expect, and count expected against found. Makillez uses `graph.py coverage`:
 
-   | Row | Checks | Result (2026-11-18) |
+   | Row | Checks | Result (2026-11-19) |
    |---|---|---|
-   | R1 | controller to handler | 99.6% |
-   | R2 | client to controller | 99.8% |
-   | R3 | template to child component | 96.7% |
+   | R1 | controller to handler | 99.8% |
+   | R2 | client to controller | 100% |
+   | R3 | template to child component | 97.0% |
    | R4 | repository to DbModel | 100% |
    | R5 | event to publisher | 100% |
-   | R6 | methods with at least one link | 93.2% |
+   | R6 | methods with at least one link | 93.4% |
 
-   No row may drop after a change.
+   No row may drop after a change. Pass the source folder (`src`), not the repo root: with the root, no path matches and the rows print 0% with no error.
+   Also count the nodes that no link reaches. In Makillez, the route and dialog links took the components with no caller from 270 to 110.
 2. **Spot checks.** Open 5 new links of each type in the code. Confirm that each one is real.
 3. **gabriel eval.** Rebuild the map and run the eval before and after:
    ```
@@ -127,6 +138,7 @@ Do not trust a pass because it added links. Measure it.
 gabriel reads every link in `graph.json`, but it weights each link by its `relation`. The weights are in `REL` in `src/mk.js`. A relation that is not in `REL` gets 0.3.
 
 - Give a new relation weight 1 when it is a real step in the code flow, for example `sends_to_handler`, `handled_by`, `http_route` or `uses_dbset`.
+- Not in `REL` yet (so 0.3 today): `routes_to`, `opens_dialog`, `hosts_service`, `mapped_to_table`, `foreign_key_to`.
 - Give it a lower weight when it only says that two nodes are related.
 - Nodes with `"migration": true` get no keyword rows, and their links get 0.2 times the normal weight.
 - Rebuild the map after a change to `REL` or to the graph.
@@ -161,3 +173,5 @@ Do not run a plain `/graphify --update` on a graph that has passes. It re-extrac
 | Bus and domain events read as one kind | False bus links. | Split them on the publish call. |
 | Deleting empty stub nodes | The shrink guard refuses the graph. | Keep the nodes, move the links. |
 | One generated client style only | Many client calls get no route link. | Handle every client style in the repo. |
+| TS pass in a fresh worktree | The worktree has no `node_modules`, so package types do not resolve. `opens_dialog` finds 0, and the run still exits 0. | Run the TS pass on a checkout with `node_modules` whose frontend folder equals the commit. Makillez `graph.py update` does this (`ts_source()`) and prints a WARNING when it cannot. Never link `node_modules` into the worktree: removing the worktree can delete the real folder. |
+| A new pass makes its own node for a thing the graph already has | Two nodes for one table; a search finds half the links. | Reuse the existing node (rule 5). |

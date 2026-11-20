@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Manual mode: set `"mode": "manual"` in `projects.json`, or type `gabriel use manual` for one session. The map then runs only on `/gabriel <question>`. `gabriel use auto` turns it back on for the session. Rule: [R40](repo-docs/business/02-business-rules.md#r40-manual-mode). Code: `src/brain.js` `askedQuestion()`, `isManual()`; `src/pin.js` `getMode()`, `setMode()`.
+- Map: after a meaning model change, the prompt is embedded even before the rule vectors are remade (`searchFull()` in `src/brain.js`). Before, every map search ran on words only until then.
+- A doc set's `graph` entry can be an absolute path (`graphPathOf()` and `build()` in `src/mk.js`).
+- Tune: with no `--venv`, `tune.js` picks the first `<data>/tune-venv*` whose torch sees a GPU. `--projects a,b` trains and scores only those sets. See [TUNING](docs/TUNING.md).
+
 - Map: a shown `XCommand`, `XQuery` or `XRequest` name is swapped for its `XCommandHandler` from the same folder. Strict exact on 100 private Makillez cases: check half 15/50 to 23/50. Code: `src/mk.js` `pairHandlers()`. Rule: [R08](repo-docs/business/02-business-rules.md#r08-map-block-at-most-6-doc-hits-and-6-code-hits-2200-characters).
 - Map: "2 links away" matches the name stem without trailing role words, in order, with text between. Event handlers `On<stem>...` are found by name. Chain check half 21/50 to 27/50 (100 private cases). Rule: [R34](repo-docs/business/02-business-rules.md#r34-two-links-away-code-names).
 - Eval: `node eval/eval-map.js --half tune|check` runs one half of a split case file. A case with no half runs in both. See [EVAL](docs/EVAL.md).

@@ -62,6 +62,8 @@ With no `--venv`, the run picks the venv by itself and prints it (`venv: ...`):
 - If none does, it uses `<data>/tune-venv` (the CPU build). If that is missing, the run stops and tells you to run `node src/setup.js --tune`.
 - Use `--venv <dir>` to choose one yourself.
 
+`--projects a,b` trains and scores only those doc sets. The default is every set with eval cases.
+
 **Add a GPU venv (Intel).** `setup.js --tune` installs the CPU build of torch. For an Intel GPU, make one more venv named `tune-venv-xpu` in `<data>`:
 
 1. In the install steps above, use the index `https://download.pytorch.org/whl/xpu` instead of `.../whl/cpu`.

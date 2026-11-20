@@ -21,6 +21,14 @@ const { skipReason } = require('../src/brain.js');
 assert.strictEqual(skipReason('/gabriel:status'), 'slash command');
 assert.strictEqual(skipReason('fix this bug'), 'under 4 words');
 assert.strictEqual(skipReason('how does the map search work'), '');
+// "/gabriel <question>" asks for the map in any mode; "/gabriel:<skill>" does not
+const { askedQuestion } = require('../src/brain.js');
+assert.strictEqual(askedQuestion('/gabriel how does dedupe work'), 'how does dedupe work');
+assert.strictEqual(askedQuestion('  /Gabriel  pin\nrules '), 'pin\nrules');
+assert.strictEqual(askedQuestion('/gabriel'), '');
+assert.strictEqual(askedQuestion('/gabriel:status'), null);
+assert.strictEqual(askedQuestion('/gabrielx foo'), null);
+assert.strictEqual(askedQuestion('how does gabriel work'), null);
 assert.strictEqual(runBrain(tempHome('why-test-'), ['why', 'fix this bug']).stdout, 'gabriel skips this prompt: under 4 words. No search runs.\n', 'why prints the skip line');
 w('brain/data/projects.json', JSON.stringify({ version: 1, ruleFiles: ['CLAUDE.md', 'preferences.md', 'codex-rules.md'] }));
 w('CLAUDE.md', '# Codex\n- Never commit or push anything. The user does.\n');

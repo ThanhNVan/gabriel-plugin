@@ -35,7 +35,8 @@ function loadConfig() {
   if (legacyProject && !seen.has(legacyProject)) throw new Error(`legacyProject ${legacyProject} is not a project`);
   const embedModel = typeof j.embedModel === 'string' && j.embedModel ? j.embedModel : null;   // optional: a tuned meaning model, e.g. "local/gabriel-tuned"
   const rerankModel = typeof j.rerankModel === 'string' && j.rerankModel ? j.rerankModel : null;   // optional: a tuned reranker, e.g. "local/gabriel-rerank"
-  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || defaultRuleFiles(), embedModel, rerankModel }; cacheKey = key; return cache;
+  const mode = j.mode === 'manual' ? 'manual' : 'auto';   // optional: "manual" = the map runs only on "/gabriel <question>" (a session can switch with "gabriel use auto|manual")
+  cache = { projects, legacyProject, ruleFiles: j.ruleFiles || defaultRuleFiles(), embedModel, rerankModel, mode }; cacheKey = key; return cache;
 }
 const loadProjects = () => loadConfig().projects;
 const getProject = (name) => loadProjects().find((p) => p.name === name);

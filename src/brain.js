@@ -386,7 +386,8 @@ function pinNote(cmd, sid) {
   try {
     const pin = require('./pin.js'), { loadProjects } = require('./projects.js'), home = homeDir();
     const noSid = 'gabriel: could not pin. This tool sends no session id, so there is no session to pin.';
-    if (cmd.auto) return pin.setPins(home, sid, null) ? 'gabriel: pin removed. The map searches all doc sets again.' : noSid;
+    if (cmd.auto) return pin.setPins(home, sid, null) && pin.setMode(home, sid, 'auto') ? 'gabriel: pin removed, auto mode. The map runs on each prompt and searches all doc sets again.' : noSid;
+    if (cmd.manual) return pin.setMode(home, sid, 'manual') ? 'gabriel: manual mode. The map runs only when you type "/gabriel <question>". Type "gabriel use auto" to undo.' : noSid;
     const sets = loadProjects().filter((p) => !p.fallback), names = sets.map((p) => p.name);
     const resolve = (word) => {   // the whole word is a set name or an alias (any case); "esg-tool" is not esg
       const lc = word.toLowerCase();
@@ -424,6 +425,18 @@ function livePins(home, sid) {
     const live = new Set(require('./projects.js').loadProjects().filter((p) => !p.fallback).map((p) => p.name));
     return require('./pin.js').getPins(home, sid).filter((n) => live.has(n));
   } catch { return []; }
+}
+
+// "/gabriel <question>" asks for the map in any mode: returns the question ('' when none), or null for any other prompt.
+// "/gabriel:<skill>" is not a match: the space or the end must follow "/gabriel".
+function askedQuestion(prompt) {
+  const m = typeof prompt === 'string' && prompt.match(/^\s*\/gabriel(?:\s+([\s\S]*))?$/i);
+  return m ? (m[1] || '').trim() : null;
+}
+
+// True when this session runs the map only on "/gabriel <question>": the session's choice, else projects.json "mode". Fails open (auto).
+function isManual(home, sid) {
+  try { return (require('./pin.js').getMode(home, sid) || require('./projects.js').loadConfig().mode) === 'manual'; } catch { return false; }
 }
 
 // Why hook() and contextText() skip a prompt: the reason, or '' when the prompt is searched. Checked in this order.
@@ -464,8 +477,11 @@ async function hook(host) {
       const failed = /^gabriel: (no doc set|at most)/.test(cmdNote);
       return await emit(host.writeOutput({ text: '', note: failed ? withPin(cmdNote) : cmdNote }));
     }
-    if (skipReason(prompt)) return await hintOnly();
-    const parts = await gather(prompt, sid, cwd);
+    const asked = askedQuestion(prompt);
+    if (asked === null && isManual(homeDir(), sid)) return;   // manual mode: no map and no note until "/gabriel <question>"
+    if (asked === '') return await hintOnly();
+    if (asked === null && skipReason(prompt)) return await hintOnly();
+    const parts = await gather(asked ?? prompt, sid, cwd);
     if (!parts.length) return await hintOnly();
     const { text: additionalContext, skipped, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
     const hint = noteHint(sid);   // the setup hint first; then the warnings; then one tip per session
@@ -485,15 +501,17 @@ async function hook(host) {
 async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   const cmd = require('./pin.js').parsePin(prompt), cmdNote = cmd ? pinNote(cmd, sid) : null;
   if (cmdNote !== null) return cmdNote;   // the same pin reply as hook()
-  if (skipReason(prompt)) return '';
-  const parts = await gather(prompt, sid, cwd);
+  const asked = askedQuestion(prompt);
+  if (asked === null && (isManual(homeDir(), sid) || skipReason(prompt))) return '';
+  if (asked === '') return '';
+  const parts = await gather(asked ?? prompt, sid, cwd);
   if (!parts.length) return '';
   const { text, save } = dedupe(homeDir(), capText(parts.join('\n'), host.maxChars), sid, transcriptPath);
   save();
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, driftNote, missNote, noteMiss, isRepoCodeFile, mapFor };
+module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, askedQuestion, driftNote, missNote, noteMiss, isRepoCodeFile, mapFor };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }

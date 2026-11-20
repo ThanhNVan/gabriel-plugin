@@ -1,5 +1,5 @@
 'use strict';
-// Pins one or more doc sets to one Claude session ("gabriel use <name>..."; "gabriel use +<name>" adds; "gabriel use auto" clears).
+// Pins one or more doc sets to one Claude session ("gabriel use <name>..."; "gabriel use +<name>" adds; "gabriel use auto" clears pins and turns the map on; "gabriel use manual" turns it off).
 // Files live in data/seen/ next to the dedupe files, which dedupe removes after 7 days.
 // Pin file: one name per line.
 const fs = require('fs');
@@ -19,10 +19,11 @@ function parsePin(prompt) {
   const words = m[1].split(/\s+/);
   if (words.length === 1) {
     if (words[0].toLowerCase() === 'auto') return { auto: true };
+    if (words[0].toLowerCase() === 'manual') return { manual: true };
   } else {
     if (words.length > MAX_PINS + 1) return null;
     if (!words.every((w) => WORD.test(w))) return null;
-    if (words.some((w) => w.toLowerCase() === 'auto')) return null;
+    if (words.some((w) => ['auto', 'manual'].includes(w.toLowerCase()))) return null;
   }
   if (words.every((w) => w.startsWith('+') && WORD.test(w))) return { add: words.map((w) => w.slice(1)) };   // "+" alone or "++a": a name, so the note says it is unknown
   return { names: words.map((w) => (WORD.test(w) ? w.replace(/^\+/, '') : w)) };
@@ -66,6 +67,25 @@ function touchPin(home, sessionId) {
   } catch { return false; }
 }
 
+// The session's map mode: 'auto' or 'manual' from seen/<sid>.mode, or null when the session has not chosen (projects.json "mode" applies).
+const modeFile = (home, sessionId) => path.join(dataDir(home), 'seen', sessionId + '.mode');
+function getMode(home, sessionId) {
+  try {
+    if (typeof sessionId !== 'string' || !ID.test(sessionId)) return null;
+    const m = fs.readFileSync(modeFile(home, sessionId), 'utf8').trim();
+    return m === 'auto' || m === 'manual' ? m : null;
+  } catch { return null; }
+}
+function setMode(home, sessionId, mode) {
+  try {
+    if (typeof sessionId !== 'string' || !ID.test(sessionId)) return false;
+    const file = modeFile(home, sessionId);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, mode);
+    return true;
+  } catch { return false; }
+}
+
 // Edit distance (insert, delete, change one letter, swap two next letters), case-insensitive.
 function distance(a, b) {
   a = a.toLowerCase(); b = b.toLowerCase();
@@ -90,4 +110,4 @@ function nearName(word, names) {
   return best;
 }
 
-module.exports = { parsePin, getPins, setPins, touchPin, nearName, MAX_PINS };
+module.exports = { parsePin, getPins, setPins, touchPin, getMode, setMode, nearName, MAX_PINS };

@@ -10,7 +10,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'pin-test-'));
 const HOME = DATA;
 process.env.GABRIEL_DATA = path.join(DATA, 'brain', 'data');
 delete process.env.BRAIN_DATA;
-const { parsePin, getPins, setPins, nearName, touchPin, MAX_PINS } = require('../src/pin.js');
+const { parsePin, getPins, setPins, getMode, setMode, nearName, touchPin, MAX_PINS } = require('../src/pin.js');
 
 const pinFile = (sid) => path.join(process.env.GABRIEL_DATA, 'seen', sid + '.pin');
 
@@ -23,6 +23,15 @@ try {
   assert.deepStrictEqual(parsePin('gabriel use auto'), { auto: true });
   assert.deepStrictEqual(parsePin('gabriel use AUTO'), { auto: true });
   assert.strictEqual(parsePin('gabriel use auto esg'), null);
+  assert.deepStrictEqual(parsePin('gabriel use Manual'), { manual: true });
+  assert.strictEqual(parsePin('gabriel use manual esg'), null);
+  // session mode: null until chosen, then the saved value; a bad id never writes
+  assert.strictEqual(getMode(HOME, 'm1'), null);
+  assert.strictEqual(setMode(HOME, 'm1', 'manual'), true);
+  assert.strictEqual(getMode(HOME, 'm1'), 'manual');
+  setMode(HOME, 'm1', 'auto');
+  assert.strictEqual(getMode(HOME, 'm1'), 'auto');
+  assert.strictEqual(setMode(HOME, '../x', 'manual'), false);
   assert.strictEqual(parsePin('gabriel use'), null);
   assert.deepStrictEqual(parsePin('gabriel use +'), { names: ['+'] }, 'bad word kept raw: the note says it is unknown');
   assert.deepStrictEqual(parsePin('gabriel use ++a'), { names: ['++a'] });

@@ -138,7 +138,8 @@ gabriel use makillez esg
 
 From then on, this session's map searches only those doc sets. Naming another set in a prompt does not switch it. The fallback general docs can still show. Every gabriel note starts with `📌 pinned: makillez, esg  ("gabriel use auto" to undo)`. The full rules are in [R35](repo-docs/business/02-business-rules.md#r35-session-pin).
 
-- `gabriel use auto`: search all doc sets again.
+- `gabriel use auto`: search all doc sets again, on each prompt.
+- `gabriel use manual`: no map until you type `/gabriel <question>`. To make manual the default, set `"mode": "manual"` in `projects.json` ([R40](repo-docs/business/02-business-rules.md#r40-manual-mode)).
 - Not pinned and you have 2 or more doc sets? Each map note ends with a 💡 line that reminds you of `gabriel use <set>`.
 - `gabriel use ?` (or any unknown name): list your doc sets.
 - A name or an alias works. A new session starts unpinned. A pin is dropped about 7 days after its last use.
@@ -167,7 +168,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 - [docs/EVAL.md](docs/EVAL.md): how gabriel is measured and retrained.
 - [docs/TUNING.md](docs/TUNING.md): the optional fine-tune of the meaning model.
 - [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md): the folder layout and lean rules for the code docs that setup writes and refresh-docs keeps.
-- [docs/GRAPH-ENHANCEMENT.md](docs/GRAPH-ENHANCEMENT.md): add the links that graphify misses (handlers, events, HTTP routes, tables) with your own passes, and measure the gain.
+- [docs/GRAPH-ENHANCEMENT.md](docs/GRAPH-ENHANCEMENT.md): add the links that graphify misses (handlers, events, HTTP routes, page routes, dialogs, background services, tables and foreign keys) with your own passes, and measure the gain.
 
 <!-- Maintainers: private tests on real local data live in the gitignored private/tests/ (not in npm test). Run: node private/tests/run.js. Baseline: node private/tests/baseline.js --compare (or --save). See private/tests/README.md. -->
 
@@ -178,7 +179,7 @@ Claude Code still sends your prompts, and the text gabriel adds, to Claude as us
 The docs and the graph live in their own folder, `<home>`: by default `~/.gabriel/this-machine-repo-docs/<name>`, safe on plugin updates ([where it goes](docs/DOC-LAYOUT.md)). The code repo stays clean. `/gabriel:setup` makes this folder for you.
 
 1. **Graph the code.** Install the graphify skill and run `/graphify <repo>`. Setup moves the graph to `<home>/graphify-out/graph.json`. gabriel reads it to link doc sections to class and file names.
-   - **Enhance the graph (optional, big gain on framework code).** The AST graph misses links that cross a framework: message to handler, event to subscriber, frontend client to API, repository to table. Add them with your own passes, then tell gabriel their weights. Step by step: [docs/GRAPH-ENHANCEMENT.md](docs/GRAPH-ENHANCEMENT.md).
+   - **Enhance the graph (optional, big gain on framework code).** The AST graph misses links that cross a framework: message to handler, event to subscriber, frontend client to API, URL to page, code to dialog, repository to table. Add them with your own passes, then tell gabriel their weights. Step by step: [docs/GRAPH-ENHANCEMENT.md](docs/GRAPH-ENHANCEMENT.md).
 2. **Write the docs from the graph.** `/gabriel:setup` (first run or `--onboard`) offers to write them, with Mermaid diagrams. They go in `<home>/docs/`. You can also ask Claude, for example with `/engineering:documentation`. Use the layout in [docs/DOC-LAYOUT.md](docs/DOC-LAYOUT.md):
    - **Business** (`docs/business/`): what the system is for, its rules, its states, a glossary, and one page per main workflow, from trigger to result.
    - **Technical** (`docs/technical/`): architecture, modules, how to build, test and add a feature, known bugs.
