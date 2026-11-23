@@ -7,6 +7,7 @@ Read these for how gabriel is built, how to change it, and what is known to be w
 | [01-architecture.md](01-architecture.md) | Learn the parts, how they talk, the data files, and why they are built this way. Start here. |
 | [02-modules.md](02-modules.md) | Find a file in `src/`, `src/hosts/`, `src/tune/`, `eval/` or `tools/`: its job, main exports, and who calls it. |
 | [03-dev-workflow.md](03-dev-workflow.md) | Install, run the tests, add a host or a doc format or a tip, release, or rebuild a map. |
+| [04-eval-results.md](04-eval-results.md) | See the latest Makillez eval scores and the baseline they are compared with. |
 | [findings.md](findings.md) | See known gaps and where the docs and the code disagree. |
 
 ## Where to start
