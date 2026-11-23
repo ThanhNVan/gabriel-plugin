@@ -72,7 +72,7 @@ sequenceDiagram
     B->>M: searchAll over every doc set, or only the pinned one
     M->>M: Score = best match + prior + alias bonus + folder bonus
     M->>M: Quiet gate: best match under 0.65 gives no map
-    M->>M: Session gate: weak unnamed match outside the project folder needs an earlier map this session
+    M->>M: Session gate (only sets with sessionGate true, default off): weak unnamed match outside the project folder needs an earlier map this session
     M->>M: Fallback general docs only when the project best is under 1.6
     M-->>B: Doc lines and code lines, or nothing
     B->>D: Drop items this session already got

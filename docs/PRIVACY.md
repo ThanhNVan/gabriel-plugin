@@ -1,6 +1,6 @@
 # Privacy
 
-This page says what gabriel stores, where, and what it sends. It covers version 0.2.0.
+This page says what gabriel stores, where, and what it sends. It covers version 0.3.0.
 
 ## Short version
 

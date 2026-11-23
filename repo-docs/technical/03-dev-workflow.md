@@ -4,7 +4,7 @@ How to install, test, and change gabriel. Commands run from the repo root, in an
 
 ## Install
 
-Run `npm ci` once. Then run `node src/setup.js` to fetch the meaning model, build the maps and run the tests. `--skip-model` skips the model download. `--only build` or `--only test` runs one step. `setup.js` writes only inside the data folder and `node_modules`.
+Run `npm ci` once. Then run `node src/setup.js` to fetch the meaning model, build the maps and run the tests. `--skip-model` skips the model download. `--only build` runs steps 7 and 8 (rules graph and doc maps). `--only test` runs step 9. `setup.js` writes only inside the data folder and `node_modules`.
 
 Optional tuning packages: `node src/setup.js --tune` (tune parts in [01-architecture.md](01-architecture.md)).
 

@@ -95,7 +95,7 @@ The tuned model is kept only when all of these hold:
 - No project's held-out score falls by more than 1.
 - The full strict score is not lower.
 - The quiet score (unrelated questions) is not lower.
-- The code total is not lower. It counts the `eval-cases-exact.json`, `eval-cases-chain.json` and `eval-cases-scenario.json` files in the private folder. With none, it prints `no exact/chain cases: code score skipped`.
+- The code total is not lower. It counts the `eval-cases-exact.json`, `eval-cases-chain.json`, `eval-cases-scenario.json` and `eval-cases-written.json` files in the private folder. With none, it prints `no exact/chain cases: code score skipped`.
 
 A run prints a before and after table, and the reason when it rolls back.
 `--force` keeps the tuned model even when the rule fails. It prints the numbers that failed. Rule: [R27](../repo-docs/business/02-business-rules.md#r27-model-tune-keeps-the-tuned-model-only-when-it-wins).
@@ -126,5 +126,5 @@ A run refuses to start while `projects.json` still sets `embedModel`. Run `--rol
 ## Limits
 
 - The training step learns from your eval questions and your class names. Write the questions in your own words.
-- The doc vectors in the map use the full chunk text. The training pairs use the first 300 characters, like the hook does for its vectors. A small mismatch.
+- The doc vectors in the map use the full chunk text. The training pairs use the first 300 characters (`embedText()` in `src/embed.js`). A small mismatch.
 - Training on a CPU can take a long time. The CPU torch build in "What you need" has no GPU support. The time depends on the number of pairs and your CPU.

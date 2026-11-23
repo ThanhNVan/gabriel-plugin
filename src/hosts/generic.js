@@ -1,5 +1,5 @@
 // Any other tool, through `brain.js context "<prompt>"`. Plain text out (the block only). No session unless --session is given.
-// Rules folder: GABRIEL_RULES_HOME, then BRAIN_HOME, then ~/.claude. No file is loaded by default, so every rule can be injected.
+// Rules folder: GABRIEL_RULES_HOME, then BRAIN_HOME, then ~/.claude. Rule file: CLAUDE.md by default. No context file, so every rule can be injected.
 'use strict';
 const os = require('os'), path = require('path');
 const { readCommon } = require('./common.js');

@@ -30,7 +30,7 @@ Graph communities: [Claude Host Integration], [Hosts Index and Tests].
 | `src/hosts/codex.js` | Codex CLI: hook entries in its `hooks.json`. Output capped at 9000 characters. | adapter object | `hosts/index.js` |
 | `src/hosts/gemini.js` | Gemini CLI: hook entries in its `settings.json`. Timeouts in milliseconds. | adapter object | `hosts/index.js` |
 | `src/hosts/copilot.js` | GitHub Copilot: no hook (its hook output is dropped). Uses `brain.js context` from its instructions file. | adapter object | `hosts/index.js` |
-| `src/hosts/generic.js` | Any other tool: plain text from `brain.js context`. No rule file loaded by default. | adapter object | `hosts/index.js` |
+| `src/hosts/generic.js` | Any other tool: plain text from `brain.js context`. Reads `CLAUDE.md` rules by default. It has no context file. | adapter object | `hosts/index.js` |
 
 ## Rules graph and folders
 
@@ -95,7 +95,7 @@ The questions live in each project's private folder, not in git.
 | File | Job | Main exports | Called by |
 |------|-----|--------------|-----------|
 | `eval/eval-map.js` | Scores the default map (or one project, or the real router) on written questions. Prints a summary. `--why` gives each DOC or FAIL a miss class (`section-rank`, `not-in-pool`, `wrong-doc`, `code-only-miss`) and the counts. | `judge`, `judgeRendered` | `retrain.js`, `tune/tune.js`, `eval/eval-rerank.js` |
-| `eval/eval-model.js` | Tries another embedding model in a throwaway home, for several similarity floors. | `judge` (script) | run by hand |
+| `eval/eval-model.js` | Tries another embedding model in a throwaway home, for several similarity floors. | none (script) | run by hand |
 | `eval/eval-rerank.js` | Offline A/B test of a rerank idea. Changes no live file. | script | run by hand |
 | `eval/eval-rules.js` | Regression check of rules matching on the real rules. When every rule is `inContext`, it skips the rule cases and checks only the `nomap` cases. Exit 1 on a failure. | script | run by hand |
 | `eval/measure-hook.js` | Times the real hook in a new process. | script | run by hand |

@@ -160,7 +160,7 @@ The setup hint shows once per session until the data folder has `mk.db`, `projec
 - Where: `src/embed.js` `getEmbedder()`; `src/brain.js` `build` mode; `src/setup.js` `run()`.
 
 ### R31 Host hook files change only with --apply, after a backup
-Without `--apply`, `setup.js --host` prints the config and changes nothing. With it, the file is backed up, checked as JSON, then written. Other hooks are kept. `--remove-host` removes only gabriel's entries.
+Without `--apply`, `setup.js --host` prints the config and changes nothing. With it, the new file is checked as JSON, the old one is backed up, then the new one is written. Other hooks are kept. `--remove-host` removes only gabriel's entries.
 - Where: `src/setup.js` `hostSetup()`, `addGabriel()`, `removeGabriel()`.
 
 ### R32 Old data is copied, never deleted
@@ -225,7 +225,7 @@ Setup step 6 copies data from `~/.claude/brain`, and only with `--yes`. A failed
 - If the file is gone but the name is found in another file of the repo, it prints `(<file>:<line> ✓ moved)` with the new file.
 - A neighbour with no file in the graph (an outside library name) prints `(external)`. It is not a repo file, so "not found in repo" would be wrong.
 - `--repo` with `--code --relink` checks the folder against the new graph, before anything is written.
-- A set with no repo folder keeps the graph's line, with no mark. `mk-status all` then shows `no repo (add-docs <name> --repo <folder> --relink)`. A label that is not a plain name (such as `R33 a code graph must exist`) also keeps the graph's line.
+- A set with no repo folder keeps the graph's line, with no mark. `mk-status all` then shows `repo   none (add-docs <name> --repo <folder> --relink)`. A label that is not a plain name (such as `R33 a code graph must exist`) also keeps the graph's line.
 - Limits: at most 30 files, 2 MB each, 5 s per prompt (`BUDGET_MS`). A file past a limit keeps the graph's line. Any error keeps it too.
 - The repo folder comes from `add-docs --repo`, which checks it first: a git repo, the graph's commit in its history, and at least 80% of 200 sampled graph files in it.
 - Gaps: [findings](../technical/findings.md).

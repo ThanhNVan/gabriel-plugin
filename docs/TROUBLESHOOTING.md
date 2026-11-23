@@ -25,7 +25,7 @@ A map appears only when a prompt matches your docs well enough. Check these in o
 
    This prints the map for the text, or "(no map for this text)". Add `--project <name>` to pick a doc set.
 5. **The words do not match.** Use your docs' words, or name the set (its `aliases` in `projects.json` count). A pinned session ignores other names: see the next section.
-6. **The map is stale.** A changed doc or graph makes the map stale. The hook rebuilds it in the background, at most once a minute. Wait a minute, then ask again. `mk-status all` prints `fix: /gabriel:update` under a stale set.
+6. **The map is stale.** A changed doc or graph makes the map stale. The hook checks for a stale map at most once a minute. It starts a background rebuild at most once every 10 minutes. The old map serves until then. `mk-status all` prints `fix: /gabriel:update` under a stale set.
 
 ## The map shows only some projects
 
