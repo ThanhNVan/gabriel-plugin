@@ -7,6 +7,8 @@
 //   node src/tune/tune.js ... --real               also train on the real questions (rerank-train-cases.json, one per row)
 //   node src/tune/tune.js ... --templates <n>      keep at most n code-name template pairs per project (default: all)
 //   node src/tune/tune.js ... --projects a,b       train and score only these doc sets (default: every set with eval cases)
+//   node src/tune/tune.js ... --sda                add train pairs: a code definition's doc comment is the anchor
+//   node src/tune/tune.js ... --llm-q              add train pairs: each question in code-questions.json is the anchor
 // Your real data does not change until the scores say keep. The scores run on a copy of the data folder,
 // because a model change re-embeds every map and the real maps must stay as they are until the decision.
 const fs = require('fs');
@@ -68,7 +70,7 @@ function linkTree(src, dst, skip = new Set()) {
 
 // The copy of the data folder for scoring. Files that get written (maps, vectors, question index, private json) are COPIED:
 // a hard link would let a write in the copy change the real file. Models and docs are only read, so they are linked.
-function stage(work) {
+function stage(work, live) {
   const real = paths.dataDir(), T = path.join(work, 'data');
   fs.mkdirSync(T, { recursive: true });
   for (const f of ['mk.db', 'vectors.json', 'graph.json', 'projects.json']) copyIfThere(path.join(real, f), path.join(T, f));
@@ -85,6 +87,13 @@ function stage(work) {
   for (const p of loadProjects()) {
     const rel = path.relative(real, p.root);
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) linkTree(p.root, path.join(T, rel));
+  }
+  if (live) {   // a live model (--no-keep on a kept model): copy it under a fixed name and point the copy's config at it
+    const LIVE = 'local/gabriel-live';
+    fs.cpSync(path.join(real, 'models', live), path.join(T, 'models', LIVE), { recursive: true });
+    const j = JSON.parse(fs.readFileSync(path.join(T, 'projects.json'), 'utf8'));
+    j.embedModel = LIVE;
+    fs.writeFileSync(path.join(T, 'projects.json'), JSON.stringify(j, null, 2) + '\n');
   }
   fs.mkdirSync(path.join(work, 'home'), { recursive: true });   // an empty rules home: the run never reads your ~/.claude
   return T;
@@ -242,7 +251,7 @@ function rollBackModel() {   // the real data was never changed, so only the (un
 
 // ---- main ----
 function parseArgs(argv) {
-  const o = { rollback: false, yes: false, venv: null, force: false, noKeep: false, real: false, templates: undefined };
+  const o = { rollback: false, yes: false, venv: null, force: false, noKeep: false, real: false, templates: undefined, train: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--rollback') o.rollback = true;
@@ -250,6 +259,8 @@ function parseArgs(argv) {
     else if (a === '--no-keep') o.noKeep = true;
     else if (a === '--yes') o.yes = true;
     else if (a === '--real') o.real = true;
+    else if (a === '--sda') o.sda = true;
+    else if (a === '--llm-q') o.llmQ = true;
     else if (a === '--templates') {
       const n = Number(argv[i + 1]);
       if (argv[i + 1] === undefined || !Number.isInteger(n) || n < 0) throw new Error('--templates needs a whole number');
@@ -257,6 +268,7 @@ function parseArgs(argv) {
     }
     else if (a === '--projects') { if (argv[i + 1] === undefined) throw new Error('--projects needs a list: a,b'); o.projects = argv[++i].split(',').map((s) => s.trim()).filter(Boolean); }
     else if (a === '--venv') { if (argv[i + 1] === undefined) throw new Error('--venv needs a folder'); o.venv = path.resolve(argv[++i]); }
+    else if (a === '--train') { if (argv[i + 1] === undefined) throw new Error('--train needs a string: "--flag value ..."'); o.train = argv[++i].split(/\s+/).filter(Boolean); }
     else throw new Error('unknown argument: ' + a);
   }
   if (o.noKeep && o.force) throw new Error('--no-keep and --force cannot be used together');
@@ -285,7 +297,7 @@ async function main(argv) {
   if (!fs.existsSync(o.venv)) throw new Error(`no tune venv at ${o.venv}: run /gabriel:setup --tune first (or node src/setup.js --tune)`);
   venvPython(o.venv);   // fails early when the venv has no python
   const cur = readConfig();
-  if (cur && cur.embedModel) throw new Error(`projects.json already sets embedModel "${cur.embedModel}". Run --rollback first, then tune again.`);
+  if (cur && cur.embedModel && !o.noKeep) throw new Error(`projects.json already sets embedModel "${cur.embedModel}". Run --rollback first, then tune again.`);
   const projects = loadProjects().map((p) => p.name).filter((n) => { const h = caseFilesOf(n); return h.main || h.code.length > 0; }).filter((n) => !o.projects || o.projects.includes(n));   // --projects: train and score only these sets
   if (!projects.length) throw new Error('no eval cases yet: write eval-cases.json for a project first (docs/EVAL.md)');
   if (!fs.existsSync(mk.dbFile())) throw new Error('no map yet: run node src/brain.js build-mk all first');
@@ -299,14 +311,14 @@ async function main(argv) {
   fs.mkdirSync(work, { recursive: true });
   const venvPy = venvPython(o.venv);
   try {
-    const T = stage(work);
+    const T = stage(work, o.noKeep && cur && cur.embedModel ? cur.embedModel : null);
     stepStart(1, 'export pairs');
-    const pairs = exportPairs({ out: path.join(work, 'pairs'), real: o.real, templates: o.templates, projects });
+    const pairs = exportPairs({ out: path.join(work, 'pairs'), real: o.real, templates: o.templates, sda: o.sda, llmQ: o.llmQ, projects });
     console.log(`  ${pairs.train} train pairs, ${pairs.heldout} held-out pairs`);
     stepDone(1, 'export pairs');
 
-    stepStart(2, 'train (slow on CPU; the log shows the device)');
-    run(venvPy, [path.join(SRC, 'tune', 'train.py'), '--base', TRAIN_BASE, '--pairs', path.join(work, 'pairs'), '--out', path.join(work, 'model')], process.env, 'train');
+    stepStart(2, 'train (device: see the "device:" line below)');
+    run(venvPy, [path.join(SRC, 'tune', 'train.py'), '--base', TRAIN_BASE, '--pairs', path.join(work, 'pairs'), '--out', path.join(work, 'model'), ...o.train], process.env, 'train');
     stepDone(2, 'train');
 
     stepStart(3, 'export ONNX');
@@ -337,7 +349,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { decide, parseArgs, keepModel, caseFilesOf, pickVenv };
+module.exports = { decide, parseArgs, stage, keepModel, caseFilesOf, pickVenv };
 
 if (require.main === module) {
   main(process.argv.slice(2)).then((code) => { process.exitCode = code; }).catch((e) => {

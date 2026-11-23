@@ -19,6 +19,7 @@ const MODELS = {
   'e5-base': { id: 'Xenova/e5-base-v2', pooling: 'mean', q: 'query: ', p: 'passage: ' },
   mpnet: { id: 'Xenova/all-mpnet-base-v2', pooling: 'mean' },
   arctic: { id: 'Snowflake/snowflake-arctic-embed-m', pooling: 'cls', q: Q_BGE },
+  'arctic-v15': { id: 'Snowflake/snowflake-arctic-embed-m-v1.5', pooling: 'cls', q: Q_BGE },
   'jina-code': { id: 'jinaai/jina-embeddings-v2-base-code', pooling: 'mean' },
   // community ONNX copies: the nomic-ai and codesage repos have no ONNX file
   coderank: { id: 'Zenabius/CodeRankEmbed-onnx', pooling: 'cls', q: 'Represent this query for searching relevant code: ' },

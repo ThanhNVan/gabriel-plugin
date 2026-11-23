@@ -1,5 +1,5 @@
 // Training pairs for the optional embedding fine-tune (see docs/TUNING.md). Reads the eval cases and the map, writes JSON lines.
-//   node src/tune/export-pairs.js [--projects a,b] [--out <dir>] [--seed 42] [--min 50] [--no-code] [--real] [--templates <n>]
+//   node src/tune/export-pairs.js [--projects a,b] [--out <dir>] [--seed 42] [--min 50] [--no-code] [--real] [--templates <n>] [--sda]
 // A pair = one case's question (anchor) and the first doc section it matches (positive). One pair per case.
 // The split is BY DOC FILE: a seeded shuffle of the files, about 20% go to held-out. A file never sits on both sides.
 // Code pairs (class names, src/tune/code-pairs.js) are added to pairs.train.jsonl only; --no-code leaves them out.
@@ -13,7 +13,7 @@ const { loadProjects, getProject } = require('../projects.js');
 const mk = require('../mk.js');
 const { embedText } = require('../embed.js');
 const { codePairs } = require('./code-pairs.js');
-const { richText } = require('../mk.js');
+const { richText, commentOf, codeText } = require('../mk.js');
 
 const HELD_SHARE = 0.2;
 const CODE_CASE_FILES = ['eval-cases-exact.json', 'eval-cases-chain.json', 'eval-cases-scenario.json', 'eval-cases-written.json'];   // scored as the code total in tune.js
@@ -56,14 +56,24 @@ function caseQuestionSkip(names) {
   return skip;
 }
 
+// --sda: the doc comment above a code definition, kept as an anchor when it has 4+ words, no name core of the label, and is not an eval question.
+function sdaAnchor(comment, label, skip) {
+  const text = String(comment || '').trim();
+  if (text.split(/\s+/).filter(Boolean).length < 4) return null;
+  const core = String(label).replace(/^\./, '').replace(/\(\)$/, '').toLowerCase();
+  if (text.toLowerCase().includes(core) || skip.has(text.toLowerCase())) return null;
+  return text;
+}
+
 // opts: projects (names), out (folder), seed (default 42), min (default 50 training pairs),
-// real (bool: add the real questions), templates (whole number: cap on code pairs per project; default all)
+// real (bool: add the real questions), templates (whole number: cap on code pairs per project; default all),
+// sda (bool: add train pairs whose anchor is a code definition's doc comment), llmQ (bool: add train pairs from code-questions.json)
 function exportPairs(opts = {}) {
   const seed = opts.seed ?? 42, min = opts.min ?? 50;
   const tcap = opts.templates ?? null;
   if (tcap !== null && !(Number.isInteger(tcap) && tcap >= 0)) throw new Error('templates needs a whole number');
   const out = opts.out || path.join(paths.dataDir(), 'tune');
-  const names = opts.projects || projectsWithCases();   // doc pairs: projects with eval-cases.json
+  const names = (opts.projects || projectsWithCases()).filter((n) => fs.existsSync(casesFile(n)));   // doc pairs: projects with eval-cases.json (a code-only project adds none)
   const codeNames = opts.projects || loadProjects().map((p) => p.name);   // code pairs: every project (one with no code rows adds none)
   const file = mk.dbFile();
   if (!fs.existsSync(file)) throw new Error('no map database yet: run node src/brain.js build-mk all first');
@@ -146,6 +156,35 @@ function exportPairs(opts = {}) {
     train.push(...cp);
   }
   train.push(...realRows);
+  // --llm-q pairs: questions from <privateDir>/code-questions.json, train only; an eval question is dropped
+  const llmPairs = [];
+  if (opts.llmQ) {
+    for (const [name, { rows, skip }] of codeByProject) {
+      const fp = path.join(paths.privateDir(name), 'code-questions.json');
+      if (!fs.existsSync(fp)) continue;
+      const fileOf = new Map(rows.map((r) => [r.label, r.file]));
+      for (const [label, qs] of Object.entries(JSON.parse(fs.readFileSync(fp, 'utf8')))) {
+        if (!fileOf.has(label) || !Array.isArray(qs)) continue;
+        for (const q of qs) {
+          if (typeof q !== 'string' || skip.has(q.toLowerCase())) continue;
+          llmPairs.push({ anchor: q, positive: richText(label, fileOf.get(label), name, rcache), project: name, kind: 'llm-q' });
+        }
+      }
+    }
+  }
+  train.push(...llmPairs);
+  // --sda pairs: train only (the held-out side stays eval questions)
+  const sdaPairs = [];
+  if (opts.sda) {
+    const sdaCache = new Map();
+    for (const [name, { rows, skip }] of codeByProject) {
+      for (const r of rows) {
+        const anchor = sdaAnchor(commentOf(r.label, r.file, name, sdaCache), r.label, skip);
+        if (anchor) sdaPairs.push({ anchor, positive: codeText(r.label, r.file), project: name, kind: 'sda' });
+      }
+    }
+  }
+  train.push(...sdaPairs);
 
   fs.mkdirSync(out, { recursive: true });
   const jsonl = (rows) => rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : '');
@@ -160,11 +199,11 @@ function exportPairs(opts = {}) {
   const templatePairs = Object.values(codeCounts).reduce((s, n) => s + n, 0);
   return {
     out, seed, train: train.length, heldout: heldout.length, unmatched, trainFiles: split.train_files.length, heldoutFiles: split.heldout_files.length, codeCounts,
-    docPairs: matched.length, templatePairs, realPairs: realRows.length, realSkipped, realDropped,
+    docPairs: matched.length, templatePairs, realPairs: realRows.length, realSkipped, realDropped, sdaPairs: sdaPairs.length, llmPairs: llmPairs.length,
   };
 }
 
-const USAGE = `usage: node src/tune/export-pairs.js [--projects a,b] [--out <dir>] [--seed 42] [--min 50] [--no-code] [--real] [--templates <n>]
+const USAGE = `usage: node src/tune/export-pairs.js [--projects a,b] [--out <dir>] [--seed 42] [--min 50] [--no-code] [--real] [--templates <n>] [--sda] [--llm-q]
   --projects a,b   projects to export (default: every project with eval cases)
   --out <dir>      output folder (default <data>/tune)
   --seed <n>       seed for the file split and the code templates (default 42)
@@ -172,6 +211,8 @@ const USAGE = `usage: node src/tune/export-pairs.js [--projects a,b] [--out <dir
   --no-code        leave the code-name pairs out of pairs.train.jsonl
   --real           add one train pair per row of each project's rerank-train-cases.json
   --templates <n>  keep at most n code-name pairs per project (seeded sample; default all)
+  --sda            add train pairs: a code definition's doc comment is the anchor
+  --llm-q          add train pairs: each question in <privateDir>/code-questions.json is the anchor
   --help           show this text`;
 
 function parseArgs(argv) {
@@ -186,6 +227,8 @@ function parseArgs(argv) {
     else if (a === '--no-code') o.code = false;
     else if (a === '--real') o.real = true;
     else if (a === '--templates') o.templates = intArg(a, next());
+    else if (a === '--sda') o.sda = true;
+    else if (a === '--llm-q') o.llmQ = true;
     else throw new Error('unknown argument: ' + a);
   }
   return o;
@@ -200,6 +243,8 @@ if (require.main === module) {
     console.log(`pairs: ${r.train} train, ${r.heldout} held-out (files: ${r.trainFiles} train, ${r.heldoutFiles} held-out, seed ${r.seed})`);
     for (const [name, n] of Object.entries(r.codeCounts)) console.log(`code pairs: ${n} (${name})`);
     console.log(`pair counts: doc ${r.docPairs}, template ${r.templatePairs}, real ${r.realPairs}, real skipped ${r.realSkipped} (real dropped as eval questions: ${r.realDropped})`);
+    console.log(`sda pairs: ${r.sdaPairs}`);
+    console.log(`llm-q pairs: ${r.llmPairs}`);
     if (r.unmatched) console.log(`cases with no matching doc section (skipped): ${r.unmatched}`);
     console.log(`written to ${r.out}`);
   } catch (e) {

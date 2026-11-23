@@ -6,6 +6,7 @@ const mk = require('../mk.js'), paths = require('../paths.js'), repo = require('
 const { getProject } = require('../projects.js');
 
 const INSTRUCTION = 'For each class or method below, write 1-2 plain sentences: what it does and when it runs, in business words (the user action or situation), plus key rules or failure cases. Start with the area (e.g. "Purchase orders:"). Do not repeat the name. Do not comment on bugs, code quality or wrong messages. Output only JSON: {"<Name>": "<description>", ...}';
+const QUESTION_INSTRUCTION = 'For each class or method below, write 3 short questions a developer would ask that this code answers, in business words (the user action or situation). Do not use the class or method name. Output only JSON: {"<Name>": ["<question>", "<question>", "<question>"], ...}';
 
 // Windows: Node cannot spawn codex.cmd without a shell (EINVAL), so run the npm package's codex.js with node directly
 const CODEX_JS = process.platform === 'win32' && process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js') : null;
@@ -57,7 +58,8 @@ function run(opts, deps = {}) {
   try { files = mk.codeLabels(db, opts.project); } finally { db.close(); }
   const requested = opts.labels ? JSON.parse(fs.readFileSync(opts.labels, 'utf8')) : [...files.keys()];
   if (!Array.isArray(requested)) throw new Error('labels must be an array');
-  const target = path.join(paths.privateDir(opts.project), 'code-desc.json');
+  const instruction = opts.questions ? QUESTION_INSTRUCTION : INSTRUCTION;
+  const target = path.join(paths.privateDir(opts.project), opts.questions ? 'code-questions.json' : 'code-desc.json');
   let saved = {};
   try { const data = JSON.parse(fs.readFileSync(target, 'utf8')); if (data && typeof data === 'object' && !Array.isArray(data)) saved = data; } catch { /* start empty */ }
   const pending = [...new Set(requested)].filter((label) => typeof label === 'string' && !saved[label]).slice(0, limit);
@@ -68,7 +70,7 @@ function run(opts, deps = {}) {
     if (code) items.push({ label, code }); else skipped++;
   }
   const batches = Math.ceil(items.length / batch);
-  const promptOf = (part) => INSTRUCTION + '\n\n' + part.map((item) => '=== ' + item.label + '\n' + item.code + '\n\n').join('');
+  const promptOf = (part) => instruction + '\n\n' + part.map((item) => '=== ' + item.label + '\n' + item.code + '\n\n').join('');
   console.log(`labels: ${pending.length}, with source: ${items.length}, skipped: ${skipped}, batches: ${batches}`);
   if (opts.dryRun) { if (items.length) console.log(promptOf(items.slice(0, batch))); return; }
   const invoke = deps.callLlm || callLlm;
@@ -86,7 +88,11 @@ function run(opts, deps = {}) {
     if (result) {
       for (const item of part) {
         const value = result[item.label];
-        if (typeof value === 'string' && value.trim() && value.trim().length <= 400) saved[item.label] = value.trim();
+        if (opts.questions) {
+          // 1-5 questions: trimmed, non-empty, at most 200 characters; bad entries are dropped
+          const qs = Array.isArray(value) ? value.filter((q) => typeof q === 'string').map((q) => q.trim()).filter((q) => q && q.length <= 200).slice(0, 5) : [];
+          if (qs.length) saved[item.label] = qs;
+        } else if (typeof value === 'string' && value.trim() && value.trim().length <= 400) saved[item.label] = value.trim();
       }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const tmp = target + '.' + process.pid + '.tmp';
@@ -104,6 +110,7 @@ function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
     if (key === '--dry-run') opts.dryRun = true;
+    else if (key === '--questions') opts.questions = true;
     else if (['--project', '--labels', '--batch', '--model', '--effort', '--limit'].includes(key) && args[i + 1] && !args[i + 1].startsWith('--')) opts[key.slice(2)] = args[++i];
     else throw new Error('unknown or incomplete option: ' + key);
   }

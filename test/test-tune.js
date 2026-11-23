@@ -10,7 +10,38 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const venv = process.env.GABRIEL_TUNE_VENV ? path.resolve(process.env.GABRIEL_TUNE_VENV) : path.join(ROOT, 'private', 'tune-venv');
+
+// Unit checks (no venv needed): parseArgs --train, and stage() with a live model.
+function unitChecks() {
+  const { parseArgs, stage } = require(path.join(ROOT, 'src', 'tune', 'tune.js'));
+  assert.deepStrictEqual(parseArgs(['--train', '--hard-negs 1 --stages 2']).train, ['--hard-negs', '1', '--stages', '2']);
+  assert.deepStrictEqual(parseArgs([]).train, []);
+  assert.throws(() => parseArgs(['--train']), /--train needs/);
+
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tune-unit-'));
+  const prev = process.env.GABRIEL_DATA;
+  try {
+    const data = path.join(d, 'gdata');
+    process.env.GABRIEL_DATA = data;
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(data, 'projects.json'), JSON.stringify({ version: 1, projects: [], embedModel: 'local/gabriel-tuned' }));
+    const src = path.join(data, 'models', 'local', 'gabriel-tuned');
+    fs.mkdirSync(src, { recursive: true });
+    fs.writeFileSync(path.join(src, 'x.onnx'), 'x');
+    const work = path.join(d, 'work');
+    stage(work, 'local/gabriel-tuned');
+    assert.ok(fs.existsSync(path.join(work, 'data', 'models', 'local', 'gabriel-live', 'x.onnx')), 'live model copied');
+    const cfg = JSON.parse(fs.readFileSync(path.join(work, 'data', 'projects.json'), 'utf8'));
+    assert.strictEqual(cfg.embedModel, 'local/gabriel-live');
+    console.log('  ok: parseArgs --train and stage(work, live) pass');
+  } finally {
+    if (prev === undefined) delete process.env.GABRIEL_DATA; else process.env.GABRIEL_DATA = prev;
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+}
+unitChecks();
+
+const venv =process.env.GABRIEL_TUNE_VENV ? path.resolve(process.env.GABRIEL_TUNE_VENV) : path.join(ROOT, 'private', 'tune-venv');
 const venvPy = process.platform === 'win32' ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python');
 if (!fs.existsSync(venvPy)) {
   console.log('tune test skipped (no tune venv; run node src/setup.js --tune)');

@@ -193,6 +193,72 @@ const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
     assert.throws(() => parseArgs(['--templates']), /--templates needs a value/);
     console.log('  ok: parseArgs reads --real and --templates');
 
+    // a project with code case files only (no eval-cases.json) is skipped for doc pairs, not read (tune.js passes it)
+    const codeOnly = path.join(base, 'docs-code');
+    fs.mkdirSync(codeOnly, { recursive: true });
+    fs.writeFileSync(path.join(DATA, 'projects.json'), JSON.stringify({ version: 1, projects: [
+      { name: 'demo', root: DOCS, layout: 'all-md', graph: null }, { name: 'codeonly', root: codeOnly, layout: 'all-md', graph: null }] }));
+    const g = exportPairs({ out: path.join(base, 'out-g'), seed: 42, min: 10, projects: ['demo', 'codeonly'] });
+    assert.ok(g.train > 0);
+    console.log('  ok: a project without eval-cases.json adds no doc pairs and does not throw');
+
+    // 7: --sda: a code definition's doc comment is a train anchor (kind 'sda'), filtered by word count and name
+    const SDA_REPO = path.join(base, 'sda-repo'), SDA_FILE = 'Services/Orders/OrderLineSaver.cs';
+    fs.mkdirSync(path.join(SDA_REPO, path.dirname(SDA_FILE)), { recursive: true });
+    fs.writeFileSync(path.join(SDA_REPO, SDA_FILE), [
+      'namespace Orders;',
+      '/// Saves the purchase order lines to the database.',
+      'public class OrderLineSaver',
+      '{',
+      '}',
+      '// CompanyRepository class',
+      'public class CompanyRepository',
+      '{',
+      '}',
+      '// todo',
+      'public class TodoThing',
+      '{',
+      '}',
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(DATA, 'projects.json'), JSON.stringify({ version: 1, projects: [
+      { name: 'demo', root: DOCS, layout: 'all-md', graph: null },
+      { name: 'other', root: DOCS, layout: 'all-md', graph: null },
+      { name: 'sda', root: DOCS, layout: 'all-md', graph: null, repo: SDA_REPO }] }));
+    const db3 = new DatabaseSync(mk.dbFile());
+    const ins3 = db3.prepare("INSERT INTO nodes(kind, label, file, deg, project) VALUES ('code', ?, ?, 1, 'sda')");
+    ins3.run('OrderLineSaver', SDA_FILE); ins3.run('CompanyRepository', SDA_FILE); ins3.run('TodoThing', SDA_FILE);
+    db3.close();
+    const off = exportPairs({ out: path.join(base, 'out-sda-off'), seed: 42, min: 10 });
+    assert.strictEqual(off.sdaPairs, 0, 'sdaPairs is 0 without sda');
+    const on = exportPairs({ out: path.join(base, 'out-sda-on'), seed: 42, min: 10, sda: true });
+    assert.strictEqual(on.sdaPairs, 1, 'one sda pair: ' + on.sdaPairs);
+    const sdaRows = readJsonl(path.join(base, 'out-sda-on', 'pairs.train.jsonl')).filter((p) => p.kind === 'sda');
+    assert.strictEqual(sdaRows.length, 1, 'one sda row in train');
+    assert.strictEqual(sdaRows[0].anchor, 'Saves the purchase order lines to the database.', 'sda anchor = doc comment');
+    assert.strictEqual(sdaRows[0].positive, codeText('OrderLineSaver', SDA_FILE), 'sda positive = codeText (no comment in it)');
+    assert.strictEqual(sdaRows[0].project, 'sda');
+    assert.ok(!readJsonl(path.join(base, 'out-sda-on', 'pairs.heldout.jsonl')).some((p) => p.kind === 'sda'), 'sda pairs never go to held-out');
+    console.log('  ok: --sda: one doc-comment anchor kept; name and word-count cases dropped; off gives 0');
+
+    // 8: --llm-q: questions in <privateDir>/code-questions.json become train pairs (kind 'llm-q'); an eval question is dropped
+    const { richText } = require(path.join(ROOT, 'src', 'mk.js'));
+    fs.mkdirSync(path.join(DATA, 'private', 'sda'), { recursive: true });
+    fs.writeFileSync(path.join(DATA, 'private', 'sda', 'code-questions.json'), JSON.stringify({
+      OrderLineSaver: ['how are order lines saved?', 'WHAT DOES FILE 0 SAY IN PART 1?'],
+    }));
+    const lq = exportPairs({ out: path.join(base, 'out-llmq'), seed: 42, min: 10, llmQ: true });
+    assert.strictEqual(lq.llmPairs, 1, 'one llm-q pair: ' + lq.llmPairs);
+    const lqRows = readJsonl(path.join(base, 'out-llmq', 'pairs.train.jsonl')).filter((p) => p.kind === 'llm-q');
+    assert.strictEqual(lqRows.length, 1, 'one llm-q row in train');
+    assert.strictEqual(lqRows[0].anchor, 'how are order lines saved?');
+    assert.strictEqual(lqRows[0].project, 'sda');
+    assert.strictEqual(lqRows[0].positive, richText('OrderLineSaver', SDA_FILE, 'sda', new Map()), 'llm-q positive = richText of the node');
+    const lqOff = exportPairs({ out: path.join(base, 'out-llmq-off'), seed: 42, min: 10 });
+    assert.strictEqual(lqOff.llmPairs, 0, 'llmPairs is 0 without llmQ');
+    assert.ok(!readJsonl(path.join(base, 'out-llmq-off', 'pairs.train.jsonl')).some((p) => p.kind === 'llm-q'), 'no llm-q rows when off');
+    console.log('  ok: --llm-q: one question kept as llm-q train pair, eval question dropped, off gives 0');
+
     console.log('ALL PASSED');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });

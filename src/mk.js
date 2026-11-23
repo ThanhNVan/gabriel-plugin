@@ -101,14 +101,11 @@ function docComment(lines, def) {
   }
   return out.join(' ');
 }
-// codeText plus the doc comment above the definition and the code body from the project's repo folder: the 12 non-empty lines from the definition, cut to 600 chars.
-// cache (a Map) holds each file's lines for one call: false when the file is missing or over 2 MB. Never throws.
-function richText(label, file, project, cache = new Map()) {
-  const desc = descriptions(project)[label];
-  const base = codeText(label, file) + (typeof desc === 'string' && desc ? ' | ' + desc : '');
+// the lines of a code file in the project's repo folder (cached per call); null when there is no repo, no file or a file over 2 MB. Never throws.
+function fileLines(project, file, cache) {
   try {
     const P = getProject(project) || {};
-    if (!P.repo || !fs.existsSync(P.repo)) return base;
+    if (!P.repo || !fs.existsSync(P.repo)) return null;
     const key = path.join(P.repo, P.repoBase || '', String(file).replace(/\\/g, '/'));
     if (!cache.has(key)) {
       let lines = false;
@@ -116,7 +113,29 @@ function richText(label, file, project, cache = new Map()) {
       if (st && st.isFile() && st.size <= MAX_RICH_BYTES) lines = fs.readFileSync(key, 'utf8').split('\n');
       cache.set(key, lines);
     }
-    const lines = cache.get(key);
+    return cache.get(key) || null;
+  } catch {
+    return null;
+  }
+}
+// the doc comment text above a code definition in the repo ('' when none). Same file reader as richText. --sda uses it.
+function commentOf(label, file, project, cache = new Map()) {
+  try {
+    const lines = fileLines(project, file, cache);
+    if (!lines) return '';
+    const def = repo.defLine(lines.join('\n'), String(label).replace(/^\./, '').replace(/\(\)$/, ''));
+    return def ? docComment(lines, def) : '';
+  } catch {
+    return '';
+  }
+}
+// codeText plus the doc comment above the definition and the code body from the project's repo folder: the 12 non-empty lines from the definition, cut to 600 chars.
+// cache (a Map) holds each file's lines for one call: false when the file is missing or over 2 MB. Never throws.
+function richText(label, file, project, cache = new Map()) {
+  const desc = descriptions(project)[label];
+  const base = codeText(label, file) + (typeof desc === 'string' && desc ? ' | ' + desc : '');
+  try {
+    const lines = fileLines(project, file, cache);
     if (!lines) return base;
     const name = String(label).replace(/^\./, '').replace(/\(\)$/, '');
     const def = repo.defLine(lines.join('\n'), name);   // 1-based, 0 = not found
@@ -1210,4 +1229,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, remember, touched, learnShow, learnReset, status, codeFiles, pairHandlers, codeText, richText, codeLabels, resetCodeDesc };
+module.exports = { defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, remember, touched, learnShow, learnReset, status, codeFiles, pairHandlers, codeText, richText, commentOf, codeLabels, resetCodeDesc };

@@ -39,6 +39,17 @@ try {
   fs.writeFileSync(labels, JSON.stringify(['DeltaService']));
   run({ project: 'demo', labels }, { callLlm: () => JSON.stringify({ DeltaService: 'Orders: Saves the order.' }) });
   assert.strictEqual(JSON.parse(fs.readFileSync(target, 'utf8')).DeltaService, 'Orders: Saves the order.');
+  // --questions: 3 questions per label go to code-questions.json; a value that is not an array is dropped
+  const qLabels = path.join(root, 'q-labels.json');
+  fs.writeFileSync(qLabels, JSON.stringify(['DeltaService', 'EchoService']));
+  let qPrompt = '';
+  run({ project: 'demo', questions: true, labels: qLabels }, { callLlm: (prompt) => {
+    qPrompt = prompt;
+    return JSON.stringify({ DeltaService: ['a b c d?', 'e f g h?', 'i j k l?'], EchoService: 'not an array' });
+  } });
+  assert.ok(qPrompt.includes('write 3 short questions'), 'the questions instruction is used');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'code-questions.json'), 'utf8')), { DeltaService: ['a b c d?', 'e f g h?', 'i j k l?'] });
+  assert.strictEqual(JSON.parse(fs.readFileSync(target, 'utf8')).DeltaService, 'Orders: Saves the order.', 'description file unchanged');
   console.log('ALL PASSED');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
