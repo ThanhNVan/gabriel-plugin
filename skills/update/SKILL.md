@@ -1,8 +1,8 @@
 ---
 name: update
-description: Update gabriel after you add or change doc files. Adds new doc folders, rebuilds the changed doc sets and suggests test questions for new sections. Usage: /gabriel:update [--dry-run] [--stack]
+description: "Update gabriel after you add or change doc files. Adds new doc folders, rebuilds the changed doc sets and suggests test questions for new sections. Usage: /gabriel:update [--dry-run] [--stack]"
 disable-model-invocation: true
-argument-hint: [--dry-run: show only] [--stack: refetch stack docs]
+argument-hint: "[--dry-run: show only] [--stack: refetch stack docs]"
 ---
 
 Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.

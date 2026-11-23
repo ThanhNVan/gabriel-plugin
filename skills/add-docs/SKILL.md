@@ -1,8 +1,8 @@
 ---
 name: add-docs
-description: Add a doc set to gabriel. Usage: /gabriel:add-docs <name> <folder>
+description: "Add a doc set to gabriel. Usage: /gabriel:add-docs <name> <folder>"
 disable-model-invocation: true
-argument-hint: <name: doc set name> <folder: docs path> [--code <repo with graphify-out/graph.json>] [--copy: copy into data folder] [--yes: allow huge folder] [--relink: change only the code graph of an existing set]
+argument-hint: "<name: doc set name> <folder: docs path> [--code <repo with graphify-out/graph.json>] [--copy: copy into data folder] [--yes: allow huge folder] [--relink: change only the code graph of an existing set]"
 ---
 
 Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.

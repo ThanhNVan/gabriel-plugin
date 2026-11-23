@@ -1,8 +1,8 @@
 ---
 name: retrain
-description: Retrain gabriel's ranking weights for one doc set or for all. Usage: /gabriel:retrain [name]
+description: "Retrain gabriel's ranking weights for one doc set or for all. Usage: /gabriel:retrain [name]"
 disable-model-invocation: true
-argument-hint: [name: doc set; none = default set] [--force: keep the new weights even if the score falls]
+argument-hint: "[name: doc set; none = default set] [--force: keep the new weights even if the score falls]"
 ---
 
 Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.

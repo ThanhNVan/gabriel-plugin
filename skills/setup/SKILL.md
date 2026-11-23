@@ -1,8 +1,8 @@
 ---
 name: setup
-description: Install or repair gabriel: packages, model, data folder, maps. Run after install or update.
+description: "Install or repair gabriel: packages, model, data folder, maps. Run after install or update."
 disable-model-invocation: true
-argument-hint: [--onboard: rerun first-run steps] [--dry-run: show only] [--skip-model] [--skip-test] [--yes: copy old brain data]
+argument-hint: "[--onboard: rerun first-run steps] [--dry-run: show only] [--skip-model] [--skip-test] [--yes: copy old brain data]"
 ---
 
 Before step 1, read `${CLAUDE_PLUGIN_ROOT}/docs/AGENT-GUIDE.md`: the rules, the finish checklist, and the known errors with their fixes.

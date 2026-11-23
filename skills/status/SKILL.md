@@ -1,6 +1,6 @@
 ---
 name: status
-description: Show whether each gabriel doc set has a current map.
+description: "Show whether each gabriel doc set has a current map."
 disable-model-invocation: true
 ---
 

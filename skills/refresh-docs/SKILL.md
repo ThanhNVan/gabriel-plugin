@@ -1,6 +1,6 @@
 ---
 name: refresh-docs
-description: After code changes, refresh a doc set: rebuild its code graph (graphify update), update the docs the change touches, shrink those docs without losing a key idea, rebuild gabriel's map, then ask whether to retrain its ranking. Usage: /gabriel:refresh-docs <doc set name>, or /gabriel:refresh-docs <code folder> [docs folder]
+description: "After code changes, refresh a doc set: rebuild its code graph (graphify update), update the docs the change touches, shrink those docs without losing a key idea, rebuild gabriel's map, then ask whether to retrain its ranking. Usage: /gabriel:refresh-docs <doc set name>, or /gabriel:refresh-docs <code folder> [docs folder]"
 disable-model-invocation: true
 argument-hint: "<doc set name> | <code folder> [docs folder]"
 ---

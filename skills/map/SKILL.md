@@ -1,6 +1,6 @@
 ---
 name: map
-description: Use when a "… map" or fallback docs block from gabriel is in the prompt context: how to read it and how far to trust it.
+description: "Use when a \"… map\" or fallback docs block from gabriel is in the prompt context: how to read it and how far to trust it."
 ---
 
 Read the map like this:

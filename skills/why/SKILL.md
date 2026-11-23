@@ -1,6 +1,6 @@
 ---
 name: why
-description: Say why gabriel showed no map for a prompt, one line per doc set.
+description: "Say why gabriel showed no map for a prompt, one line per doc set."
 argument-hint: "<prompt>"
 disable-model-invocation: true
 ---
