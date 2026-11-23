@@ -511,7 +511,7 @@ async function contextText(prompt, sid, host, transcriptPath = '', cwd = '') {
   return text;
 }
 
-module.exports = { build, query, search, searchFull, embedNodes, format, tokens, capText, contextText, skipReason, askedQuestion, driftNote, missNote, noteMiss, isRepoCodeFile, mapFor };
+module.exports = { build, query, search, searchFull, embedNodes, tokens, capText, skipReason, askedQuestion, driftNote, missNote, noteMiss, isRepoCodeFile, mapFor };
 
 // The value after a flag ("--host codex"), or undefined.
 function flagValue(name) { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; }
@@ -632,7 +632,7 @@ const MODES = {
       for (const [i, project] of list.entries()) {
         if (list.length > 1) console.log(`[${i + 1}/${list.length}] ${getProject(project).label}`);
         try {
-          const r = await mk.build(home, { project, log: (m) => console.log(m), progress: (n, total) => { if (n === total || n % 320 === 0) console.log(`meaning numbers ${n}/${total}`); } });
+          const r = await mk.build(home, { project, log: (m) => console.log(m), progress: (n, total, phase) => { if (n === total || n % 320 === 0) console.log(`meaning numbers, ${phase} ${n}/${total} (${Math.round((100 * n) / total)}%)`); } });
           console.log(`map built in ${(r.ms / 1000).toFixed(1)} s: ${r.code} code neurons, ${r.docs} doc neurons from ${r.files} files${r.skipped ? ` (${r.skipped} skipped: no readable text)` : ''}, ${r.synapses} code synapses, ${r.vectors} meaning numbers, graph @${r.commit.slice(0, 8)}, ${r.docLinked} doc sections linked to code`);
           console.log(`old map merged in: ${r.merged.kept} learned links kept, ${r.merged.dropped} dropped (neuron gone or faded), ${r.merged.sessions} recent session(s) carried over`);
         } catch (e) { console.log('map not built: ' + e.message); process.exitCode = 1; } finally { try { const lk = path.join(dataDir(home), 'mk.lock'); let held = ''; try { held = fs.readFileSync(lk, 'utf8'); } catch { /* no lock */ } if (held === '' || held === project) fs.rmSync(lk, { force: true }); } catch { /* none */ } }   // the background lock names the doc set it built; an empty (old-style) lock is cleared

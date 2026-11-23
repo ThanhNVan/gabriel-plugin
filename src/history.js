@@ -182,4 +182,4 @@ function formatHistory(entries) {
   return `Earlier prompts of yours that look related:\n${lines.join('\n')}`;
 }
 
-module.exports = { redact, isAutomated, append, load, embedHistory, hasUnembedded, searchHistory, forget, formatHistory, HIST_GATE, machineId };
+module.exports = { redact, isAutomated, append, load, embedHistory, hasUnembedded, searchHistory, forget, formatHistory, machineId };

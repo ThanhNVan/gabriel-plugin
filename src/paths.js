@@ -43,4 +43,4 @@ const moveIntoPlace = (tmp, file) => {
     }
   }
 };
-module.exports = { pluginRoot, pathKey, moveIntoPlace, insidePluginCache, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, hostAdapter, defaultRuleFiles, contextFile };
+module.exports = { pluginRoot, pathKey, moveIntoPlace, insidePluginCache, dataDir, rulesHome, modelsDir, projectsFile, docsDir, privateDir, checkName, activeHost, setHost, defaultRuleFiles, contextFile };

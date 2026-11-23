@@ -52,4 +52,4 @@ function rerankModel() {
   if (process.env.GABRIEL_RERANK_MODEL !== undefined) return process.env.GABRIEL_RERANK_MODEL || null;
   try { return loadConfig().rerankModel || null; } catch { return null; }
 }
-module.exports = { hasFiles, loadConfig, loadProjects, getProject, projectNames, DEFAULTS, resolveRoot, embedModel, DEFAULT_EMBED_MODEL, rerankModel };
+module.exports = { hasFiles, loadConfig, loadProjects, getProject, projectNames, embedModel, DEFAULT_EMBED_MODEL, rerankModel };

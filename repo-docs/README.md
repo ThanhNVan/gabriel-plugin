@@ -2,7 +2,7 @@
 
 Developer docs for this repo, in the layout of [DOC-LAYOUT](../docs/DOC-LAYOUT.md). Docs are a lead: the code is the proof. User guides stay in [docs/](../docs/).
 
-Checked against commit: 1e50f8dd
+Checked against commit: f1f40eca
 
 ## Which doc?
 

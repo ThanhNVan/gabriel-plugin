@@ -64,6 +64,46 @@ Today is 1 question below the baseline (342 against 343 strict). That is within 
 | Right doc or code | not recorded | 359/447 | none to compare |
 | Unrelated kept quiet | 2/3 | 2/3 | 0 |
 
+## Model test: jina-code, 2026-11-23
+
+Zero-shot `jinaai/jina-embeddings-v2-base-code` (q8, mean pooling) against base MiniLM. Command: `node eval/eval-model.js minilm`, then `jina-code`. These numbers use 489 questions and are not on the scale of the runs above.
+
+The floor was picked on `dev`. Both models tie there, so the lowest floor (0.15) was used for both.
+
+| At floor 0.15 | MiniLM | jina-code |
+|---|---|---|
+| dev | 41/45 | 40/45 |
+| held | 46/51 | 45/51 |
+| fresh | 26/29 | 27/29 |
+| Right doc or code | 74% | 75% |
+| Unrelated kept quiet | 2/3 | 0/3 |
+| Map build | 209 s | 535 s |
+| Model load | 0.3 s | 14.4 s |
+
+Result: not kept. It ties on held and fresh (72/80 each), and it is worse on unrelated questions. Its load time is above the hook limit (`EMBED_TIMEOUT`, 9000 ms). No fine-tune was tried.
+
+## Model test: CodeRankEmbed and codesage-small-v2, 2026-11-23
+
+Zero-shot test of two code models, on the same 489 questions as the jina test. The tuned model (`local/gabriel-tuned`) was scored the same way, as a baseline. Command: `node eval/eval-model.js <name>` with `tuned`, `coderank` and `codesage-small`.
+
+- `coderank`: `Zenabius/CodeRankEmbed-onnx`, a community q8 copy of `nomic-ai/CodeRankEmbed`. CLS pooling, 768 numbers, with the query prefix from the model card.
+- `codesage-small`: `Teradata/codesage-small-v2`, a community fp32 copy, as no q8 file exists. 1024 numbers. Its ONNX output is already pooled, so `eval-model.js` reads `sentence_embedding` directly.
+
+Each floor was picked on `dev`; a tie takes the lowest floor.
+
+| At the `dev` floor | MiniLM (0.15) | Tuned (0.15) | CodeRankEmbed (0.45) | codesage (0.15) |
+|---|---|---|---|---|
+| dev | 41/45 | 40/45 | 36/45 | 38/45 |
+| held | 46/51 | 46/51 | 43/51 | 43/51 |
+| fresh | 26/29 | 26/29 | 22/29 | 26/29 |
+| held + fresh | 72/80 | 72/80 | 65/80 | 69/80 |
+| Right doc or code | 74% | 74% | 68% | 71% |
+| Unrelated kept quiet | 2/3 | 2/3 | 0/3 | 2/3 |
+| Map build | 209 s | 250 s | 1669 s | 803 s |
+| `mk.db` size | not measured | 104 MiB | 129 MiB | 135 MiB |
+
+Result: neither model is kept. Both lose on held and fresh, and both build the map 3 to 8 times slower. The tuned model ties base MiniLM on this scale. No fine-tune was tried.
+
 ## Notes
 
 - Workflow questions (WF) are the main loss: 21/83 strict, 62 of the 105 strict misses.

@@ -22,4 +22,4 @@ function pathsFrom(ti, keys, cwd) {
   return f ? [path.resolve(cwd, f)] : [];
 }
 
-module.exports = { str, readCommon, toolInput, pathsFrom };
+module.exports = { readCommon, toolInput, pathsFrom };

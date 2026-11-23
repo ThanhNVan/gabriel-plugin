@@ -400,13 +400,13 @@ async function build(home = homeDir(), opts = {}) {
       for (let i = 0; i < rows.length; i += 32) {
         const part = rows.slice(i, i + 32), got = await embed(part.map((r) => (r.section ? r.section + ': ' : '') + r.text));
         part.forEach((r, j) => { const f = Float32Array.from(got[j]); put.run(r.id, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); vecs++; });
-        if (opts.progress) opts.progress(Math.min(i + 32, rows.length), rows.length);
+        if (opts.progress) opts.progress(Math.min(i + 32, rows.length), rows.length, 'docs');
       }
       db.exec('COMMIT');
       // the heading alone (last two levels of the path), one number set per distinct heading: a question often matches the title of the section that answers it
       const headOf = (s) => (s || '').split(' > ').slice(-2).join(': ');
       const uniq = [...new Set(rows.map((r) => headOf(r.section)).filter(Boolean))], hv = new Map();
-      for (let i = 0; i < uniq.length; i += 32) { const part = uniq.slice(i, i + 32), got = await embed(part); part.forEach((h, j) => hv.set(h, Float32Array.from(got[j]))); }
+      for (let i = 0; i < uniq.length; i += 32) { const part = uniq.slice(i, i + 32), got = await embed(part); part.forEach((h, j) => hv.set(h, Float32Array.from(got[j]))); if (opts.progress) opts.progress(Math.min(i + 32, uniq.length), uniq.length, 'headings'); }
       const puth = db.prepare('INSERT INTO vech VALUES(?,?)');
       db.exec('BEGIN');
       for (const r of rows) { const f = hv.get(headOf(r.section)); if (f) puth.run(r.id, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); }
@@ -420,6 +420,7 @@ async function build(home = homeDir(), opts = {}) {
       for (let i = 0; i < names.length; i += 64) {
         const part = names.slice(i, i + 64), got = await embed(part.map((l) => richText(l, fileOf.get(l), project, rcache)));
         part.forEach((l, j) => { const f = Float32Array.from(got[j]); putc.run(l, Buffer.from(f.buffer, f.byteOffset, f.byteLength)); });
+        if (opts.progress) opts.progress(Math.min(i + 64, names.length), names.length, 'code names');
       }
       db.exec('COMMIT');
     }
@@ -1209,4 +1210,4 @@ function format(res, lim = {}) {   // lim: a shorter block (max characters, numb
   return out;
 }
 
-module.exports = { GATE, defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, words, sources, remember, touched, learnShow, learnReset, status, effective, codeFiles, pairHandlers, codeText, richText, codeLabels, resetCodeDesc };
+module.exports = { defaultProject, projectNames, dbFile, docsRoot, graphPathOf, build, stale, hasMap, search, searchAll, namedProjects,format, chunkDoc, listDocs, rankDocs, remember, touched, learnShow, learnReset, status, codeFiles, pairHandlers, codeText, richText, codeLabels, resetCodeDesc };

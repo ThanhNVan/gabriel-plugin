@@ -20,6 +20,9 @@ projects.json
 privacy-words.txt
 *.local.*
 !projects.example.json
+# Python bytecode from src/tune
+__pycache__/
+*.pyc
 
 # graphify writes local machine paths here
 repo-docs/graphify-out/.graphify_root

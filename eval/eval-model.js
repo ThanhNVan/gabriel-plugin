@@ -19,6 +19,12 @@ const MODELS = {
   'e5-base': { id: 'Xenova/e5-base-v2', pooling: 'mean', q: 'query: ', p: 'passage: ' },
   mpnet: { id: 'Xenova/all-mpnet-base-v2', pooling: 'mean' },
   arctic: { id: 'Snowflake/snowflake-arctic-embed-m', pooling: 'cls', q: Q_BGE },
+  'jina-code': { id: 'jinaai/jina-embeddings-v2-base-code', pooling: 'mean' },
+  // community ONNX copies: the nomic-ai and codesage repos have no ONNX file
+  coderank: { id: 'Zenabius/CodeRankEmbed-onnx', pooling: 'cls', q: 'Represent this query for searching relevant code: ' },
+  // no q8 file; the ONNX output is already pooled ('sentence_embedding'), so it skips the feature-extraction pipeline
+  'codesage-small': { id: 'Teradata/codesage-small-v2', out: 'sentence_embedding', load: { dtype: 'fp32', model_file_name: 'model-fp32' } },
+  tuned: { id: 'local/gabriel-tuned', pooling: 'mean' },   // the live tuned model, read from paths.modelsDir()
 };
 const name = process.argv[2], M = MODELS[name];
 if (!M) { console.log('models: ' + Object.keys(MODELS).join(', ')); process.exit(1); }
@@ -43,15 +49,20 @@ function judge(c, res) {   // same rules as eval-mk.js
   const tf = await import('@huggingface/transformers');
   const dir = path.join(os.tmpdir(), 'mk-model-cache');
   tf.env.cacheDir = dir; tf.env.allowRemoteModels = true;
+  tf.env.localModelPath = paths.modelsDir(); tf.env.allowLocalModels = true;   // for local/... ids, as in getEmbedder()
   const t0 = Date.now();
-  const ext = await tf.pipeline('feature-extraction', M.id, { dtype: 'q8' });
+  let ext;
+  if (M.out) {   // model with its own pooling: tokenize, run, read the named output, normalize
+    const tok = await tf.AutoTokenizer.from_pretrained(M.id), model = await tf.AutoModel.from_pretrained(M.id, M.load);
+    ext = async (texts) => (await model(tok(texts, { padding: true, truncation: true, max_length: 1024 })))[M.out].normalize(2, -1);
+  } else ext = await tf.pipeline('feature-extraction', M.id, M.load || { dtype: 'q8' });
   console.log(`${name}: model ${M.id} loaded in ${Date.now() - t0} ms`);
   const run = async (texts, pre) => (await ext(texts.map((t) => (pre || '') + t), { pooling: M.pooling, normalize: true })).tolist();
   const passage = (texts) => run(texts, M.p), query = (texts) => run(texts, M.q);
 
   fs.mkdirSync(dataDir(home), { recursive: true });
   const b0 = Date.now();
-  const r = await mk.build(home, { embed: passage });
+  const r = await mk.build(home, { embed: passage, log: (m) => console.log(m), progress: (n, total, phase) => { if (n === total || n % 320 === 0) console.log(`meaning numbers, ${phase} ${n}/${total} (${Math.round((100 * n) / total)}%)`); } });
   console.log(`built map in ${Date.now() - b0} ms: ${r.docs} docs, ${r.vectors} vectors`);
 
   const cases = JSON.parse(fs.readFileSync(path.join(paths.privateDir(mk.defaultProject()), 'eval-cases.json'), 'utf8')).filter((c) => !c.known);
@@ -63,7 +74,8 @@ function judge(c, res) {   // same rules as eval-mk.js
   const rate = (rs) => (rs.length ? `${rs.filter((x) => x === 'OK').length}/${rs.length} ${Math.round((100 * rs.filter((x) => x === 'OK').length) / rs.length)}%` : '-');
   const lenient = (rs) => `${Math.round((100 * rs.filter((x) => x === 'OK' || x === 'DOC').length) / Math.max(rs.length, 1))}%`;
   const rows = [];
-  for (const f of [null, ...grid]) {   // null = words only, no meaning
+  for (const [k, f] of [null, ...grid].entries()) {   // null = words only, no meaning
+    console.log(`scoring ${f === null ? 'words only' : 'floor ' + f} (${k + 1}/${grid.length + 1})`);
     const res = cases.map((c, i) => judge(c, mk.search(home, c.q, f === null ? { learn: false } : { pv: pvs[i], learn: false, simFloor: f, simSpan: 0.35, simGate: f + 0.1 })));
     const pick = (fn) => res.filter((_, i) => fn(cases[i]));
     const pos = pick((c) => !c.none), neg = pick((c) => c.none);

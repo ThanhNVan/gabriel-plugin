@@ -111,7 +111,7 @@ function parseArgs(args) {
   return opts;
 }
 
-module.exports = { run, callLlm, parseArgs };
+module.exports = { run, callLlm };
 if (require.main === module) {
   try { run(parseArgs(process.argv.slice(2))); } catch (e) { console.error(e.message); process.exitCode = 1; }
 }

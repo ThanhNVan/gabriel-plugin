@@ -9,4 +9,4 @@ function get(name) {
   return HOSTS[key];
 }
 
-module.exports = { get, names: Object.keys(HOSTS) };
+module.exports = { get };

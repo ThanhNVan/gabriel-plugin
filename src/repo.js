@@ -206,4 +206,4 @@ function exactLines(repoDir, items, base = '') {
   }
 }
 
-module.exports = { checkRepo, defLine, exactLines, graphDrift, lastCommitTime, isGitRepo, headCommit, commitsSince };
+module.exports = { checkRepo, defLine, exactLines, graphDrift, lastCommitTime, headCommit, commitsSince };
