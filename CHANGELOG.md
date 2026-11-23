@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- User command template: `templates/user-command/gabriel.md` gives a `/gabriel <question>` command outside the plugin (Claude Code or Codex CLI). See the README section "Add your own skill or command".
 - Manual mode: set `"mode": "manual"` in `projects.json`, or type `gabriel use manual` for one session. The map then runs only on `/gabriel <question>`. `gabriel use auto` turns it back on for the session. Rule: [R40](repo-docs/business/02-business-rules.md#r40-manual-mode). Code: `src/brain.js` `askedQuestion()`, `isManual()`; `src/pin.js` `getMode()`, `setMode()`.
 - Map: after a meaning model change, the prompt is embedded even before the rule vectors are remade (`searchFull()` in `src/brain.js`). Before, every map search ran on words only until then.
 - A doc set's `graph` entry can be an absolute path (`graphPathOf()` and `build()` in `src/mk.js`).

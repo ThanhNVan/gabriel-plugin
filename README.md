@@ -92,6 +92,23 @@ A skill is a command you type in Claude Code, starting with `/gabriel:`. You onl
 
 **The `map` skill** is not a command. It tells Claude how to read the map block, and that the map is a hint to check, not proof.
 
+### Add your own skill or command
+
+Claude Code puts the plugin name before every plugin skill (`/gabriel:<name>`). To add one:
+
+1. Make the folder `skills/<name>/` and write a `SKILL.md` in it. Copy `skills/why/SKILL.md` as a start.
+2. Call gabriel from the file as `node "${CLAUDE_PLUGIN_ROOT}/src/brain.js" <mode> "$ARGUMENTS"`.
+3. Run `claude plugin update gabriel@gabriel`, then restart Claude Code.
+
+A command with no prefix (for example `gabriel <question>`) lives outside the plugin, in your host's own folder. Start from `templates/user-command/gabriel.md`. In the copy, replace `<path-to>` with the folder that holds `gabriel-plugin`.
+
+| Host | Put the copy here | Type |
+|---|---|---|
+| Claude Code | `~/.claude/commands/gabriel.md` | `/gabriel <question>` |
+| Codex CLI | `~/.codex/skills/gabriel/SKILL.md` (or `$CODEX_HOME/skills/`). Add `name: gabriel` to the frontmatter. | Ask for the `gabriel` skill by name |
+
+Then start a new session. The command runs `brain.js context`, which works in any host (see [docs/HOSTS.md](docs/HOSTS.md)).
+
 ### All commands and options
 
 | Command | What it does |
